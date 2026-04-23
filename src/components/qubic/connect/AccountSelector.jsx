@@ -1,7 +1,18 @@
-import { copyText } from '../../../utils';
 import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { MdCheck, MdKeyboardArrowDown, MdContentCopy } from 'react-icons/md';
+import {
+  Box,
+  Typography,
+  ButtonBase,
+  IconButton,
+  Stack,
+  Chip,
+  useTheme,
+} from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import DoneIcon from '@mui/icons-material/Done';
+import { copyText } from '../../../utils';
 
 const AccountSelector = ({
   label,
@@ -11,105 +22,90 @@ const AccountSelector = ({
   isLoading = false,
   error,
 }) => {
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isCopied, setIsCopied] = useState(false);
+  const theme = useTheme();
+  const [copiedValue, setCopiedValue] = useState('');
 
-  const handleCopy = (value) => {
+  const handleCopy = (value, e) => {
+    e.stopPropagation();
     copyText(value);
-    setIsCopied(true);
-    setTimeout(() => setIsCopied(false), 2000);
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      setIsDropdownOpen(!isDropdownOpen);
-    }
-    if (e.key === 'Escape') {
-      setIsDropdownOpen(false);
-    }
+    setCopiedValue(value);
+    setTimeout(() => setCopiedValue(''), 1500);
   };
 
   return (
-    <div className='relative w-full'>
-      <label className='mb-2 block'>{label}</label>
-      <div
-        className={`relative rounded-lg border bg-card ${
-          error ? 'border-error-40' : 'border-card-border'
-        } transition-all duration-200`}
-      >
-        <button
-          className='w-full bg-card p-4 text-left focus:outline-none'
-          onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          onKeyDown={handleKeyDown}
-          aria-expanded={isDropdownOpen}
-          aria-haspopup='listbox'
-          disabled={isLoading}
-        >
-          <div className='flex items-center justify-between'>
-            <span className='text-gray-50'>
-              {options[selected]?.label || 'Select an option'}
-            </span>
-            <MdKeyboardArrowDown
-              className={`h-5 w-5 text-gray-50 transition-transform duration-200 ${
-                isDropdownOpen ? 'rotate-180 transform' : ''
-              }`}
-            />
-          </div>
-          {options[selected] && options[selected].value && (
-            <div className='mt-2 flex items-center'>
-              <span className='break-all'>{options[selected].value}</span>
-              <div
-                role='button'
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleCopy(options[selected].value);
-                }}
-                className='ml-2 cursor-pointer rounded bg-card p-1 transition-colors hover:bg-card-border'
-              >
-                {isCopied ? (
-                  <MdCheck className='h-4 w-4 text-success-40' />
-                ) : (
-                  <MdContentCopy className='h-4 w-4 text-gray-50' />
-                )}
-              </div>
-            </div>
-          )}
-        </button>
+    <Box width='100%'>
+      <Typography variant='body2' sx={{ mb: 1, color: 'text.secondary' }}>
+        {label}
+      </Typography>
 
-        <AnimatePresence>
-          {isDropdownOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-              className='absolute z-10 mt-1 w-full rounded-lg border border-card-border bg-card'
+      <Stack spacing={1} role='listbox' aria-label={label}>
+        {options.map((option, index) => {
+          const isSelected = selected === index;
+          const isCopied = copiedValue === option.value;
+          return (
+            <ButtonBase
+              key={`${option.value}-${index}`}
+              onClick={() => setSelected(index)}
+              disabled={isLoading}
+              sx={{
+                width: '100%',
+                borderRadius: 1.5,
+                border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
+                backgroundColor: isSelected ? theme.palette.action.selected : theme.palette.background.paper,
+                px: 1.5,
+                py: 1.25,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                textAlign: 'left',
+              }}
+              role='option'
+              aria-selected={isSelected}
             >
-              {options.map((option, index) => (
-                <button
-                  key={index}
-                  className={`w-full bg-card p-4 text-left transition-colors duration-150`}
-                  onClick={() => {
-                    setSelected(index);
-                    setIsDropdownOpen(false);
-                  }}
-                  role='option'
-                  aria-selected={selected === index}
+              <Box sx={{ minWidth: 0, pr: 1 }}>
+                <Typography variant='body2' sx={{ fontWeight: 600 }} noWrap>
+                  {option.label || `Account ${index + 1}`}
+                </Typography>
+                <Typography
+                  variant='caption'
+                  color='text.secondary'
+                  sx={{ display: 'block', wordBreak: 'break-all', lineHeight: 1.3 }}
                 >
-                  {option.label}
-                </button>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-      {error && <p className='text-right text-error-40'>{error}</p>}
-      {isLoading && (
-        <div className='absolute inset-0 flex items-center justify-center'>
-          <div className='h-5 w-5 animate-spin rounded-full border-2 border-primary-40 border-t-transparent' />
-        </div>
+                  {option.value}
+                </Typography>
+              </Box>
+
+              <Stack direction='row' spacing={0.5} alignItems='center' flexShrink={0}>
+                <IconButton
+                  size='small'
+                  onClick={(e) => handleCopy(option.value, e)}
+                  aria-label='Copy account address'
+                >
+                  {isCopied ? <DoneIcon fontSize='small' color='success' /> : <ContentCopyIcon fontSize='small' />}
+                </IconButton>
+                {isSelected ? (
+                  <CheckCircleIcon color='primary' fontSize='small' />
+                ) : (
+                  <RadioButtonUncheckedIcon color='disabled' fontSize='small' />
+                )}
+              </Stack>
+            </ButtonBase>
+          );
+        })}
+      </Stack>
+
+      {!!options[selected]?.value && (
+        <Box sx={{ mt: 1 }}>
+          <Chip size='small' label='Selected account ready' color='primary' variant='outlined' />
+        </Box>
       )}
-    </div>
+
+      {error && (
+        <Typography variant='caption' color='error' sx={{ mt: 0.75, display: 'block' }}>
+          {error}
+        </Typography>
+      )}
+    </Box>
   );
 };
 

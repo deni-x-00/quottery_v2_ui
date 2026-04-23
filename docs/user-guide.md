@@ -10,18 +10,13 @@ The currency used for trading is **GARTH** (the Quottery SC asset). You also nee
 
 ## Getting Started
 
-### 1. Connect to a Server
+### 1. Node Connection
 
-When you first open the app, you'll see a prompt to connect to a Bob server. This is the backend node that relays your transactions to the Qubic network.
-
-- Click the **plug icon** in the header (or the connect prompt on the Start page).
-- Enter the server **IP** and **Port** (default: 40420).
-- If you're on a local testnet, check **Dev Mode** — this skips public tick validation.
-- Click **Connect**. The app pings `/status` to verify the server is reachable.
+The app auto-connects to the default Bob node configured in the code. This is the backend gateway that relays your transactions to the Qubic network.
 
 ### 2. Connect Your Wallet
 
-After connecting to a server, click the **wallet icon** in the header.
+After the app loads, click the **wallet icon** in the header.
 
 - Select **MetaMask Snap**. This installs the Qubic signing snap into MetaMask.
 - Approve the snap permissions when prompted.

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   AppBar, Toolbar, Box, IconButton, Container, useTheme,
-  useScrollTrigger, Button, Typography, Tooltip,
+  useScrollTrigger, Button, Typography,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import ConnectLink from '../qubic/connect/ConnectLink';
@@ -9,12 +9,9 @@ import { useThemeContext } from '../../contexts/ThemeContext';
 import { useConfig } from '../../contexts/ConfigContext';
 import logoLight from '../../assets/logo/logo-text-on-light.svg';
 import logoDark from '../../assets/logo/logo-text-on-dark.svg';
-import connectIcon from '../../assets/connect.svg';
-import connectedIcon from '../../assets/connected.svg';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { useQuotteryContext } from '../../contexts/QuotteryContext';
 import { useBalanceNotifier } from '../../hooks/useBalanceNotifier';
-import ServerConnectModal from '../qubic/connect/ServerConfigModal';
 import TickIndicator from '../TickIndicator';
 
 const Header = () => {
@@ -24,7 +21,6 @@ const Header = () => {
   const { walletPublicIdentity, fetchBalance } = useQuotteryContext();
   const { refreshBalanceWithNotifications } = useBalanceNotifier();
   const [refreshing, setRefreshing] = useState(false);
-  const [serverModalOpen, setServerModalOpen] = useState(false);
 
   useEffect(() => {
     let intervalId;
@@ -87,19 +83,10 @@ const Header = () => {
                       <ConnectLink />
                     </>
                 )}
-                <Tooltip title={isConnected ? 'Server connected' : 'Connect to server'}>
-                  <IconButton onClick={() => setServerModalOpen(true)} color='inherit' size='small'>
-                    <Box component='img' src={isConnected ? connectedIcon : connectIcon}
-                         alt={isConnected ? 'Connected' : 'Connect'}
-                         sx={{ width: 24, height: 24, filter: isDarkMode ? 'invert(0)' : 'invert(1)' }} />
-                  </IconButton>
-                </Tooltip>
               </Box>
             </Toolbar>
           </Container>
         </AppBar>
-
-        <ServerConnectModal open={serverModalOpen} onClose={() => setServerModalOpen(false)} />
       </>
   );
 };

@@ -1,35 +1,31 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { DEFAULT_BOB_URL } from '../config/network';
 
 const ConfigContext = createContext();
 
 export const ConfigProvider = ({ children }) => {
-    const [bobUrl, setBobUrl] = useState('');
-    const [isConnected, setIsConnected] = useState(false);
+    const [bobUrl, setBobUrl] = useState(DEFAULT_BOB_URL);
+    const [isConnected, setIsConnected] = useState(true);
     const [devMode, setDevMode] = useState(false);
 
     useEffect(() => {
-        const savedBobUrl = localStorage.getItem('bobUrl');
-        if (savedBobUrl) {
-            setBobUrl(savedBobUrl);
-            setIsConnected(true);
-        }
+        setBobUrl(DEFAULT_BOB_URL);
+        setIsConnected(true);
         setDevMode(localStorage.getItem('devMode') === 'true');
     }, []);
 
-    const connectToServer = (url, isDev = false) => {
-        const trimmed = url.trim().replace(/\/+$/, '');
+    const connectToServer = (url = DEFAULT_BOB_URL, isDev = false) => {
+        const trimmed = (url || DEFAULT_BOB_URL).trim().replace(/\/+$/, '');
         setBobUrl(trimmed);
         setIsConnected(true);
         setDevMode(isDev);
-        localStorage.setItem('bobUrl', trimmed);
         localStorage.setItem('devMode', isDev ? 'true' : 'false');
     };
 
     const disconnectFromServer = () => {
-        setBobUrl('');
-        setIsConnected(false);
+        setBobUrl(DEFAULT_BOB_URL);
+        setIsConnected(true);
         setDevMode(false);
-        localStorage.removeItem('bobUrl');
         localStorage.removeItem('devMode');
     };
 

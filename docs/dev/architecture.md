@@ -15,9 +15,11 @@ src/
 ├── App.js                  # Router and provider tree
 ├── Theme.jsx               # MUI theme configuration (dark/light)
 ├── index.js                # ReactDOM entry point
+├── config/
+│   └── network.js          # Default Bob node URL
 │
 ├── contexts/               # React context providers
-│   ├── ConfigContext.jsx    # Bob server URL, devMode flag
+│   ├── ConfigContext.jsx    # Default Bob URL and devMode flag
 │   ├── QuotteryContext.jsx  # Events, balances, positions, order book, tick rate
 │   ├── SnackbarContext.jsx  # Toast notification queue
 │   └── ThemeContext.jsx     # Dark/light mode toggle
@@ -51,7 +53,6 @@ src/
 │       │   ├── ConnectModal.jsx         # Wallet selection dialog
 │       │   ├── ConnectLink.jsx          # Header wallet button + balance bubble
 │       │   ├── ConfirmTxModal.jsx       # Tx confirmation dialog (unused currently)
-│       │   ├── ServerConfigModal.jsx    # Bob server connect dialog
 │       │   ├── MetamaskContext.jsx      # MetaMask provider state
 │       │   ├── WalletConnectContext.jsx # WalletConnect placeholder
 │       │   ├── AccountSelector.jsx

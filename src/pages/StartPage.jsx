@@ -12,7 +12,6 @@ import {
 } from "@mui/material";
 import GamepadIcon from "@mui/icons-material/Gamepad";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import LinkIcon from "@mui/icons-material/Link";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useConfig } from "../contexts/ConfigContext";
 import { Typewriter } from "react-simple-typewriter";
@@ -21,9 +20,7 @@ import ModernSearchFilter from "../components/SearchFilter";
 import AnimatedBars from "../components/qubic/ui/AnimateBars";
 import EventOverviewCard from "../components/EventOverviewCard";
 import { getAllTags } from "../components/qubic/util/tagMap";
-import ServerConnectModal from "../components/qubic/connect/ServerConfigModal";
 import { useTxTracker } from "../hooks/useTxTracker";
-import connectIcon from "../assets/connect.svg";
 
 function StartPage() {
   const navigate = useNavigate();
@@ -32,7 +29,6 @@ function StartPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [isFilterLoading, setIsFilterLoading] = useState(false);
   const [selectedTagIndex, setSelectedTagIndex] = useState(0);
-  const [serverModalOpen, setServerModalOpen] = useState(false);
   const { trackTx } = useTxTracker();
 
   const {
@@ -180,61 +176,6 @@ function StartPage() {
             )}
           </Box>
 
-          {/* Not connected: show connect prompt */}
-          {!isConnected && (
-              <Box
-                  component={motion.div}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3, duration: 0.6 }}
-                  sx={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    py: { xs: 6, sm: 8, md: 10 },
-                    gap: 3,
-                  }}
-              >
-                <Box
-                    component="img"
-                    src={connectIcon}
-                    alt="Connect"
-                    sx={{
-                      width: { xs: 64, sm: 80 },
-                      height: { xs: 64, sm: 80 },
-                      opacity: 0.5,
-                      filter: theme.palette.mode === "dark" ? "invert(0)" : "invert(1)",
-                    }}
-                />
-                <Typography
-                    variant="h5"
-                    color="text.secondary"
-                    textAlign="center"
-                    sx={{ fontWeight: 500, maxWidth: 400 }}
-                >
-                  Connect to a Bob server to start exploring prediction markets
-                </Typography>
-                <Button
-                    variant="contained"
-                    color="primary"
-                    size="large"
-                    startIcon={<LinkIcon />}
-                    onClick={() => setServerModalOpen(true)}
-                    sx={{
-                      borderRadius: 10,
-                      px: 4,
-                      py: 1.5,
-                      fontWeight: "bold",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.1em",
-                    }}
-                >
-                  Connect to Server
-                </Button>
-              </Box>
-          )}
-
           {/* Connected: show filter, search, events */}
           {isConnected && (
               <>
@@ -298,10 +239,6 @@ function StartPage() {
           )}
         </Container>
 
-        <ServerConnectModal
-            open={serverModalOpen}
-            onClose={() => setServerModalOpen(false)}
-        />
       </Box>
   );
 }

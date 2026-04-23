@@ -10,12 +10,7 @@ const FUNC_GET_ACTIVE = 4;
 const FUNC_GET_EVENT_BATCH = 5;
 const FUNC_GET_POSITION = 6;
 const FUNC_GET_APPROVED = 7;
-
-const FUNC_GET_PROPOSAL_FEES = 65531;
-const FUNC_GET_PROPOSAL_INDICES = 65532;
-const FUNC_GET_PROPOSAL = 65533;
-const FUNC_GET_VOTES = 65534;
-const FUNC_GET_VOTING_RESULTS = 65535;
+const FUNC_GET_TOP_PROPOSALS = 8;
 
 async function bobPost(bobUrl, path, payload, maxRetries = 10) {
     const url = `${bobUrl}${path}`;
@@ -624,94 +619,53 @@ export async function getUserOrdersFromBob(bobUrl, identity, tickRange = 20) {
     }
 }
 
-export async function getProposalIndices(bobUrl) {
-    try {
-        const raw = await querySc(bobUrl, FUNC_GET_PROPOSAL_INDICES, '');
-        if (!raw || raw.length === 0) return [];
-        // Parse indices — format depends on QPI implementation
-        const indices = [];
-        for (let i = 0; i + 2 <= raw.length; i += 2) {
-            const idx = readUint16LE(raw, i);
-            if (idx === 0xFFFF) break; // sentinel
-            indices.push(idx);
-        }
-        return indices;
-    } catch (e) {
-        console.warn('[getProposalIndices] error:', e);
-        return [];
-    }
+function decodeGovParams(bytes, offset = 0) {
+    const opIdBytes = bytes.slice(offset + 40, offset + 72);
+    const hasOperator = opIdBytes.length === 32 && !opIdBytes.every((b) => b === 0);
+
+    return {
+        shareholderFee: readUint64LE(bytes, offset),
+        burnFee: readUint64LE(bytes, offset + 8),
+        operationFee: readUint64LE(bytes, offset + 16),
+        feePerDay: readInt64LE(bytes, offset + 24),
+        depositAmountForDispute: readInt64LE(bytes, offset + 32),
+        operationId: hasOperator ? pubkeyToIdentity(opIdBytes) : '',
+    };
 }
 
-export async function getProposal(bobUrl, proposalIndex) {
+export async function getTopProposals(bobUrl) {
     try {
-        const buf = new ArrayBuffer(8);
-        const view = new DataView(buf);
-        view.setUint16(0, proposalIndex, true);
-        const inputHex = bytesToHex(new Uint8Array(buf));
+        const raw = await querySc(bobUrl, FUNC_GET_TOP_PROPOSALS, '');
+        if (!raw || raw.length < 80) return { proposals: [], uniqueCount: 0 };
 
-        const raw = await querySc(bobUrl, FUNC_GET_PROPOSAL, inputHex);
-        if (!raw || raw.length < 8) return null;
+        const ENTRY_SIZE = 80; // QtryGOV(72) + totalVotes(sint64)
+        const MAX_TOP = 4;
+        const proposals = [];
 
+        for (let i = 0; i < MAX_TOP; i++) {
+            const base = i * ENTRY_SIZE;
+            if (base + ENTRY_SIZE > raw.length) break;
 
-        const proposalType = readUint16LE(raw, 0);
-        if (proposalType === 0) return null; // empty/invalid
+            const totalVotes = readInt64LE(raw, base + 72);
+            const govParams = decodeGovParams(raw, base);
+            const isEmpty = totalVotes <= 0 && !govParams.operationId;
+            if (isEmpty) continue;
 
-        const PROPOSAL_DATA_SIZE = 8; // approximate
-        const proposerOffset = PROPOSAL_DATA_SIZE;
-        const govOffset = proposerOffset + 32;
-
-        let proposerKey = '';
-        if (proposerOffset + 32 <= raw.length) {
-            const pubkeyBytes = raw.slice(proposerOffset, proposerOffset + 32);
-            if (!pubkeyBytes.every(b => b === 0)) {
-                proposerKey = pubkeyToIdentity(pubkeyBytes);
-            }
+            proposals.push({
+                rank: proposals.length + 1,
+                totalVotes,
+                govParams,
+            });
         }
 
-        let govParams = null;
-        if (govOffset + 72 <= raw.length) {
-            govParams = {
-                shareholderFee: readUint64LE(raw, govOffset),
-                burnFee: readUint64LE(raw, govOffset + 8),
-                operationFee: readUint64LE(raw, govOffset + 16),
-                feePerDay: readInt64LE(raw, govOffset + 24),
-                depositAmountForDispute: readInt64LE(raw, govOffset + 32),
-                operationId: pubkeyToIdentity(raw.slice(govOffset + 40, govOffset + 72)),
-            };
-        }
+        const uniqueCountOffset = MAX_TOP * ENTRY_SIZE;
+        const uniqueCount = raw.length >= uniqueCountOffset + 4
+            ? readInt32LE(raw, uniqueCountOffset)
+            : proposals.length;
 
-        return {
-            index: proposalIndex,
-            type: proposalType,
-            proposer: proposerKey,
-            govParams,
-        };
+        return { proposals, uniqueCount };
     } catch (e) {
-        console.warn('[getProposal] error:', e);
-        return null;
-    }
-}
-
-
-export async function getVotingResults(bobUrl, proposalIndex) {
-    try {
-        const buf = new ArrayBuffer(8);
-        const view = new DataView(buf);
-        view.setUint16(0, proposalIndex, true);
-        const inputHex = bytesToHex(new Uint8Array(buf));
-
-        const raw = await querySc(bobUrl, FUNC_GET_VOTING_RESULTS, inputHex);
-        if (!raw || raw.length < 8) return null;
-
-        // ProposalSummarizedVotingDataV1 fields
-        return {
-            proposalIndex,
-            totalVotes: readUint32LE(raw, 0),
-            acceptedOption: readInt32LE(raw, 4),
-            rawData: raw,
-        };
-    } catch (e) {
-        console.warn('[getVotingResults] error:', e);
-        return null;
+        console.warn('[getTopProposals] error:', e);
+        return { proposals: [], uniqueCount: 0 };
     }
 }

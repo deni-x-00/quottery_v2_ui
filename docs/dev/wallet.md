@@ -14,7 +14,6 @@ The app bar. Contains:
 
 - **Logo** — Links to `/`. Switches between light and dark variants based on theme.
 - **Navigation** — Links to Orders and Governance pages.
-- **Server connect button** — Plug icon that opens `ServerConfigModal`.
 - **Wallet button** — `ConnectLink` component showing wallet state, GARTH balance, and balance bubble.
 - **Tick indicator** — `TickIndicator` component.
 - **Refresh button** — Manual balance refresh.

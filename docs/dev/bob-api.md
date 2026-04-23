@@ -94,16 +94,3 @@ GETs `/balance/{identity}` for the native QU balance.
 
 GETs `/tx/{hash}` to check if a transaction exists. Used by `useTxTracker` for confirmation polling.
 
----
-
-## Governance Functions
-
-These query governance-specific SC view functions (function numbers 65531–65535):
-
-| Function | Number | Purpose |
-|----------|--------|---------|
-| `getProposalFees` | 65531 | Fee configuration for proposals |
-| `getProposalIndices` | 65532 | List of active proposal indices |
-| `getProposal` | 65533 | Details of a specific proposal |
-| `getVotes` | 65534 | Vote tallies for a proposal |
-| `getVotingResults` | 65535 | Final voting outcome |

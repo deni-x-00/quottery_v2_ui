@@ -8,19 +8,19 @@ All context providers live in `src/contexts/`. They manage shared state that mul
 
 **File:** `src/contexts/ConfigContext.jsx`
 
-Manages the Bob server connection.
+Manages Bob node configuration.
 
 **State:**
-- `bobUrl` — Full URL of the connected Bob server (e.g. `http://14.161.50.156:40420`).
-- `isConnected` — Whether a Bob server is currently connected.
+- `bobUrl` — Full URL of the default Bob server from `src/config/network.js` (currently `http://91.210.226.133:40420`).
+- `isConnected` — Always `true` in the current flow because the app auto-connects to the default node.
 - `devMode` — When `true`, the app skips public tick validation and shows "Dev Mode" in the tick indicator. Used for local testnets.
 
 **Methods:**
-- `connectToServer(url, isDev)` — Saves the URL and devMode flag to state and localStorage.
-- `disconnectFromServer()` — Clears connection state.
+- `connectToServer(url, isDev)` — Keeps compatibility with existing callers; updates runtime URL and saves `devMode`.
+- `disconnectFromServer()` — Resets runtime URL to default and keeps app connected.
 - `toggleDevMode()` — Flips devMode.
 
-Both `bobUrl` and `devMode` persist in localStorage so the connection survives page reloads.
+Only `devMode` persists in localStorage.
 
 ---
 

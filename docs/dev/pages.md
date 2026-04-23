@@ -13,7 +13,6 @@ The landing page. Displays all active prediction events as cards.
 
 ### Features
 
-- **Server connect prompt** — If no Bob server is connected, shows a connect button that opens `ServerConfigModal`.
 - **Tag filter bar** — Horizontal scrollable bar of category tags (Crypto, Sport, Politics, etc.). Selecting a tag filters events. Tag definitions come from `tagMap.js`.
 - **Keyword search** — Text input filters events by description.
 - **Event cards** — Each event renders as an `EventOverviewCard` with the question, end date, tag label, thumbnail, and a Quick Buy button.
@@ -22,7 +21,7 @@ The landing page. Displays all active prediction events as cards.
 
 ### Data flow
 
-On mount (and when `isConnected` changes), calls `fetchEvents()` from QuotteryContext, which batch-fetches all active events from the SC via Bob.
+On mount, calls `fetchEvents()` from QuotteryContext, which batch-fetches all active events from the SC via Bob.
 
 ---
 
@@ -99,6 +98,4 @@ Displays Quottery contract governance information.
 ### Sections
 
 - **Current Parameters** — Shows the active fee structure (operation fee, shareholder fee, burn fee), fee per day, anti-spam amount, dispute deposit, and the Game Operator address.
-- **Active Proposals** — Lists governance proposals submitted by QTRYGOV share holders. Each proposal suggests a new set of parameters.
-- **Voting** — If the user holds QTRYGOV shares, they can vote Yes/No on proposals. If 2/3 of share holders agree on the same configuration, it takes effect next epoch.
-- 
+- **Top Proposals** — Displays the top governance proposals returned by SC function `8` (`GetTopProposals`) with weighted votes and proposed parameter values.
