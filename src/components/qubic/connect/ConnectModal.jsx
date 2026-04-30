@@ -49,6 +49,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
   const [accounts, setAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(0);
   const [qrCode, setQrCode] = useState('');
+  const [qrError, setQrError] = useState('');
   const [connectionURI, setConnectionURI] = useState('');
   const {
     connect: walletConnectConnect,
@@ -58,10 +59,31 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
   const { walletPublicIdentity, balance, eventPositions } = useQuotteryContext();
 
   const generateURI = async () => {
-    const { uri, approve } = await walletConnectConnect();
-    setConnectionURI(uri);
-    const result = await generateQRCode(uri);
-    setQrCode(result);
+    setQrCode('');
+    setQrError('');
+    setConnectionURI('');
+
+    let activeUri = '';
+    const renderUri = async (uri) => {
+      if (!uri || activeUri === uri) return;
+      activeUri = uri;
+      setConnectionURI(uri);
+      const result = await generateQRCode(uri);
+      if (result) {
+        setQrCode(result);
+      } else {
+        setQrError('Failed to generate WalletConnect QR code.');
+      }
+    };
+
+    const { uri, approve } = await walletConnectConnect(renderUri);
+    await renderUri(uri);
+
+    if (!activeUri) {
+      setQrError('Failed to create WalletConnect pairing URI.');
+      return;
+    }
+
     await approve();
   };
 
@@ -240,6 +262,10 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                          sx={{ minWidth: 216, minHeight: 216 }}>
                       {qrCode ? (
                           <img src={qrCode} alt='Wallet Connect QR Code' style={{ width: 216, height: 216 }} />
+                      ) : qrError ? (
+                          <Typography variant='body2' color='error' textAlign='center'>
+                            {qrError}
+                          </Typography>
                       ) : (
                           <Box sx={{
                             width: 32, height: 32,
@@ -252,7 +278,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                       )}
                     </Box>
                     <Button variant='outlined' color='primary' size='large'
-                            onClick={() => window.open(`qubic-wallet://pairwc/${connectionURI}`, '_blank')}
+                            onClick={() => window.open(`qubic-wallet://pairwc/${encodeURIComponent(connectionURI)}`, '_blank')}
                             disabled={!connectionURI || !isMobile} sx={{ fontWeight: 600 }}>
                       {t('connect.Open in Qubic Wallet')}
                     </Button>

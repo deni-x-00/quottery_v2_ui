@@ -10,9 +10,17 @@ export function WalletConnectProvider({ children }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
 
-  const connect = async () => {
+  const connect = async (onDisplayUri) => {
     if (!signClient) return { uri: '', approve: async () => {} };
     setIsConnecting(true);
+    const handleDisplayUri = (uri) => {
+      if (uri && typeof onDisplayUri === 'function') {
+        onDisplayUri(uri);
+      }
+    };
+
+    signClient.on('display_uri', handleDisplayUri);
+
     try {
       const { uri, approval } = await signClient.connect({
         requiredNamespaces: {
@@ -30,6 +38,8 @@ export function WalletConnectProvider({ children }) {
         },
       });
 
+      handleDisplayUri(uri);
+
       const approve = async () => {
         try {
           const session = await approval();
@@ -46,6 +56,7 @@ export function WalletConnectProvider({ children }) {
       console.error('Failed to connect:', error);
       return { uri: '', approve: async () => {} };
     } finally {
+      signClient.off('display_uri', handleDisplayUri);
       setIsConnecting(false);
     }
   };
@@ -143,12 +154,14 @@ export function WalletConnectProvider({ children }) {
   };
 
   useEffect(() => {
+    const appUrl = window.location.origin;
+
     SignClient.init({
-      projectId: '2697d842a392d20a355416a260f58276',
+      projectId: '6b20c30bdf9886424e0c563ba165af9b',
       metadata: {
-        name: 'QEARN',
-        description: 'QEARN',
-        url: 'https://www.qearn.org',
+        name: 'Quottery',
+        description: 'Quottery',
+        url: appUrl,
         icons: ['https://walletconnect.com/walletconnect-logo.png'],
       },
     }).then((client) => {
