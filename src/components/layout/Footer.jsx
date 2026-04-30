@@ -38,7 +38,7 @@ const Footer = () => {
         justifyContent='center'
       >
         <Link
-          href='https://qubic.org/Terms-of-service'
+          href='https://qubic.org/terms-of-service'
           target='_blank'
           rel='noreferrer'
           underline='hover'
@@ -72,7 +72,7 @@ const Footer = () => {
         />
 
         <Link
-          href='https://qubic.org/Privacy-policy'
+          href='https://qubic.org/privacy-policy'
           target='_blank'
           rel='noreferrer'
           underline='hover'

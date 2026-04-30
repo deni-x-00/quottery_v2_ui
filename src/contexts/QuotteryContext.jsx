@@ -40,7 +40,7 @@ export const QuotteryProvider = ({ children }) => {
   const [obError, setObError] = useState(null);
 
   // Adaptive tick rate measurement
-  const { tickRate, latestTick, adaptiveOffset, getScheduledTick } = useTickRate(bobUrl);
+  const { tickRate, adaptiveOffset, getScheduledTick } = useTickRate(bobUrl);
 
   const getCurrentTick = async () => {
     return await getLatestTick(bobUrl);
@@ -258,6 +258,9 @@ export const QuotteryProvider = ({ children }) => {
 
     getIdentityAndBalance();
     return () => {};
+    // fetchBalance intentionally reads current balance/position state for diffing.
+    // Re-running this effect on every balance update would trigger extra network calls.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet]);
 
   // Build order book side entries for display

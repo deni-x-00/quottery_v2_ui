@@ -2,7 +2,6 @@
   "name": "quottery-frontend",
   "version": "1.0",
   "private": true,
-  "proxy": "http://14.161.50.156:40420",
   "dependencies": {
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
@@ -38,6 +37,8 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:api": "node server/bob-proxy.js",
+    "serve:prod": "node server/bob-proxy.js",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
@@ -62,6 +63,7 @@
     ]
   },
   "devDependencies": {
+    "@babel/plugin-proposal-private-property-in-object": "7.21.11",
     "auto-changelog": "^2.4.0"
   }
 }

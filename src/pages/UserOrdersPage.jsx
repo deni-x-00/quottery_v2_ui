@@ -1,4 +1,3 @@
-/* global BigInt */
 import React, { useEffect, useState, useCallback } from "react";
 import {
   Box,

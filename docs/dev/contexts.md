@@ -11,7 +11,7 @@ All context providers live in `src/contexts/`. They manage shared state that mul
 Manages Bob node configuration.
 
 **State:**
-- `bobUrl` — Full URL of the default Bob server from `src/config/network.js` (currently `http://91.210.226.133:40420`).
+- `bobUrl` — Frontend Bob API path from `src/config/network.js`. In production this should normally be `/api/bob`, with the real Bob node URL kept only in the server-side `BOB_TARGET_URL` environment variable.
 - `isConnected` — Always `true` in the current flow because the app auto-connects to the default node.
 - `devMode` — When `true`, the app skips public tick validation and shows "Dev Mode" in the tick indicator. Used for local testnets.
 

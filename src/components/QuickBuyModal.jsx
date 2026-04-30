@@ -1,4 +1,3 @@
-/* global BigInt */
 import React, { useState } from 'react';
 import {
     Dialog,

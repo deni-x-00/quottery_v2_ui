@@ -81,25 +81,6 @@ async function querySc(bobUrl, funcNumber, inputHex = '') {
     return new Uint8Array(0);
 }
 
-async function bobRpc(bobUrl, method, params = []) {
-    const res = await fetch(`${bobUrl}/qubic`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            jsonrpc: '2.0',
-            method,
-            params,
-            id: Date.now(),
-        }),
-    });
-    const data = await res.json();
-    if (data?.error) {
-        throw new Error(data.error.message || JSON.stringify(data.error));
-    }
-    return data?.result;
-}
-
-
 export async function broadcastTransaction(bobUrl, signedHex) {
     const res = await bobPost(bobUrl, '/broadcastTransaction', { data: signedHex });
 
@@ -532,15 +513,6 @@ export async function fetchUserBalanceAndPositions(bobUrl, identity) {
         positions: posResult.positions,
     };
 }
-
-// Quottery SC procedure numbers for order actions
-const PROC_ADD_ASK    = 2;
-const PROC_REMOVE_ASK = 3;
-const PROC_ADD_BID    = 4;
-const PROC_REMOVE_BID = 5;
-
-const ORDER_PROCS = new Set([PROC_ADD_ASK, PROC_REMOVE_ASK, PROC_ADD_BID, PROC_REMOVE_BID]);
-
 
 export async function getUserOrdersFromBob(bobUrl, identity, tickRange = 20) {
     try {

@@ -1,1 +1,1 @@
-export const DEFAULT_BOB_URL = 'http://91.210.226.133:40420';
+export const DEFAULT_BOB_URL = process.env.REACT_APP_BOB_URL || '/api/bob';
