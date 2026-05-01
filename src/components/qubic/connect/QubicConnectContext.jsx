@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   SIGNATURE_LENGTH,
 } from '@qubic-lib/qubic-ts-library/dist/crypto';
+import { QubicHelper } from '@qubic-lib/qubic-ts-library/dist/qubicHelper';
 import {
   MetamaskActions,
   MetaMaskContext,
@@ -9,6 +10,8 @@ import {
 } from './MetamaskContext';
 import { connectTypes, defaultSnapOrigin } from './config';
 import {
+  base64ToUint8Array,
+  decodeUint8ArrayTx,
   uint8ArrayToBase64,
 } from '../../../utils';
 import { toast } from 'react-hot-toast';
@@ -263,6 +266,7 @@ function QubicConnectProviderInner({ children }) {
     const signedTx =
         result?.signedTx ||
         result?.signature ||
+        result?.signedTransaction ||
         result?.transaction ||
         result?.tx ||
         result;
@@ -297,11 +301,29 @@ function QubicConnectProviderInner({ children }) {
       throw new Error('WalletConnect session is not connected');
     }
 
-    const sigOffset = tx.length - SIGNATURE_LENGTH;
+    const qHelper = new QubicHelper();
+    const decodedTx = tx instanceof Uint8Array ? decodeUint8ArrayTx(tx) : tx;
+    const [from, to] = await Promise.all([
+      qHelper.getIdentity(decodedTx.sourcePublicKey.getIdentity()),
+      qHelper.getIdentity(decodedTx.destinationPublicKey.getIdentity()),
+    ]);
+    const payloadBytes = decodedTx.payload?.getPackageData?.() || new Uint8Array();
+    const payload = payloadBytes.length > 0 ? uint8ArrayToBase64(payloadBytes) : null;
+
+    toast('Sign the transaction in your wallet');
+
     const result = await signWalletConnectTransaction({
-      base64Tx: uint8ArrayToBase64(tx),
-      offset: sigOffset,
+      from,
+      to,
+      amount: Number(decodedTx.amount.getNumber()),
+      tick: decodedTx.tick,
+      inputType: decodedTx.inputType,
+      payload,
     });
+
+    if (result?.signedTransaction) {
+      return { tx: base64ToUint8Array(result.signedTransaction) };
+    }
 
     return applySignedTxResult(tx, result);
   };
