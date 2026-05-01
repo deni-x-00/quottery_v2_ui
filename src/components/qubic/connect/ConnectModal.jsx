@@ -32,6 +32,25 @@ export const MetamaskActions = Object.freeze({
   SetIsFlask: 'SetIsFlask',
 });
 
+const normalizeWalletConnectAccounts = (accounts) => {
+  const accountList = Array.isArray(accounts)
+      ? accounts
+      : accounts?.accounts || accounts?.result || [];
+
+  return accountList
+      .map((account) => {
+        if (typeof account === 'string') {
+          return { publicId: account, alias: '' };
+        }
+
+        return {
+          publicId: account?.address || account?.publicId || account?.id || '',
+          alias: account?.name || account?.alias || '',
+        };
+      })
+      .filter((account) => account.publicId);
+};
+
 const ConnectModal = ({ open, onClose, darkMode }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -86,20 +105,16 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
   };
 
   useEffect(() => {
-    if (isConnected) {
+    if (open && isConnected && !connected && selectedMode === 'walletconnect') {
       const fetchAccounts = async () => {
-        const accounts = await requestAccounts();
-        setAccounts(
-            accounts.map((account) => ({
-              publicId: account.address,
-              alias: account.name,
-            }))
-        );
+        const accounts = normalizeWalletConnectAccounts(await requestAccounts());
+        setAccounts(accounts);
+        setSelectedAccount(0);
         setSelectedMode('account-select');
       };
       fetchAccounts();
     }
-  }, [isConnected, requestAccounts]);
+  }, [open, isConnected, connected, selectedMode, requestAccounts]);
 
   const handleClose = () => {
     setSelectedMode('none');

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import SignClient from '@walletconnect/sign-client';
 import toast from 'react-hot-toast';
 
@@ -9,8 +9,9 @@ export function WalletConnectProvider({ children }) {
   const [sessionTopic, setSessionTopic] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  const connect = async (onDisplayUri) => {
+  const connect = useCallback(async (onDisplayUri) => {
     if (!signClient) return { uri: '', approve: async () => {} };
     setIsConnecting(true);
     const handleDisplayUri = (uri) => {
@@ -59,10 +60,15 @@ export function WalletConnectProvider({ children }) {
       signClient.off('display_uri', handleDisplayUri);
       setIsConnecting(false);
     }
-  };
+  }, [signClient]);
 
-  const disconnect = async () => {
-    if (!signClient || !sessionTopic) return;
+  const disconnect = useCallback(async () => {
+    if (!signClient || !sessionTopic) {
+      setSessionTopic('');
+      setIsConnected(false);
+      localStorage.removeItem('sessionTopic');
+      return;
+    }
 
     try {
       await signClient.disconnect({
@@ -75,10 +81,13 @@ export function WalletConnectProvider({ children }) {
       localStorage.removeItem('sessionTopic');
     } catch (error) {
       console.error('Failed to disconnect:', error);
+      setSessionTopic('');
+      setIsConnected(false);
+      localStorage.removeItem('sessionTopic');
     }
-  };
+  }, [signClient, sessionTopic]);
 
-  const requestAccounts = async () => {
+  const requestAccounts = useCallback(async () => {
     if (!signClient || !sessionTopic) throw new Error('Not connected');
 
     try {
@@ -97,9 +106,9 @@ export function WalletConnectProvider({ children }) {
       console.error('Failed to request accounts:', error);
       throw error;
     }
-  };
+  }, [signClient, sessionTopic]);
 
-  const sendQubic = async (params) => {
+  const sendQubic = useCallback(async (params) => {
     if (!signClient || !sessionTopic) throw new Error('Not connected');
 
     return await signClient.request({
@@ -113,9 +122,9 @@ export function WalletConnectProvider({ children }) {
         },
       },
     });
-  };
+  }, [signClient, sessionTopic]);
 
-  const signTransaction = async (params) => {
+  const signTransaction = useCallback(async (params) => {
     if (!signClient || !sessionTopic) throw new Error('Not connected');
 
     try {
@@ -125,11 +134,7 @@ export function WalletConnectProvider({ children }) {
         request: {
           method: 'qubic_signTransaction',
           params: {
-            from: params.from,
-            to: params.to,
-            amount: params.amount,
-            inputType: params.inputType,
-            payload: params.payload,
+            ...params,
             nonce: Date.now().toString(),
           },
         },
@@ -138,9 +143,9 @@ export function WalletConnectProvider({ children }) {
       toast.error(error?.message || 'Failed to sign transaction');
       throw error;
     }
-  };
+  }, [signClient, sessionTopic]);
 
-  const signMessage = async (params) => {
+  const signMessage = useCallback(async (params) => {
     if (!signClient || !sessionTopic) throw new Error('Not connected');
 
     return await signClient.request({
@@ -151,10 +156,16 @@ export function WalletConnectProvider({ children }) {
         params,
       },
     });
-  };
+  }, [signClient, sessionTopic]);
 
   useEffect(() => {
+    let mounted = true;
     const appUrl = window.location.origin;
+    const clearSession = () => {
+      setSessionTopic('');
+      setIsConnected(false);
+      localStorage.removeItem('sessionTopic');
+    };
 
     SignClient.init({
       projectId: '6b20c30bdf9886424e0c563ba165af9b',
@@ -165,31 +176,39 @@ export function WalletConnectProvider({ children }) {
         icons: ['https://walletconnect.com/walletconnect-logo.png'],
       },
     }).then((client) => {
+      if (!mounted) return;
       setSignClient(client);
 
       const storedTopic = localStorage.getItem('sessionTopic');
       if (storedTopic) {
-        const session = client.session.get(storedTopic);
-        if (session) {
-          setSessionTopic(storedTopic);
-          setIsConnected(true);
-        } else {
+        try {
+          const session = client.session.get(storedTopic);
+          if (session) {
+            setSessionTopic(storedTopic);
+            setIsConnected(true);
+          } else {
+            localStorage.removeItem('sessionTopic');
+          }
+        } catch (error) {
+          console.warn('Failed to restore WalletConnect session:', error);
           localStorage.removeItem('sessionTopic');
         }
       }
 
-      client.on('session_delete', () => {
-        setSessionTopic('');
-        setIsConnected(false);
-        localStorage.removeItem('sessionTopic');
-      });
+      client.on('session_delete', clearSession);
+      client.on('session_expire', clearSession);
 
-      client.on('session_expire', () => {
-        setSessionTopic('');
-        setIsConnected(false);
-        localStorage.removeItem('sessionTopic');
-      });
+      setIsInitialized(true);
+    }).catch((error) => {
+      console.error('Failed to initialize WalletConnect:', error);
+      if (mounted) {
+        setIsInitialized(true);
+      }
     });
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const contextValue = {
@@ -197,6 +216,7 @@ export function WalletConnectProvider({ children }) {
     sessionTopic,
     isConnecting,
     isConnected,
+    isInitialized,
     connect,
     disconnect,
     requestAccounts,

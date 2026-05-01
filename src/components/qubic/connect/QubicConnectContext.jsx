@@ -23,6 +23,25 @@ const balancesAtom = atom([]);
 const QubicConnectContext = createContext(undefined);
 const walletTypes = [...connectTypes, 'walletconnect'];
 
+const normalizeWalletConnectAccounts = (accounts) => {
+  const accountList = Array.isArray(accounts)
+      ? accounts
+      : accounts?.accounts || accounts?.result || [];
+
+  return accountList
+      .map((account) => {
+        if (typeof account === 'string') {
+          return { publicId: account, alias: '' };
+        }
+
+        return {
+          publicId: account?.address || account?.publicId || account?.id || '',
+          alias: account?.name || account?.alias || '',
+        };
+      })
+      .filter((account) => account.publicId);
+};
+
 const readStoredWallet = () => {
   if (typeof window === 'undefined') {
     return null;
@@ -59,7 +78,10 @@ function QubicConnectProviderInner({ children }) {
   const [, setBalances] = useAtom(balancesAtom);
   const {
     isConnected: walletConnectConnected,
+    isInitialized: walletConnectInitialized,
     requestAccounts: requestWalletConnectAccounts,
+    signTransaction: signWalletConnectTransaction,
+    disconnect: disconnectWalletConnect,
   } = useWalletConnect();
 
   const connect = (wallet) => {
@@ -68,11 +90,16 @@ function QubicConnectProviderInner({ children }) {
     setConnected(true);
   };
 
-  const disconnect = () => {
+  const disconnect = async () => {
+    const shouldDisconnectWalletConnect = wallet?.connectType === 'walletconnect';
     localStorage.removeItem('wallet');
     setWallet(null);
     setConnected(false);
     setBalances([]);
+
+    if (shouldDisconnectWalletConnect) {
+      await disconnectWalletConnect();
+    }
   };
 
   useEffect(() => {
@@ -84,21 +111,16 @@ function QubicConnectProviderInner({ children }) {
 
     const restoreWalletConnectWallet = async () => {
       try {
-        const accounts = await requestWalletConnectAccounts();
-        if (cancelled || !Array.isArray(accounts) || accounts.length === 0) {
+        const accounts = normalizeWalletConnectAccounts(await requestWalletConnectAccounts());
+        if (cancelled || accounts.length === 0) {
           return;
         }
 
         const account = accounts[0];
-        const publicKey = account?.address || account?.publicId || account;
-        if (typeof publicKey !== 'string' || publicKey.length === 0) {
-          return;
-        }
-
         connect({
           connectType: 'walletconnect',
-          publicKey,
-          alias: account?.name || account?.alias,
+          publicKey: account.publicId,
+          alias: account.alias,
         });
       } catch (error) {
         console.warn('Failed to restore WalletConnect wallet:', error);
@@ -111,6 +133,21 @@ function QubicConnectProviderInner({ children }) {
       cancelled = true;
     };
   }, [wallet, walletConnectConnected, requestWalletConnectAccounts]);
+
+  useEffect(() => {
+    if (
+      !walletConnectInitialized ||
+      wallet?.connectType !== 'walletconnect' ||
+      walletConnectConnected
+    ) {
+      return;
+    }
+
+    localStorage.removeItem('wallet');
+    setWallet(null);
+    setConnected(false);
+    setBalances([]);
+  }, [wallet, walletConnectConnected, walletConnectInitialized, setBalances]);
 
   const toggleConnectModal = () => {
     setShowConnectModal(!showConnectModal);
@@ -204,9 +241,77 @@ function QubicConnectProviderInner({ children }) {
     }
   };
 
+  const decodeSignedTx = (signedTx) => {
+    if (signedTx instanceof Uint8Array) {
+      return signedTx;
+    }
+
+    if (typeof signedTx !== 'string' || signedTx.length === 0) {
+      return null;
+    }
+
+    if (/^[0-9a-fA-F]+$/.test(signedTx) && signedTx.length % 2 === 0) {
+      return new Uint8Array(
+          signedTx.match(/.{1,2}/g).map((byte) => parseInt(byte, 16))
+      );
+    }
+
+    return new Uint8Array(atob(signedTx).split('').map((char) => char.charCodeAt(0)));
+  };
+
+  const applySignedTxResult = (tx, result) => {
+    const signedTx =
+        result?.signedTx ||
+        result?.signature ||
+        result?.transaction ||
+        result?.tx ||
+        result;
+
+    if (!signedTx) {
+      return null;
+    }
+
+    const decoded = decodeSignedTx(signedTx);
+    if (!decoded) {
+      throw new Error('Unsupported signed transaction format');
+    }
+
+    const sigOffset = tx.length - SIGNATURE_LENGTH;
+    if (decoded.length === tx.length) {
+      for (let i = 0; i < tx.length; i++) {
+        tx[i] = decoded[i];
+      }
+    } else if (decoded.length === SIGNATURE_LENGTH) {
+      tx.set(decoded, sigOffset);
+    } else {
+      throw new Error(
+          `Unexpected signedTx length: ${decoded.length} (expected ${tx.length} or ${SIGNATURE_LENGTH})`
+      );
+    }
+
+    return { tx };
+  };
+
+  const getWalletConnectSignedTx = async (tx) => {
+    if (!walletConnectConnected) {
+      throw new Error('WalletConnect session is not connected');
+    }
+
+    const sigOffset = tx.length - SIGNATURE_LENGTH;
+    const result = await signWalletConnectTransaction({
+      base64Tx: uint8ArrayToBase64(tx),
+      offset: sigOffset,
+    });
+
+    return applySignedTxResult(tx, result);
+  };
+
   const getSignedTx = async (tx) => {
-    if (!wallet || !connectTypes.includes(wallet.connectType)) {
+    if (!wallet || !walletTypes.includes(wallet.connectType)) {
       throw new Error(`Unsupported connectType: ${wallet?.connectType}`);
+    }
+    if (wallet.connectType === 'walletconnect') {
+      return getWalletConnectSignedTx(tx);
     }
     const sigOffset = tx.length - SIGNATURE_LENGTH;
     const mmResult = await getMetaMaskSignedTx(tx, sigOffset);
