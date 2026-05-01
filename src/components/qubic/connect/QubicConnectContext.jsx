@@ -21,9 +21,37 @@ const balancesAtom = atom([]);
 
 const QubicConnectContext = createContext(undefined);
 
-export function QubicConnectProvider({ children }) {
-  const [connected, setConnected] = useState(false);
-  const [wallet, setWallet] = useState(null);
+const readStoredWallet = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const storedWallet = window.localStorage.getItem('wallet');
+    if (!storedWallet) {
+      return null;
+    }
+
+    const parsedWallet = JSON.parse(storedWallet);
+    if (
+      parsedWallet &&
+      connectTypes.includes(parsedWallet.connectType) &&
+      typeof parsedWallet.publicKey === 'string' &&
+      parsedWallet.publicKey.length > 0
+    ) {
+      return parsedWallet;
+    }
+  } catch (error) {
+    console.warn('Failed to restore wallet from localStorage:', error);
+  }
+
+  window.localStorage.removeItem('wallet');
+  return null;
+};
+
+function QubicConnectProviderInner({ children }) {
+  const [wallet, setWallet] = useState(readStoredWallet);
+  const [connected, setConnected] = useState(() => Boolean(wallet));
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [, dispatch] = useContext(MetaMaskContext);
   const [, setBalances] = useAtom(balancesAtom);
@@ -205,10 +233,16 @@ export function QubicConnectProvider({ children }) {
   };
 
   return (
+      <QubicConnectContext.Provider value={contextValue}>
+        {children}
+      </QubicConnectContext.Provider>
+  );
+}
+
+export function QubicConnectProvider({ children }) {
+  return (
       <MetaMaskProvider>
-        <QubicConnectContext.Provider value={contextValue}>
-          {children}
-        </QubicConnectContext.Provider>
+        <QubicConnectProviderInner>{children}</QubicConnectProviderInner>
       </MetaMaskProvider>
   );
 }

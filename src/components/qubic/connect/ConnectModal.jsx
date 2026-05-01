@@ -22,7 +22,6 @@ import { ReactComponent as MetaMaskLogo } from '../../../assets/metamask-clean.s
 import { useWalletConnect } from './WalletConnectContext';
 import { generateQRCode } from '../../../utils';
 import WalletConnectLogo from '../../../assets/wallet-connect.svg';
-import { useTranslation } from 'react-i18next';
 import AccountSelector from './AccountSelector';
 import { useQuotteryContext } from '../../../contexts/QuotteryContext';
 
@@ -37,7 +36,6 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [state] = useContext(MetaMaskContext);
-  const { t } = useTranslation();
 
   const [selectedMode, setSelectedMode] = useState('none');
   const {
@@ -165,7 +163,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                         <Button variant='outlined' color='primary' size='large'
                                 startIcon={<AccountBalanceWalletIcon />}
                                 onClick={() => disconnect()} fullWidth sx={{ mt: 1 }}>
-                          <Typography variant='button' fontWeight='bold'>{t('Disconnect Wallet')}</Typography>
+                          <Typography variant='button' fontWeight='bold'>Disconnect Wallet</Typography>
                         </Button>
                       </>
                   )}
@@ -199,10 +197,10 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
               <Grow in={selectedMode === 'account-select'} timeout={300}>
                 <Box>
                   <Typography variant='body1' mb={2} color='text.secondary'>
-                    {t('connect.Select an account:')}
+                    Select an account
                   </Typography>
                   <AccountSelector
-                      label={t('Account')}
+                      label='Account'
                       options={accounts.map((account, idx) => ({
                         label: account.alias || `Account ${idx + 1}`,
                         value: account.publicId,
@@ -214,7 +212,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={() => { disconnect(); setSelectedMode('none'); }}
                             sx={{ fontWeight: 600 }}>
-                      {t('connect.Lock Wallet')}
+                      Lock Wallet
                     </Button>
                     <Button variant='contained' color='primary' size='large'
                             onClick={() => {
@@ -227,7 +225,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                               onClose();
                             }}
                             sx={{ fontWeight: 600 }}>
-                      {t('connect.Select Account')}
+                      Select Account
                     </Button>
                   </Box>
                 </Box>
@@ -244,7 +242,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                     <HeaderButtons state={state} onConnectClick={() => { mmSnapConnect(); setSelectedMode('none'); onClose(); }} />
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={() => setSelectedMode('none')} sx={{ fontWeight: 600 }}>
-                      {t('Cancel')}
+                      Cancel
                     </Button>
                   </Box>
                 </Box>
@@ -255,7 +253,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
               <Grow in={selectedMode === 'walletconnect'} timeout={300}>
                 <Box>
                   <Typography variant='body1' mb={3} textAlign='center' color='text.secondary'>
-                    {t('Connect your Qubic Wallet. You need to have Qubic Wallet installed and unlocked.')}
+                    Connect your Qubic Wallet. You need to have Qubic Wallet installed and unlocked.
                   </Typography>
                   <Box display='flex' flexDirection='column' gap={2}>
                     <Box display='flex' flexDirection='column' alignItems='center' justifyContent='center'
@@ -280,11 +278,11 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                     <Button variant='outlined' color='primary' size='large'
                             onClick={() => window.open(`qubic-wallet://pairwc/${encodeURIComponent(connectionURI)}`, '_blank')}
                             disabled={!connectionURI || !isMobile} sx={{ fontWeight: 600 }}>
-                      {t('connect.Open in Qubic Wallet')}
+                      Open in Qubic Wallet
                     </Button>
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={() => setSelectedMode('none')} sx={{ fontWeight: 600 }}>
-                      {t('Cancel')}
+                      Cancel
                     </Button>
                   </Box>
                 </Box>

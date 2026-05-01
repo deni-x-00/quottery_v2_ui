@@ -1,11 +1,8 @@
 import { MetaMaskLogo } from './MetaMaskLogo.jsx';
 import { MetaMaskFlaskLogo } from './MetaMaskFlaskLogo.jsx';
 
-import { useTranslation } from 'react-i18next';
 import { Button, Typography } from '@mui/material';
 export const InstallButton = () => {
-  const { t } = useTranslation();
-
   return (
     <Button
       variant="contained"
@@ -17,15 +14,13 @@ export const InstallButton = () => {
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">
-        {t('connect.Install MetaMask')}
+        Install MetaMask
       </Typography>
     </Button>
   );
 };
 
 export const ConnectButton = (props) => {
-  const { t } = useTranslation();
-
   return (
     <Button
       variant="contained"
@@ -37,15 +32,13 @@ export const ConnectButton = (props) => {
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">
-        {t('Connect')}
+        Connect
       </Typography>
     </Button>
   );
 };
 
 export const ReconnectButton = (props) => {
-  const { t } = useTranslation();
-
   return (
     <Button
       variant="contained"
@@ -57,15 +50,13 @@ export const ReconnectButton = (props) => {
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">
-        {t('Reconnect')}
+        Reconnect
       </Typography>
     </Button>
   );
 };
 
 export const HeaderButtons = ({ state, onConnectClick }) => {
-  const { t } = useTranslation();
-
   if (!state.snapsDetected && !state.installedSnap) {
     return <InstallButton />;
   }
@@ -89,7 +80,7 @@ export const HeaderButtons = ({ state, onConnectClick }) => {
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">
-        {t('Connected')}
+        Connected
       </Typography>
     </Button>
   );
