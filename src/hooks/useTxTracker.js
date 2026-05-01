@@ -9,7 +9,7 @@ export function useTxTracker() {
     const [pendingTxs, setPendingTxs] = useState([]);
     const { bobUrl } = useConfig();
     const { showSnackbar } = useSnackbar();
-    const { walletPublicIdentity, fetchBalance } = useQuotteryContext();
+    const { walletPublicIdentity, fetchBalance, fetchOpenOrders } = useQuotteryContext();
     const intervalRef = useRef(null);
 
     const trackTx = useCallback((tx) => {
@@ -28,6 +28,20 @@ export function useTxTracker() {
     const removeTx = useCallback((txId) => {
         setPendingTxs((prev) => prev.filter((t) => t.id !== txId));
     }, []);
+
+    const hasMatchingOpenOrder = useCallback(async (tx) => {
+        if (tx.type !== 'order' || !walletPublicIdentity || !fetchOpenOrders) return false;
+
+        const result = await fetchOpenOrders(walletPublicIdentity);
+        const orders = result?.orders || [];
+        return orders.some((order) =>
+            String(order.market_id) === String(tx.eventId) &&
+            Number(order.option) === Number(tx.option) &&
+            String(order.side) === String(tx.side) &&
+            Number(order.price) === Number(tx.price) &&
+            Number(order.qty) >= Number(tx.amount)
+        );
+    }, [walletPublicIdentity, fetchOpenOrders]);
 
     useEffect(() => {
         if (pendingTxs.length === 0) {
@@ -53,7 +67,7 @@ export function useTxTracker() {
                     // Before tick passes: try GET /tx/{hash} for early confirmation
                     if (tx.txHash && tx.scheduledTick) {
                         const txData = await getTxByHash(bobUrl, tx.txHash);
-                        if (txData) {
+                        if (txData && tx.type !== 'order') {
                             showSnackbar(
                                 `Tx confirmed on tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
                                 'success'
@@ -80,10 +94,20 @@ export function useTxTracker() {
                         }
 
                         if (txFound) {
-                            showSnackbar(
-                                `Tx confirmed at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
-                                'success'
-                            );
+                            if (tx.type === 'order') {
+                                const orderFound = await hasMatchingOpenOrder(tx);
+                                showSnackbar(
+                                    orderFound
+                                        ? `Order added at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`
+                                        : `Transaction was included, but the order was not added. The event may be closed or the balance/position was insufficient.\nTx: ${tx.txHash}`,
+                                    orderFound ? 'success' : 'warning'
+                                );
+                            } else {
+                                showSnackbar(
+                                    `Tx confirmed at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
+                                    'success'
+                                );
+                            }
                             if (walletPublicIdentity && fetchBalance) {
                                 fetchBalance(walletPublicIdentity);
                             }
@@ -98,16 +122,22 @@ export function useTxTracker() {
                             balanceChanged = result?.changed || result?.balanceChanged || result?.positionsChanged;
                         }
 
-                        if (balanceChanged) {
+                        if (balanceChanged && tx.type !== 'order') {
                             showSnackbar(
                                 `Tx executed at tick ${tx.scheduledTick}: ${tx.description || ''}\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
                                 'success'
                             );
-                        } else {
-                            // Order placements (bid/ask) don't change balance until matched.
-                            // This is NOT a failure — the order is likely sitting in the book.
+                        } else if (tx.type === 'order') {
+                            const orderFound = await hasMatchingOpenOrder(tx);
                             showSnackbar(
-                                `Order submitted at tick ${tx.scheduledTick}: ${tx.description || ''}\nCheck the order book to verify.\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
+                                orderFound
+                                    ? `Order added at tick ${tx.scheduledTick}: ${tx.description || ''}`
+                                    : `Could not verify that the order was added. Please refresh the order book before trying again.`,
+                                orderFound ? 'success' : 'warning'
+                            );
+                        } else {
+                            showSnackbar(
+                                `Could not verify tx execution at tick ${tx.scheduledTick}. Check manually.\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
                                 'info'
                             );
                         }
@@ -136,7 +166,7 @@ export function useTxTracker() {
                 intervalRef.current = null;
             }
         };
-    }, [pendingTxs, bobUrl, walletPublicIdentity, fetchBalance, showSnackbar, removeTx]);
+    }, [pendingTxs, bobUrl, walletPublicIdentity, fetchBalance, showSnackbar, removeTx, hasMatchingOpenOrder]);
 
     return { trackTx, pendingTxs };
 }

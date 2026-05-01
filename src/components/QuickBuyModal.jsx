@@ -26,6 +26,7 @@ import {
     packOrderPayload,
     QTRY_ADD_BID_ORDER,
 } from './qubic/util/quotteryTx';
+import { isEventClosed, validateOrderPreflight } from './qubic/util/tradeValidation';
 import gcLogo from '../assets/gc.png';
 
 const WHOLE_SHARE_PRICE = 100000;
@@ -34,7 +35,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
-    const { walletPublicIdentity, walletPublicKeyBytes, balance, getScheduledTick } = useQuotteryContext();
+    const { walletPublicIdentity, walletPublicKeyBytes, balance, quBalance, fetchQuBalance, getScheduledTick } = useQuotteryContext();
     const { bobUrl } = useConfig();
     const { showSnackbar } = useSnackbar();
 
@@ -65,6 +66,19 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
             return;
         }
 
+        const preflightError = validateOrderPreflight({
+            event,
+            option: selectedOption,
+            side: 'buy',
+            amount: shares,
+            price,
+            balance,
+        });
+        if (preflightError) {
+            showSnackbar(preflightError, 'error');
+            return;
+        }
+
         setSubmitting(true);
         try {
             const [tickInfo, basicInfo] = await Promise.all([
@@ -79,6 +93,24 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
 
             const { scheduledTick } = tickInfo;
             const antiSpamAmount = basicInfo.antiSpamAmount || 0;
+            const latestQuBalance = walletPublicIdentity
+                ? await fetchQuBalance(walletPublicIdentity)
+                : quBalance;
+
+            const fundedPreflightError = validateOrderPreflight({
+                event,
+                option: selectedOption,
+                side: 'buy',
+                amount: shares,
+                price,
+                balance,
+                quBalance: latestQuBalance,
+                antiSpamAmount,
+            });
+            if (fundedPreflightError) {
+                showSnackbar(fundedPreflightError, 'error');
+                return;
+            }
 
             const payload = packOrderPayload(eid, selectedOption, shares, price);
             const packet = buildQuotteryTx(
@@ -102,11 +134,21 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                 const optDesc = selectedOption === 0 ? event.option0Desc : event.option1Desc;
                 const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : '';
                 showSnackbar(
-                    `Bid placed for tick ${scheduledTick}: ${shares} shares of "${optDesc}" @ ${formatQubicAmount(price)}${hashInfo}`,
-                    'success'
+                    `Bid transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${shares} shares of "${optDesc}" @ ${formatQubicAmount(price)}${hashInfo}`,
+                    'info'
                 );
                 if (onTxBroadcast) {
-                    onTxBroadcast({ txHash: res.txHash, scheduledTick, description: `Bid ${shares} "${optDesc}" @ ${price}` });
+                    onTxBroadcast({
+                        txHash: res.txHash,
+                        scheduledTick,
+                        description: `Bid ${shares} "${optDesc}" @ ${price}`,
+                        type: 'order',
+                        eventId: eid,
+                        option: selectedOption,
+                        side: 'buy',
+                        amount: shares,
+                        price,
+                    });
                 }
                 onClose();
             } else {
@@ -237,7 +279,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                     <Button
                         variant="contained" fullWidth size="medium"
                         onClick={handleSubmit}
-                        disabled={submitting || shares <= 0 || price <= 0 || price >= WHOLE_SHARE_PRICE}
+                        disabled={submitting || isEventClosed(event) || shares <= 0 || price <= 0 || price >= WHOLE_SHARE_PRICE || Number(balance || 0) < cost}
                     >
                         {submitting ? 'Signing...' : 'Place Bid'}
                     </Button>

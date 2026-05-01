@@ -65,6 +65,7 @@ import {
     QTRY_ADD_ASK_ORDER,
     QTRY_DISPUTE,
 } from "../components/qubic/util/quotteryTx";
+import { isEventClosed, validateOrderPreflight } from "../components/qubic/util/tradeValidation";
 
 import gcLogo from "../assets/gc.png";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
@@ -89,6 +90,9 @@ function EventDetailsPage() {
         walletPublicIdentity,
         walletPublicKeyBytes,
         balance,
+        quBalance,
+        fetchQuBalance,
+        eventPositions,
         getScheduledTick,
         buildOrderSideEntries,
         orderbook,
@@ -269,6 +273,20 @@ function EventDetailsPage() {
             return;
         }
 
+        const preflightError = validateOrderPreflight({
+            event,
+            eventPositions,
+            option: selectedOption,
+            side: tradeSide,
+            amount: tradeAmount,
+            price: tradePrice,
+            balance,
+        });
+        if (preflightError) {
+            showSnackbar(preflightError, "error");
+            return;
+        }
+
         setSubmitting(true);
         try {
             // 1. Fetch current tick and basic info (for antiSpamAmount)
@@ -289,6 +307,25 @@ function EventDetailsPage() {
             const { scheduledTick, tickRate: rate, offset } = tickInfo;
             console.log(`[handleTradeClick] adaptive scheduling: rate=${rate.toFixed(2)} t/s, offset=${offset}, scheduledTick=${scheduledTick}`);
             const antiSpamAmount = basicInfo.antiSpamAmount || 0;
+            const latestQuBalance = walletPublicIdentity
+                ? await fetchQuBalance(walletPublicIdentity)
+                : quBalance;
+
+            const fundedPreflightError = validateOrderPreflight({
+                event,
+                eventPositions,
+                option: selectedOption,
+                side: tradeSide,
+                amount: tradeAmount,
+                price: tradePrice,
+                balance,
+                quBalance: latestQuBalance,
+                antiSpamAmount,
+            });
+            if (fundedPreflightError) {
+                showSnackbar(fundedPreflightError, "error");
+                return;
+            }
 
             // 2. Determine procedure number
             const isBid = tradeSide === "buy";
@@ -325,13 +362,19 @@ function EventDetailsPage() {
                 const optDesc = selectedOption === 0 ? event.option0Desc : event.option1Desc;
                 const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : '';
                 showSnackbar(
-                    `Order broadcasted for tick ${scheduledTick}: ${tradeSide === "buy" ? "Bid" : "Ask"} ${tradeAmount} "${optDesc}" @ ${tradePrice}${hashInfo}`,
-                    "success"
+                    `Order transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${tradeSide === "buy" ? "Bid" : "Ask"} ${tradeAmount} "${optDesc}" @ ${tradePrice}${hashInfo}`,
+                    "info"
                 );
                 trackTx({
                     txHash: res.txHash,
                     scheduledTick,
                     description: `${tradeSide === "buy" ? "Bid" : "Ask"} ${tradeAmount} "${optDesc}" @ ${tradePrice}`,
+                    type: "order",
+                    eventId: event.eid,
+                    option: selectedOption,
+                    side: tradeSide === "buy" ? "buy" : "sell",
+                    amount: tradeAmount,
+                    price: tradePrice,
                 });
                 scheduleBalanceRefresh(2000);
             } else {
@@ -814,7 +857,7 @@ function EventDetailsPage() {
                                 {/* Submit */}
                                 <Button variant="contained" fullWidth size="medium"
                                         onClick={handleTradeClick}
-                                        disabled={submitting || selectedOption === null || tradeAmount <= 0 || tradePrice <= 0 || tradePrice >= 100000}>
+                                        disabled={submitting || isEventClosed(event) || selectedOption === null || tradeAmount <= 0 || tradePrice <= 0 || tradePrice >= 100000 || (tradeSide === "buy" && Number(balance || 0) < tradeCoins)}>
                                     {submitting ? "Signing..." : (tradeSide === "buy" ? "Place Bid" : "Place Ask")}
                                 </Button>
 
