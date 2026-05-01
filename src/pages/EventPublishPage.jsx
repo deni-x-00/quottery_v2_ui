@@ -65,7 +65,7 @@ import {
   QTRY_ADD_ASK_ORDER,
   QTRY_DISPUTE,
 } from "../components/qubic/util/quotteryTx";
-import { isEventClosed, validateOrderPreflight } from "../components/qubic/util/tradeValidation";
+import { getPositionAmount, isEventClosed, validateOrderPreflight } from "../components/qubic/util/tradeValidation";
 
 import gcLogo from "../assets/gc.png";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
@@ -78,6 +78,14 @@ const resolveThumbnail = (name) => {
   } catch {
     return null;
   }
+};
+
+const formatBroadcastError = (error) => {
+  const message = String(error?.message || error || "");
+  if (/Tick value is Expired/i.test(message)) {
+    return "Tick value is Expired. Try again.";
+  }
+  return `Failed to broadcast transaction: ${message || "Transaction broadcast failed"}`;
 };
 
 function EventDetailsPage() {
@@ -124,6 +132,16 @@ function EventDetailsPage() {
 
   // Cost estimation: shares × price (in GARTH)
   const tradeCoins = Number(tradeAmount || 0) * Number(tradePrice || 0);
+  const availableTradeShares = getPositionAmount(eventPositions, event?.eid, selectedOption);
+  const tradeSubmitDisabled =
+      !connected ||
+      isEventClosed(event) ||
+      selectedOption === null ||
+      tradeAmount <= 0 ||
+      tradePrice <= 0 ||
+      tradePrice >= 100000 ||
+      (tradeSide === "buy" && Number(balance || 0) < tradeCoins) ||
+      (tradeSide === "sell" && availableTradeShares < Number(tradeAmount || 0));
 
   // Order book UI state
   const [orderBookExpanded, setOrderBookExpanded] = useState(true);
@@ -183,8 +201,18 @@ function EventDetailsPage() {
 
           return (
               <TableRow key={`${isBidSide ? "bid" : "ask"}-${i}`}>
-                <TableCell>
-                  <Box sx={{ position: "relative", height: 24 }}>
+                <TableCell sx={{ minWidth: 120 }}>
+                  <Box
+                      sx={{
+                        position: "relative",
+                        height: 24,
+                        width: "100%",
+                        minWidth: 100,
+                        overflow: "hidden",
+                        borderRadius: 0.5,
+                        bgcolor: alpha(theme.palette.text.primary, 0.04),
+                      }}
+                  >
                     <Box
                         sx={{
                           position: "absolute",
@@ -202,15 +230,31 @@ function EventDetailsPage() {
                           borderRadius: 0.5,
                         }}
                     />
+                    <Typography
+                        variant="caption"
+                        sx={{
+                          position: "absolute",
+                          inset: 0,
+                          px: 0.75,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: isBidSide ? "flex-start" : "flex-end",
+                          color: "text.primary",
+                          fontWeight: 600,
+                          zIndex: 1,
+                        }}
+                    >
+                      {formatQubicAmount(running)}
+                    </Typography>
                   </Box>
                 </TableCell>
                 <TableCell align="right">{formatQubicAmount(amt)}</TableCell>
-                <TableCell align="right">{Number(o?.price ?? 0)}</TableCell>
+                <TableCell align="right">{formatQubicAmount(Number(o?.price ?? 0))}</TableCell>
               </TableRow>
           );
         });
       },
-      [theme.palette.error.main, theme.palette.success.main]
+      [theme.palette.error.main, theme.palette.success.main, theme.palette.text.primary]
   );
 
   // Fetch event details on mount
@@ -380,7 +424,7 @@ function EventDetailsPage() {
       return confirmed;
     } catch (error) {
       showSnackbar(
-          `Failed to broadcast transaction: ${error.message}`,
+          formatBroadcastError(error),
           "error"
       );
       throw error;
@@ -840,7 +884,9 @@ function EventDetailsPage() {
                     ))}
                     <Button variant="outlined" size="small" sx={{ ml: "auto" }}
                             onClick={() => {
-                              const maxShares = tradePrice > 0 ? Math.floor((balance || 0) / tradePrice) : 0;
+                              const maxShares = tradeSide === "sell"
+                                  ? availableTradeShares
+                                  : tradePrice > 0 ? Math.floor((balance || 0) / tradePrice) : 0;
                               setTradeAmount(maxShares);
                               setTradeAmountInput(String(maxShares));
                             }}>
@@ -851,7 +897,7 @@ function EventDetailsPage() {
                   {/* Submit */}
                   <Button variant="contained" fullWidth size="medium"
                           onClick={handleTradeClick}
-                          disabled={isEventClosed(event) || selectedOption === null || tradeAmount <= 0 || tradePrice <= 0 || tradePrice >= 100000 || (tradeSide === "buy" && Number(balance || 0) < tradeCoins)}>
+                          disabled={tradeSubmitDisabled}>
                     {tradeSide === "buy" ? "Place Bid" : "Place Ask"}
                   </Button>
 

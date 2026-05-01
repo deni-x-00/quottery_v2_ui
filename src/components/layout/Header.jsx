@@ -29,7 +29,7 @@ const Header = () => {
       await refreshBalanceWithNotifications();
     };
     if (walletPublicIdentity && typeof fetchBalance === 'function') {
-      intervalId = setInterval(pollBalance, 15000);
+      intervalId = setInterval(pollBalance, 60000);
     }
     return () => { if (intervalId) clearInterval(intervalId); };
   }, [walletPublicIdentity, fetchBalance, refreshBalanceWithNotifications]);

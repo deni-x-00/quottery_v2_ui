@@ -187,7 +187,7 @@ export const QuotteryProvider = ({ children }) => {
   // Fetch user's open orders — query all 4 sides for all active events
   // This is more expensive via Bob since there's no "orders by user" function.
   // We query the order book for each active event and filter by the user's identity.
-  const fetchOpenOrders = async (walletIdentity = walletPublicIdentity) => {
+  const fetchOpenOrders = useCallback(async (walletIdentity = walletPublicIdentity) => {
     if (!walletIdentity) {
       return { identity: null, orders: [] };
     }
@@ -242,7 +242,7 @@ export const QuotteryProvider = ({ children }) => {
       console.error('Error fetching open orders:', error);
       return { identity: walletIdentity, orders: [], error };
     }
-  };
+  }, [allEvents, bobUrl, walletPublicIdentity]);
 
   useEffect(() => {
     const getIdentityAndBalance = async () => {

@@ -230,6 +230,8 @@ const UserOrdersPage = () => {
 
   const hasOrders = orders && orders.length > 0;
   const hasPositions = positions && positions.length > 0;
+  const showOrdersInitialLoading = ordersLoading && !hasOrders;
+  const showPositionsInitialLoading = positionsLoading && !hasPositions;
 
   return (
       <Box sx={{ maxWidth: 1200, mx: "auto", mt: 10, px: 2, mb: 8 }}>
@@ -252,6 +254,9 @@ const UserOrdersPage = () => {
                     color={ordersSource === "bob" ? "primary" : "default"}
                 />
             )}
+            {(ordersLoading || positionsLoading) && (
+                <Chip label="Refreshing" size="small" variant="outlined" />
+            )}
             <Tooltip title="Refresh">
               <IconButton
                   onClick={handleRefresh}
@@ -266,25 +271,25 @@ const UserOrdersPage = () => {
 
         {/* Orders table */}
         <Paper elevation={2} sx={{ p: 2, overflowX: "auto", mb: 4 }}>
-          {ordersLoading && (
+          {showOrdersInitialLoading && (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress />
               </Box>
           )}
 
-          {!ordersLoading && ordersError && (
+          {!showOrdersInitialLoading && ordersError && (
               <Box sx={{ py: 4, textAlign: "center", color: "error.main" }}>
                 <Typography>{ordersError}</Typography>
               </Box>
           )}
 
-          {!ordersLoading && !ordersError && !walletPublicIdentity && (
+          {!showOrdersInitialLoading && !ordersError && !walletPublicIdentity && (
               <Box sx={{ py: 4, textAlign: "center", color: "text.secondary" }}>
                 <Typography>Connect your wallet to see your orders.</Typography>
               </Box>
           )}
 
-          {!ordersLoading &&
+          {!showOrdersInitialLoading &&
               !ordersError &&
               walletPublicIdentity &&
               !hasOrders && (
@@ -293,7 +298,7 @@ const UserOrdersPage = () => {
                   </Box>
               )}
 
-          {!ordersLoading && !ordersError && hasOrders && (
+          {!showOrdersInitialLoading && !ordersError && hasOrders && (
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -358,19 +363,19 @@ const UserOrdersPage = () => {
         </Typography>
 
         <Paper elevation={2} sx={{ p: 2, overflowX: "auto" }}>
-          {positionsLoading && (
+          {showPositionsInitialLoading && (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress />
               </Box>
           )}
 
-          {!positionsLoading && positionsError && (
+          {!showPositionsInitialLoading && positionsError && (
               <Box sx={{ py: 4, textAlign: "center", color: "error.main" }}>
                 <Typography>{positionsError}</Typography>
               </Box>
           )}
 
-          {!positionsLoading && !positionsError && !walletPublicIdentity && (
+          {!showPositionsInitialLoading && !positionsError && !walletPublicIdentity && (
               <Box sx={{ py: 4, textAlign: "center", color: "text.secondary" }}>
                 <Typography>
                   Connect your wallet to see your positions.
@@ -378,7 +383,7 @@ const UserOrdersPage = () => {
               </Box>
           )}
 
-          {!positionsLoading &&
+          {!showPositionsInitialLoading &&
               !positionsError &&
               walletPublicIdentity &&
               !hasPositions && (
@@ -387,7 +392,7 @@ const UserOrdersPage = () => {
                   </Box>
               )}
 
-          {!positionsLoading && !positionsError && hasPositions && (
+          {!showPositionsInitialLoading && !positionsError && hasPositions && (
               <Table size="small">
                 <TableHead>
                   <TableRow>
