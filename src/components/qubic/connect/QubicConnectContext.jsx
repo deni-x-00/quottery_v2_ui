@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   SIGNATURE_LENGTH,
 } from '@qubic-lib/qubic-ts-library/dist/crypto';
@@ -14,12 +14,14 @@ import {
 import { toast } from 'react-hot-toast';
 import { getSnap } from './utils';
 import { connectSnap } from './utils';
+import { useWalletConnect } from './WalletConnectContext';
 // @ts-ignore
 import { atom, useAtom } from 'jotai';
 
 const balancesAtom = atom([]);
 
 const QubicConnectContext = createContext(undefined);
+const walletTypes = [...connectTypes, 'walletconnect'];
 
 const readStoredWallet = () => {
   if (typeof window === 'undefined') {
@@ -35,7 +37,7 @@ const readStoredWallet = () => {
     const parsedWallet = JSON.parse(storedWallet);
     if (
       parsedWallet &&
-      connectTypes.includes(parsedWallet.connectType) &&
+      walletTypes.includes(parsedWallet.connectType) &&
       typeof parsedWallet.publicKey === 'string' &&
       parsedWallet.publicKey.length > 0
     ) {
@@ -55,6 +57,10 @@ function QubicConnectProviderInner({ children }) {
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [, dispatch] = useContext(MetaMaskContext);
   const [, setBalances] = useAtom(balancesAtom);
+  const {
+    isConnected: walletConnectConnected,
+    requestAccounts: requestWalletConnectAccounts,
+  } = useWalletConnect();
 
   const connect = (wallet) => {
     localStorage.setItem('wallet', JSON.stringify(wallet));
@@ -68,6 +74,43 @@ function QubicConnectProviderInner({ children }) {
     setConnected(false);
     setBalances([]);
   };
+
+  useEffect(() => {
+    if (wallet || !walletConnectConnected) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const restoreWalletConnectWallet = async () => {
+      try {
+        const accounts = await requestWalletConnectAccounts();
+        if (cancelled || !Array.isArray(accounts) || accounts.length === 0) {
+          return;
+        }
+
+        const account = accounts[0];
+        const publicKey = account?.address || account?.publicId || account;
+        if (typeof publicKey !== 'string' || publicKey.length === 0) {
+          return;
+        }
+
+        connect({
+          connectType: 'walletconnect',
+          publicKey,
+          alias: account?.name || account?.alias,
+        });
+      } catch (error) {
+        console.warn('Failed to restore WalletConnect wallet:', error);
+      }
+    };
+
+    restoreWalletConnectWallet();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet, walletConnectConnected, requestWalletConnectAccounts]);
 
   const toggleConnectModal = () => {
     setShowConnectModal(!showConnectModal);
