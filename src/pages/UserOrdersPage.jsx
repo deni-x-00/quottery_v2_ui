@@ -19,6 +19,7 @@ import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext";
 import { useConfig } from "../contexts/ConfigContext";
 import { useSnackbar } from "../contexts/SnackbarContext";
+import { useTxTracker } from "../hooks/useTxTracker";
 import { byteArrayToHexString } from "../components/qubic/util";
 import {
   broadcastTransaction,
@@ -46,6 +47,7 @@ const UserOrdersPage = () => {
   const { getSignedTx } = useQubicConnect();
   const { bobUrl } = useConfig();
   const { showSnackbar } = useSnackbar();
+  const { trackTx } = useTxTracker();
 
   // Orders state
   const [orders, setOrders] = useState([]);
@@ -203,6 +205,7 @@ const UserOrdersPage = () => {
           payload
       );
 
+      showSnackbar("Sign your transaction in wallet.", "info");
       const confirmed = await getSignedTx(packet);
       if (!confirmed) return;
 
@@ -214,8 +217,25 @@ const UserOrdersPage = () => {
       const res = await broadcastTransaction(bobUrl, txHex);
 
       if (res && !res.error) {
-        showSnackbar("Order removal broadcasted successfully", "success");
-        setTimeout(() => loadOrders(), 3000);
+        const side = order.isBid ? "Bid" : "Ask";
+        const description = `${side} ${order.qty} @ ${order.price} for ${getOptionName(order.market_id, order.option)} of ${getEventName(order.market_id)}`;
+        const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : "";
+        showSnackbar(
+            `Order removal broadcasted for tick ${scheduledTick}. Waiting for execution: ${description}${hashInfo}`,
+            "info"
+        );
+        trackTx({
+          txHash: res.txHash,
+          scheduledTick,
+          description,
+          type: "order",
+          action: "remove",
+          eventId: order.market_id,
+          option: order.option,
+          side: order.isBid ? "buy" : "sell",
+          amount: order.qty,
+          price: order.price,
+        });
       } else {
         showSnackbar(
             `Failed to remove order: ${res?.error || "Unknown error"}`,

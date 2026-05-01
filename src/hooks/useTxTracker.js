@@ -96,11 +96,15 @@ export function useTxTracker() {
                         if (txFound) {
                             if (tx.type === 'order') {
                                 const orderFound = await hasMatchingOpenOrder(tx);
+                                const isRemove = tx.action === 'remove';
+                                const success = isRemove ? !orderFound : orderFound;
                                 showSnackbar(
-                                    orderFound
-                                        ? `Order added at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`
-                                        : `Transaction was included, but the order was not added. The event may be closed or the balance/position was insufficient.\nTx: ${tx.txHash}`,
-                                    orderFound ? 'success' : 'warning'
+                                    success
+                                        ? `${isRemove ? 'Order cancelled' : 'Order added'} at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`
+                                        : isRemove
+                                            ? `Transaction was included, but the order still appears open. Please refresh before trying again.\nTx: ${tx.txHash}`
+                                            : `Transaction was included, but the order was not added. The event may be closed or the balance/position was insufficient.\nTx: ${tx.txHash}`,
+                                    success ? 'success' : 'warning'
                                 );
                             } else {
                                 showSnackbar(
@@ -129,11 +133,15 @@ export function useTxTracker() {
                             );
                         } else if (tx.type === 'order') {
                             const orderFound = await hasMatchingOpenOrder(tx);
+                            const isRemove = tx.action === 'remove';
+                            const success = isRemove ? !orderFound : orderFound;
                             showSnackbar(
-                                orderFound
-                                    ? `Order added at tick ${tx.scheduledTick}: ${tx.description || ''}`
-                                    : `Could not verify that the order was added. Please refresh the order book before trying again.`,
-                                orderFound ? 'success' : 'warning'
+                                success
+                                    ? `${isRemove ? 'Order cancelled' : 'Order added'} at tick ${tx.scheduledTick}: ${tx.description || ''}`
+                                    : isRemove
+                                        ? `Could not verify that the order was cancelled. Please refresh before trying again.`
+                                        : `Could not verify that the order was added. Please refresh the order book before trying again.`,
+                                success ? 'success' : 'warning'
                             );
                         } else {
                             showSnackbar(
