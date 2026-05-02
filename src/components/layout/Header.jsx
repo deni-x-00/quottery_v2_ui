@@ -10,13 +10,15 @@ import { useConfig } from '../../contexts/ConfigContext';
 import logoLight from '../../assets/logo/logo-text-on-light.svg';
 import logoDark from '../../assets/logo/logo-text-on-dark.svg';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import LightModeIcon from '@mui/icons-material/LightMode';
 import { useQuotteryContext } from '../../contexts/QuotteryContext';
 import { useBalanceNotifier } from '../../hooks/useBalanceNotifier';
 import TickIndicator from '../TickIndicator';
 
 const Header = () => {
   const theme = useTheme();
-  const { isDarkMode } = useThemeContext();
+  const { isDarkMode, toggleTheme } = useThemeContext();
   const { isConnected } = useConfig();
   const { walletPublicIdentity, fetchBalance } = useQuotteryContext();
   const { refreshBalanceWithNotifications } = useBalanceNotifier();
@@ -86,6 +88,24 @@ const Header = () => {
                       <ConnectLink />
                     </>
                 )}
+                <IconButton
+                    aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
+                    color='inherit'
+                    onClick={toggleTheme}
+                    size='small'
+                    sx={{
+                      border: `1px solid ${theme.palette.divider}`,
+                      color: theme.palette.text.secondary,
+                      bgcolor: theme.palette.background.default,
+                      transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
+                      '&:hover': {
+                        bgcolor: theme.palette.action.hover,
+                        color: theme.palette.text.primary,
+                      },
+                    }}
+                >
+                  {isDarkMode ? <LightModeIcon fontSize='small' /> : <DarkModeIcon fontSize='small' />}
+                </IconButton>
               </Box>
             </Toolbar>
           </Container>
