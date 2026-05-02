@@ -97,7 +97,8 @@ const TickIndicator = () => {
         <Tooltip title={tooltipContent} arrow>
             <Box sx={{
                 display: 'flex', alignItems: 'center', gap: 0.75,
-                px: 1.5, py: 0.5, borderRadius: 1,
+                px: { xs: 1, sm: 1.5 }, py: 0.5, borderRadius: 1,
+                maxWidth: { xs: 118, sm: 'none' },
                 bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
                 cursor: 'default', userSelect: 'none',
             }}>
@@ -106,10 +107,16 @@ const TickIndicator = () => {
                     bgcolor: dotColor,
                     boxShadow: `0 0 6px ${dotColor}`,
                 }} />
-                <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 600, color: theme.palette.text.secondary }}>
+                <Typography variant="caption" sx={{
+                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    color: theme.palette.text.secondary,
+                    fontSize: { xs: '0.68rem', sm: '0.75rem' },
+                    whiteSpace: 'nowrap',
+                }}>
                     {bobTick ? formatQubicAmount(bobTick) : '—'}
                 </Typography>
-                <Typography variant="caption" sx={{ color: dotColor, fontWeight: 600, fontSize: '0.65rem' }}>
+                <Typography variant="caption" sx={{ display: { xs: 'none', md: 'block' }, color: dotColor, fontWeight: 600, fontSize: '0.65rem', whiteSpace: 'nowrap' }}>
                     {statusLabels[networkStatus]}
                 </Typography>
             </Box>
