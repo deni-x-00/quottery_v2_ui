@@ -13,6 +13,8 @@ import {
   Grow,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PhonelinkIcon from '@mui/icons-material/Phonelink';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import { useQubicConnect } from './QubicConnectContext';
@@ -20,7 +22,7 @@ import { HeaderButtons } from './Buttons';
 import { MetaMaskContext } from './MetamaskContext';
 import { ReactComponent as MetaMaskLogo } from '../../../assets/metamask-clean.svg';
 import { useWalletConnect } from './WalletConnectContext';
-import { generateQRCode } from '../../../utils';
+import { copyText, generateQRCode } from '../../../utils';
 import WalletConnectLogo from '../../../assets/wallet-connect.svg';
 import AccountSelector from './AccountSelector';
 import { useQuotteryContext } from '../../../contexts/QuotteryContext';
@@ -49,6 +51,11 @@ const normalizeWalletConnectAccounts = (accounts) => {
         };
       })
       .filter((account) => account.publicId);
+};
+
+const buildQubicWalletDeepLink = (uri) => {
+  if (!uri) return '';
+  return `qubic-wallet://pairwc/${uri}`;
 };
 
 const ConnectModal = ({ open, onClose, darkMode }) => {
@@ -102,6 +109,12 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
     }
 
     await approve();
+  };
+
+  const openQubicWallet = () => {
+    const deepLink = buildQubicWalletDeepLink(connectionURI);
+    if (!deepLink) return;
+    window.location.href = deepLink;
   };
 
   useEffect(() => {
@@ -291,9 +304,16 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                       )}
                     </Box>
                     <Button variant='outlined' color='primary' size='large'
-                            onClick={() => window.open(`qubic-wallet://pairwc/${encodeURIComponent(connectionURI)}`, '_blank')}
-                            disabled={!connectionURI || !isMobile} sx={{ fontWeight: 600 }}>
+                            startIcon={<OpenInNewIcon />}
+                            onClick={openQubicWallet}
+                            disabled={!connectionURI} sx={{ fontWeight: 600 }}>
                       Open in Qubic Wallet
+                    </Button>
+                    <Button variant='outlined' color='primary' size='large'
+                            startIcon={<ContentCopyIcon />}
+                            onClick={() => copyText(connectionURI)}
+                            disabled={!connectionURI} sx={{ fontWeight: 600 }}>
+                      Copy WalletConnect URL
                     </Button>
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={() => setSelectedMode('none')} sx={{ fontWeight: 600 }}>
