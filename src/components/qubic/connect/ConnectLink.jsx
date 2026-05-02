@@ -21,7 +21,15 @@ import { useTheme } from '@mui/material/styles';
 
 const ConnectLink = () => {
     const { connected, showConnectModal, toggleConnectModal } = useQubicConnect();
-    const { balance, quBalance, fetchBalance, fetchQuBalance, walletPublicIdentity } = useQuotteryContext();
+    const {
+        balance,
+        quBalance,
+        qtryGovBalance,
+        fetchBalance,
+        fetchQuBalance,
+        fetchQtryGovBalance,
+        walletPublicIdentity,
+    } = useQuotteryContext();
     const theme = useTheme();
     const lg = useMediaQuery(theme.breakpoints.up('lg'));
 
@@ -57,6 +65,7 @@ const ConnectLink = () => {
             await Promise.all([
                 fetchBalance(walletPublicIdentity),
                 fetchQuBalance(walletPublicIdentity),
+                fetchQtryGovBalance(walletPublicIdentity),
             ]);
         } finally {
             setLoadingBalances(false);
@@ -159,6 +168,14 @@ const ConnectLink = () => {
                                     </Typography>
                                     <Typography variant="body1" fontWeight={700}>
                                         {quBalance !== null ? `${formatQubicAmount(quBalance)} QU` : 'Unavailable'}
+                                    </Typography>
+                                </Box>
+                                <Box>
+                                    <Typography variant="caption" color="text.secondary">
+                                        QTRYGOV Balance
+                                    </Typography>
+                                    <Typography variant="body1" fontWeight={700}>
+                                        {qtryGovBalance !== null ? `${formatQubicAmount(qtryGovBalance)} QTRYGOV` : 'Unavailable'}
                                     </Typography>
                                 </Box>
                                 <Button

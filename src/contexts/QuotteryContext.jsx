@@ -15,6 +15,7 @@ import {
   getOrders,
   getLatestTick,
   getEntityBalance,
+  getQtryGovBalance,
 } from '../components/qubic/util/bobApi';
 import { useTickRate } from '../hooks/useTickRate';
 
@@ -26,6 +27,7 @@ export const QuotteryProvider = ({ children }) => {
   const { wallet } = useQubicConnect();
   const [balance, setBalance] = useState(null);
   const [quBalance, setQuBalance] = useState(null);
+  const [qtryGovBalance, setQtryGovBalance] = useState(null);
   const [eventPositions, setEventPositions] = useState(null);
   const [walletPublicIdentity, setWalletPublicIdentity] = useState('');
   const [walletPublicKeyBytes, setWalletPublicKeyBytes] = useState(null);
@@ -184,6 +186,20 @@ export const QuotteryProvider = ({ children }) => {
     }
   };
 
+  const fetchQtryGovBalance = async (publicId) => {
+    const identity = publicId || walletPublicIdentity;
+    if (!identity) return null;
+    try {
+      const gov = await getQtryGovBalance(bobUrl, identity);
+      setQtryGovBalance(gov);
+      return gov;
+    } catch (e) {
+      console.warn('Error fetching QTRYGOV balance:', e);
+      setQtryGovBalance(null);
+      return null;
+    }
+  };
+
   // Fetch user's open orders — query all 4 sides for all active events
   // This is more expensive via Bob since there's no "orders by user" function.
   // We query the order book for each active event and filter by the user's identity.
@@ -253,6 +269,7 @@ export const QuotteryProvider = ({ children }) => {
             await qHelper.getIdentityBytes(wallet.publicKey)
         );
         fetchBalance(wallet.publicKey);
+        fetchQtryGovBalance(wallet.publicKey);
       }
     };
 
@@ -317,8 +334,10 @@ export const QuotteryProvider = ({ children }) => {
     walletPublicKeyBytes,
     balance,
     quBalance,
+    qtryGovBalance,
     fetchBalance,
     fetchQuBalance,
+    fetchQtryGovBalance,
     eventPositions,
     setEventPositions,
     currentFilterOption,

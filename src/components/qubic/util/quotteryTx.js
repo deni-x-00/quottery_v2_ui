@@ -34,6 +34,7 @@ export const QTRY_GO_FORCE_CLAIM  = 11;
 export const QTRY_TRANSFER_QUSD  = 12;
 export const QTRY_TRANSFER_SHARE_MGMT = 13;
 export const QTRY_TRANSFER_QTRYGOV = 15;
+export const QTRY_PROPOSAL_VOTE = 100;
 
 function contractDestination() {
     const dest = new Uint8Array(32);
@@ -115,6 +116,19 @@ export function packTransferPayload(receiverPubkey, amount) {
     arr.set(receiverPubkey, 0);
     const v = new DataView(buf);
     v.setBigInt64(32, BigInt(amount), true);
+    return arr;
+}
+
+export function packGovProposalPayload(govParams, operationPubkey) {
+    const buf = new ArrayBuffer(72);
+    const arr = new Uint8Array(buf);
+    const v = new DataView(buf);
+    v.setBigUint64(0, BigInt(govParams.shareholderFee), true);
+    v.setBigUint64(8, BigInt(govParams.burnFee), true);
+    v.setBigUint64(16, BigInt(govParams.operationFee), true);
+    v.setBigInt64(24, BigInt(govParams.feePerDay), true);
+    v.setBigInt64(32, BigInt(govParams.depositAmountForDispute), true);
+    arr.set(operationPubkey, 40);
     return arr;
 }
 

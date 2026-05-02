@@ -11,6 +11,9 @@ const FUNC_GET_EVENT_BATCH = 5;
 const FUNC_GET_POSITION = 6;
 const FUNC_GET_APPROVED = 7;
 const FUNC_GET_TOP_PROPOSALS = 8;
+const QTRYGOV_ASSET_NAME = 'QTRYGOV';
+const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
+const QTRYGOV_MANAGE_SC_INDEX = 2;
 
 async function bobPost(bobUrl, path, payload, maxRetries = 10) {
     const url = `${bobUrl}${path}`;
@@ -181,6 +184,27 @@ function pack4xUint64LE(a, b, c, d) {
 function readUint64LE(bytes, offset) {
     const view = new DataView(bytes.buffer, bytes.byteOffset);
     return Number(view.getBigUint64(offset, true));
+}
+
+export async function getQtryGovBalance(bobUrl, identity) {
+    if (!identity) return null;
+
+    try {
+        const res = await fetch(
+            `${bobUrl}/asset/${identity}/${QTRYGOV_ISSUER}/${QTRYGOV_ASSET_NAME}/${QTRYGOV_MANAGE_SC_INDEX}`
+        );
+        if (!res.ok) return null;
+
+        const data = await res.json();
+        const balance = Number(data?.ownershipBalance ?? 0);
+        if (!Number.isFinite(balance) || balance < 0) {
+            return 0;
+        }
+        return balance;
+    } catch (e) {
+        console.warn('[getQtryGovBalance] Could not fetch QTRYGOV balance:', e.message);
+        return null;
+    }
 }
 
 function readBigUint64LE(bytes, offset) {
