@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     Box,
     Typography,
@@ -9,7 +9,10 @@ import {
     TextField,
     Card,
     CardContent,
-    Tooltip,
+    Slider,
+    Alert,
+    MenuItem,
+    CircularProgress,
 } from "@mui/material";
 import RedeemIcon from "@mui/icons-material/Redeem";
 import SendIcon from "@mui/icons-material/Send";
@@ -21,29 +24,175 @@ import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext
 import { useConfig } from "../contexts/ConfigContext";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatQubicAmount, byteArrayToHexString } from "../components/qubic/util";
-import { broadcastTransaction, getBasicInfo } from "../components/qubic/util/bobApi";
 import {
+    broadcastTransaction,
+    getAssetBalance,
+    getBasicInfo,
+    getEventInfo,
+    getStaticSmartContracts,
+    getUserPositions,
+} from "../components/qubic/util/bobApi";
+import {
+    buildContractTx,
     buildQuotteryTx,
     packEventIdPayload,
+    packRevokeShareMgmtPayload,
     packTransferPayload,
     packTransferShareMgmtPayload,
     QTRY_USER_CLAIM_REWARD,
     QTRY_TRANSFER_QUSD,
     QTRY_TRANSFER_QTRYGOV,
-    QTRY_TRANSFER_SHARE_MGMT,
 } from "../components/qubic/util/quotteryTx";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 
+const TRANSFER_QUBIC_FEE = 100;
+const WHOLE_SHARE_PRICE = 100000;
+const GARTH_ASSET_NAME = "GARTH";
+const GARTH_ISSUER = "PHOENIXCLQOBHDZCHJOCKCPZVTKALQBMXYOEDBUHSDCJRMTUCUBPLSUFNBIE";
+const TRANSFER_RIGHTS_IDENTIFIERS = [
+    "TransferShareManagementRights",
+    "TransferSharesManagementRights",
+];
+const REVOKE_RIGHTS_IDENTIFIERS = ["RevokeAssetManagementRights"];
+
+const toPositiveInt = (value) => {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+};
+
+const clampToMax = (value, max) => {
+    const parsed = toPositiveInt(value);
+    if (!max || max <= 0) return parsed ? String(parsed) : "";
+    if (!parsed) return "";
+    return String(Math.min(parsed, max));
+};
+
+const availableLabel = (value, unit) => (
+    value === null || value === undefined
+        ? `Available: unavailable`
+        : `Available: ${formatQubicAmount(value)} ${unit}`
+);
+
+const hasTransferFee = (quBalance) => quBalance === null || quBalance === undefined || quBalance >= TRANSFER_QUBIC_FEE;
+
+const matchesIdentifier = (sourceIdentifier, identifiers) => {
+    if (!sourceIdentifier) return false;
+    return identifiers.some((identifier) => identifier.toLowerCase() === sourceIdentifier.toLowerCase());
+};
+
+const findManagementRightsProcedure = (contract) => {
+    const transferProcedure = contract?.procedures?.find((procedure) =>
+        matchesIdentifier(procedure.sourceIdentifier, TRANSFER_RIGHTS_IDENTIFIERS)
+    );
+    if (transferProcedure) return { procedure: transferProcedure, type: "transfer" };
+
+    const revokeProcedure = contract?.procedures?.find((procedure) =>
+        matchesIdentifier(procedure.sourceIdentifier, REVOKE_RIGHTS_IDENTIFIERS)
+    );
+    if (revokeProcedure) return { procedure: revokeProcedure, type: "revoke" };
+
+    return null;
+};
+
+const contractLabel = (contract) => contract?.label || contract?.name || `Contract #${contract?.contractIndex}`;
+
+const ActionCard = ({
+    icon,
+    title,
+    subtitle,
+    children,
+    onSubmit,
+    submitting,
+    submitLabel,
+    connected,
+    disabled = false,
+}) => (
+    <Card variant="outlined" sx={{ borderColor: "divider" }}>
+        <CardContent>
+            <Stack spacing={2}>
+                <Box display="flex" alignItems="center" gap={1}>
+                    {icon}
+                    <Box>
+                        <Typography variant="h6">{title}</Typography>
+                        <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
+                    </Box>
+                </Box>
+                <Divider />
+                {children}
+                <Button
+                    variant="contained"
+                    onClick={onSubmit}
+                    disabled={!connected || submitting || disabled}
+                    fullWidth
+                    size="large"
+                >
+                    {submitting ? "Signing..." : submitLabel}
+                </Button>
+            </Stack>
+        </CardContent>
+    </Card>
+);
+
+const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
+    const numericValue = toPositiveInt(value);
+    const sliderMax = Math.max(1, Number(max || 0));
+    const cappedValue = Math.min(numericValue, sliderMax);
+
+    return (
+        <Stack spacing={1}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
+                <Typography variant="body2" color="text.secondary">
+                    {label}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                    {availableLabel(max, unit)}
+                </Typography>
+            </Box>
+            <Slider
+                value={cappedValue}
+                min={0}
+                max={sliderMax}
+                step={1}
+                disabled={disabled || !max || max <= 0}
+                onChange={(_, nextValue) => onChange(String(nextValue))}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(nextValue) => formatQubicAmount(nextValue)}
+            />
+            <TextField
+                label={label}
+                value={value}
+                onChange={(e) => onChange(clampToMax(e.target.value, max))}
+                fullWidth
+                size="small"
+                placeholder={max ? `Max ${formatQubicAmount(max)} ${unit}` : "Unavailable"}
+                inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+                disabled={disabled || !max || max <= 0}
+            />
+        </Stack>
+    );
+};
+
 function MiscPage() {
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
-    const { walletPublicKeyBytes, getScheduledTick } = useQuotteryContext();
+    const {
+        allEvents,
+        walletPublicIdentity,
+        walletPublicKeyBytes,
+        balance,
+        quBalance,
+        qtryGovBalance,
+        getScheduledTick,
+    } = useQuotteryContext();
     const { bobUrl } = useConfig();
     const { showSnackbar } = useSnackbar();
     const { trackTx } = useTxTracker();
     const { scheduleBalanceRefresh } = useBalanceNotifier();
 
     const [claimEventId, setClaimEventId] = useState("");
+    const [claimOptions, setClaimOptions] = useState([]);
+    const [claimOptionsLoading, setClaimOptionsLoading] = useState(false);
+    const [claimOptionsError, setClaimOptionsError] = useState("");
     const [claimSubmitting, setClaimSubmitting] = useState(false);
 
     const [garthReceiver, setGarthReceiver] = useState("");
@@ -54,11 +203,282 @@ function MiscPage() {
     const [govAmount, setGovAmount] = useState("");
     const [govSubmitting, setGovSubmitting] = useState(false);
 
-    const [smrIssuer, setSmrIssuer] = useState("");
-    const [smrAssetName, setSmrAssetName] = useState("");
+    const [smartContracts, setSmartContracts] = useState([]);
+    const [smartContractsLoading, setSmartContractsLoading] = useState(false);
+    const [smartContractsError, setSmartContractsError] = useState("");
+    const [smrSourceContractIndex, setSmrSourceContractIndex] = useState("");
+    const [smrDestinationContractIndex, setSmrDestinationContractIndex] = useState("");
     const [smrShares, setSmrShares] = useState("");
-    const [smrContractIndex, setSmrContractIndex] = useState("");
+    const [smrSourceContracts, setSmrSourceContracts] = useState([]);
+    const [smrDestinationContracts, setSmrDestinationContracts] = useState([]);
+    const [smrAvailable, setSmrAvailable] = useState(null);
+    const [smrAvailableLoading, setSmrAvailableLoading] = useState(false);
     const [smrSubmitting, setSmrSubmitting] = useState(false);
+
+    const feeWarning = useMemo(() => (
+        hasTransferFee(quBalance)
+            ? ""
+            : `Transfers require ${TRANSFER_QUBIC_FEE} QU for the Qubic fee. Current QU balance: ${formatQubicAmount(quBalance ?? 0)}.`
+    ), [quBalance]);
+
+    const selectedSmrSource = useMemo(
+        () => smrSourceContracts.find((contract) => String(contract.contractIndex) === String(smrSourceContractIndex)) || null,
+        [smrSourceContractIndex, smrSourceContracts]
+    );
+
+    const selectedSmrDestination = useMemo(
+        () => smrDestinationContracts.find((contract) => String(contract.contractIndex) === String(smrDestinationContractIndex)) || null,
+        [smrDestinationContractIndex, smrDestinationContracts]
+    );
+
+    const filteredSmrDestinationContracts = useMemo(() => {
+        if (!selectedSmrSource) return smrDestinationContracts;
+        if (selectedSmrSource.procedureType === "revoke") {
+            return smrDestinationContracts.filter((contract) => Number(contract.contractIndex) === 1);
+        }
+        return smrDestinationContracts.filter((contract) => Number(contract.contractIndex) !== Number(selectedSmrSource.contractIndex));
+    }, [selectedSmrSource, smrDestinationContracts]);
+
+    const smrFeeWarning = useMemo(() => {
+        const fee = Number(selectedSmrSource?.procedureFee || 0);
+        if (!selectedSmrSource || quBalance === null || quBalance === undefined || quBalance >= fee) return "";
+        return `Transfer rights requires ${formatQubicAmount(fee)} QU for the selected contract fee. Current QU balance: ${formatQubicAmount(quBalance ?? 0)}.`;
+    }, [quBalance, selectedSmrSource]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadClaimOptions = async () => {
+            if (!connected || !walletPublicIdentity) {
+                setClaimOptions([]);
+                setClaimEventId("");
+                setClaimOptionsLoading(false);
+                setClaimOptionsError("");
+                return;
+            }
+
+            setClaimOptionsLoading(true);
+            setClaimOptionsError("");
+
+            try {
+                const result = await getUserPositions(bobUrl, walletPublicIdentity);
+                const positions = (result?.positions || []).filter((position) => Number(position?.amount || 0) > 0);
+                const uniqueEventIds = [...new Set(positions.map((position) => position.eventId))];
+                const knownEventsById = new Map(
+                    (allEvents || [])
+                        .filter((event) => event?.eid !== undefined && event?.eid !== null)
+                        .map((event) => [String(event.eid), event])
+                );
+
+                const fetchedEvents = await Promise.all(
+                    uniqueEventIds.map(async (eventId) => {
+                        const knownEvent = knownEventsById.get(String(eventId));
+                        if (knownEvent && knownEvent.resultByGO !== undefined) return knownEvent;
+
+                        try {
+                            return await getEventInfo(bobUrl, eventId);
+                        } catch (eventError) {
+                            console.warn(`Failed to load claim event ${eventId}:`, eventError);
+                            return null;
+                        }
+                    })
+                );
+
+                const eventsById = new Map(
+                    fetchedEvents
+                        .filter(Boolean)
+                        .map((event) => [String(event.eid ?? event.eventId), event])
+                );
+
+                const nextOptions = positions
+                    .map((position) => {
+                        const event = eventsById.get(String(position.eventId));
+                        const resultByGO = Number(event?.resultByGO);
+                        const option = Number(position.option);
+
+                        if (!event || !Number.isInteger(resultByGO) || resultByGO < 0 || resultByGO !== option) {
+                            return null;
+                        }
+
+                        const optionName = option === 0
+                            ? event.option0Desc || "Option 0"
+                            : event.option1Desc || "Option 1";
+                        const shares = Number(position.amount || 0);
+
+                        return {
+                            eventId: position.eventId,
+                            label: event.desc || `Event #${position.eventId}`,
+                            optionName,
+                            shares,
+                            estimatedReward: shares * WHOLE_SHARE_PRICE,
+                        };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => Number(b.eventId) - Number(a.eventId));
+
+                if (cancelled) return;
+
+                setClaimOptions(nextOptions);
+                setClaimEventId((currentEventId) => (
+                    nextOptions.some((option) => String(option.eventId) === String(currentEventId))
+                        ? currentEventId
+                        : (nextOptions[0] ? String(nextOptions[0].eventId) : "")
+                ));
+            } catch (error) {
+                console.error("Failed to load claimable rewards:", error);
+                if (!cancelled) {
+                    setClaimOptions([]);
+                    setClaimEventId("");
+                    setClaimOptionsError("Failed to load rewards.");
+                }
+            } finally {
+                if (!cancelled) setClaimOptionsLoading(false);
+            }
+        };
+
+        loadClaimOptions();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [allEvents, bobUrl, connected, walletPublicIdentity]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadSmartContracts = async () => {
+            setSmartContractsLoading(true);
+            setSmartContractsError("");
+
+            try {
+                const contracts = await getStaticSmartContracts();
+                if (cancelled) return;
+
+                setSmartContracts(contracts);
+                if (contracts.length === 0) {
+                    setSmartContractsError("Failed to load smart contracts metadata.");
+                }
+            } catch (error) {
+                console.error("Failed to load smart contracts metadata:", error);
+                if (!cancelled) {
+                    setSmartContracts([]);
+                    setSmartContractsError("Failed to load smart contracts metadata.");
+                }
+            } finally {
+                if (!cancelled) setSmartContractsLoading(false);
+            }
+        };
+
+        loadSmartContracts();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadSourceContracts = async () => {
+            if (!connected || !walletPublicIdentity || smartContracts.length === 0) {
+                setSmrSourceContracts([]);
+                setSmrDestinationContracts([]);
+                setSmrSourceContractIndex("");
+                setSmrDestinationContractIndex("");
+                setSmrAvailable(null);
+                setSmrAvailableLoading(false);
+                return;
+            }
+
+            setSmrAvailableLoading(true);
+
+            try {
+                const destinationContracts = smartContracts
+                    .filter((contract) => contract.allowTransferShares && findManagementRightsProcedure(contract))
+                    .sort((a, b) => contractLabel(a).localeCompare(contractLabel(b)));
+
+                const sourceCandidates = smartContracts
+                    .map((contract) => {
+                        const mgmtProcedure = findManagementRightsProcedure(contract);
+                        if (!mgmtProcedure) return null;
+                        return {
+                            ...contract,
+                            procedureId: mgmtProcedure.procedure.id,
+                            procedureFee: mgmtProcedure.procedure.fee ?? 0,
+                            procedureType: mgmtProcedure.type,
+                        };
+                    })
+                    .filter(Boolean);
+
+                const sourceContracts = await Promise.all(
+                    sourceCandidates.map(async (contract) => {
+                        const availableBalance = await getAssetBalance(
+                            bobUrl,
+                            walletPublicIdentity,
+                            GARTH_ISSUER,
+                            GARTH_ASSET_NAME,
+                            contract.contractIndex
+                        );
+
+                        return {
+                            ...contract,
+                            availableBalance: availableBalance ?? 0,
+                        };
+                    })
+                );
+
+                const availableSources = sourceContracts
+                    .filter((contract) => contract.availableBalance > 0)
+                    .sort((a, b) => b.availableBalance - a.availableBalance);
+
+                if (cancelled) return;
+
+                setSmrSourceContracts(availableSources);
+                setSmrDestinationContracts(destinationContracts);
+                setSmrSourceContractIndex((currentIndex) => (
+                    availableSources.some((contract) => String(contract.contractIndex) === String(currentIndex))
+                        ? currentIndex
+                        : (availableSources[0] ? String(availableSources[0].contractIndex) : "")
+                ));
+            } catch (error) {
+                console.error("Failed to load GARTH management contracts:", error);
+                if (!cancelled) {
+                    setSmrSourceContracts([]);
+                    setSmrDestinationContracts([]);
+                    setSmartContractsError("Failed to load GARTH management contracts.");
+                }
+            } finally {
+                if (!cancelled) setSmrAvailableLoading(false);
+            }
+        };
+
+        loadSourceContracts();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [bobUrl, connected, smartContracts, walletPublicIdentity]);
+
+    useEffect(() => {
+        if (!selectedSmrSource) {
+            setSmrAvailable(null);
+            setSmrDestinationContractIndex("");
+            return;
+        }
+
+        setSmrAvailable(selectedSmrSource.availableBalance);
+        setSmrShares((currentShares) => clampToMax(currentShares, selectedSmrSource.availableBalance));
+
+        const filteredDestinations = selectedSmrSource.procedureType === "revoke"
+            ? smrDestinationContracts.filter((contract) => Number(contract.contractIndex) === 1)
+            : smrDestinationContracts.filter((contract) => Number(contract.contractIndex) !== Number(selectedSmrSource.contractIndex));
+
+        setSmrDestinationContractIndex((currentIndex) => (
+            filteredDestinations.some((contract) => String(contract.contractIndex) === String(currentIndex))
+                ? currentIndex
+                : (filteredDestinations[0] ? String(filteredDestinations[0].contractIndex) : "")
+        ));
+    }, [selectedSmrSource, smrDestinationContracts]);
 
     const identityToBytes = async (identity) => {
         const qHelper = new QubicHelper();
@@ -66,7 +486,7 @@ function MiscPage() {
         return new Uint8Array(idBytes);
     };
 
-    const signAndBroadcast = async (inputType, amount, payload, description) => {
+    const signAndBroadcast = async (inputType, amount, payload, description, destinationPubkey = null) => {
         const [tickInfo, basicInfo] = await Promise.all([
             getScheduledTick(),
             getBasicInfo(bobUrl),
@@ -87,7 +507,9 @@ function MiscPage() {
         );
 
         const txAmount = amount ?? (basicInfo.antiSpamAmount || 0);
-        const packet = buildQuotteryTx(walletPublicKeyBytes, scheduledTick, inputType, txAmount, payload);
+        const packet = destinationPubkey
+            ? buildContractTx(walletPublicKeyBytes, destinationPubkey, scheduledTick, inputType, txAmount, payload)
+            : buildQuotteryTx(walletPublicKeyBytes, scheduledTick, inputType, txAmount, payload);
         const confirmed = await getSignedTx(packet);
         if (!confirmed) return null;
 
@@ -150,6 +572,14 @@ function MiscPage() {
             showSnackbar("Enter a valid amount.", "error");
             return;
         }
+        if (balance !== null && balance !== undefined && amt > balance) {
+            showSnackbar("Amount exceeds available GARTH balance.", "error");
+            return;
+        }
+        if (!hasTransferFee(quBalance)) {
+            showSnackbar(`Transfer requires ${TRANSFER_QUBIC_FEE} QU for the Qubic fee.`, "error");
+            return;
+        }
 
         setGarthSubmitting(true);
         try {
@@ -175,6 +605,14 @@ function MiscPage() {
             showSnackbar("Enter a valid amount.", "error");
             return;
         }
+        if (qtryGovBalance !== null && qtryGovBalance !== undefined && amt > qtryGovBalance) {
+            showSnackbar("Amount exceeds available QTRYGOV balance.", "error");
+            return;
+        }
+        if (!hasTransferFee(quBalance)) {
+            showSnackbar(`Transfer requires ${TRANSFER_QUBIC_FEE} QU for the Qubic fee.`, "error");
+            return;
+        }
 
         setGovSubmitting(true);
         try {
@@ -191,16 +629,12 @@ function MiscPage() {
     const handleTransferShareMgmt = async () => {
         if (!requireWallet()) return;
 
-        if (!smrIssuer || smrIssuer.length !== 60) {
-            showSnackbar("Enter a valid 60-character issuer identity.", "error");
+        if (!selectedSmrSource) {
+            showSnackbar("Select the current managing contract.", "error");
             return;
         }
-        if (!smrAssetName || smrAssetName.length > 7) {
-            showSnackbar("Asset name must be 1-7 letters.", "error");
-            return;
-        }
-        if (!/^[a-zA-Z]+$/.test(smrAssetName)) {
-            showSnackbar("Asset name must contain only A-Z letters.", "error");
+        if (!selectedSmrDestination) {
+            showSnackbar("Select the destination contract.", "error");
             return;
         }
 
@@ -209,22 +643,38 @@ function MiscPage() {
             showSnackbar("Enter a valid number of shares.", "error");
             return;
         }
+        if (smrAvailable !== null && smrAvailable !== undefined && shares > smrAvailable) {
+            showSnackbar("Number of shares exceeds the available balance.", "error");
+            return;
+        }
 
-        const contractIdx = parseInt(smrContractIndex, 10);
-        if (Number.isNaN(contractIdx) || contractIdx < 0) {
-            showSnackbar("Enter a valid contract index.", "error");
+        const procedureFee = Number(selectedSmrSource.procedureFee || 0);
+        if (quBalance !== null && quBalance !== undefined && quBalance < procedureFee) {
+            showSnackbar(`Transfer rights requires ${formatQubicAmount(procedureFee)} QU for the selected contract fee.`, "error");
             return;
         }
 
         setSmrSubmitting(true);
         try {
-            const issuerBytes = await identityToBytes(smrIssuer);
-            const payload = packTransferShareMgmtPayload(issuerBytes, smrAssetName, shares, contractIdx);
+            const [issuerBytes, sourceContractBytes] = await Promise.all([
+                identityToBytes(GARTH_ISSUER),
+                identityToBytes(selectedSmrSource.address),
+            ]);
+            const isRevoke = selectedSmrSource.procedureType === "revoke";
+            const payload = isRevoke
+                ? packRevokeShareMgmtPayload(issuerBytes, GARTH_ASSET_NAME, shares)
+                : packTransferShareMgmtPayload(
+                    issuerBytes,
+                    GARTH_ASSET_NAME,
+                    shares,
+                    selectedSmrDestination.contractIndex
+                );
             await signAndBroadcast(
-                QTRY_TRANSFER_SHARE_MGMT,
-                0,
+                selectedSmrSource.procedureId,
+                procedureFee,
                 payload,
-                `Transfer ${shares} ${smrAssetName.toUpperCase()} management rights to contract ${contractIdx}`
+                `${isRevoke ? "Revoke" : "Transfer"} ${formatQubicAmount(shares)} GARTH management rights from ${contractLabel(selectedSmrSource)} to ${contractLabel(selectedSmrDestination)}`,
+                sourceContractBytes
             );
         } catch (e) {
             showSnackbar(`Transfer failed: ${e.message}`, "error");
@@ -232,33 +682,6 @@ function MiscPage() {
             setSmrSubmitting(false);
         }
     };
-
-    const ActionCard = ({ icon, title, subtitle, children, onSubmit, submitting, submitLabel }) => (
-        <Card variant="outlined" sx={{ borderColor: "divider" }}>
-            <CardContent>
-                <Stack spacing={2}>
-                    <Box display="flex" alignItems="center" gap={1}>
-                        {icon}
-                        <Box>
-                            <Typography variant="h6">{title}</Typography>
-                            <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
-                        </Box>
-                    </Box>
-                    <Divider />
-                    {children}
-                    <Button
-                        variant="contained"
-                        onClick={onSubmit}
-                        disabled={submitting}
-                        fullWidth
-                        size="large"
-                    >
-                        {submitting ? "Signing..." : submitLabel}
-                    </Button>
-                </Stack>
-            </CardContent>
-        </Card>
-    );
 
     return (
         <Container maxWidth="md" sx={{ pt: 12, pb: 6 }}>
@@ -277,16 +700,40 @@ function MiscPage() {
                     onSubmit={handleClaimReward}
                     submitting={claimSubmitting}
                     submitLabel="Claim Reward"
+                    connected={connected}
+                    disabled={!claimEventId || claimOptionsLoading}
                 >
                     <TextField
-                        label="Event ID"
-                        type="number"
+                        select
+                        label="Reward Event"
                         value={claimEventId}
                         onChange={(e) => setClaimEventId(e.target.value)}
                         fullWidth
                         size="small"
-                        placeholder="e.g. 0"
-                    />
+                        disabled={!connected || claimOptionsLoading || claimOptions.length === 0}
+                        helperText={
+                            claimOptionsLoading
+                                ? "Loading rewards..."
+                                : claimOptions.length === 0
+                                    ? "No rewards found for your current winning positions."
+                                    : " "
+                        }
+                        InputProps={{
+                            endAdornment: claimOptionsLoading ? <CircularProgress size={18} /> : null,
+                        }}
+                    >
+                        {claimOptions.map((option) => (
+                            <MenuItem key={option.eventId} value={String(option.eventId)} sx={{ whiteSpace: "normal" }}>
+                                <Stack spacing={0.25}>
+                                    <Typography variant="body2">{option.label}</Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {option.optionName} | {formatQubicAmount(option.shares)} shares | est. {formatQubicAmount(option.estimatedReward)} GARTH
+                                    </Typography>
+                                </Stack>
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    {claimOptionsError && <Alert severity="warning">{claimOptionsError}</Alert>}
                 </ActionCard>
 
                 <ActionCard
@@ -296,24 +743,26 @@ function MiscPage() {
                     onSubmit={handleTransferGarth}
                     submitting={garthSubmitting}
                     submitLabel="Transfer GARTH"
+                    connected={connected}
+                    disabled={!hasTransferFee(quBalance)}
                 >
+                    {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
                     <TextField
                         label="Receiver Identity"
                         value={garthReceiver}
-                        onChange={(e) => setGarthReceiver(e.target.value.trim())}
+                        onChange={(e) => setGarthReceiver(e.target.value.toUpperCase().replace(/\s/g, ""))}
                         fullWidth
                         size="small"
                         placeholder="60-character Qubic identity"
                         inputProps={{ maxLength: 60 }}
                     />
-                    <TextField
+                    <AmountSlider
                         label="Amount"
-                        type="number"
                         value={garthAmount}
-                        onChange={(e) => setGarthAmount(e.target.value)}
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. 1000000"
+                        max={balance}
+                        unit="GARTH"
+                        onChange={setGarthAmount}
+                        disabled={!connected}
                     />
                 </ActionCard>
 
@@ -324,75 +773,102 @@ function MiscPage() {
                     onSubmit={handleTransferGov}
                     submitting={govSubmitting}
                     submitLabel="Transfer QTRYGOV"
+                    connected={connected}
+                    disabled={!hasTransferFee(quBalance)}
                 >
+                    {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
                     <TextField
                         label="Receiver Identity"
                         value={govReceiver}
-                        onChange={(e) => setGovReceiver(e.target.value.trim())}
+                        onChange={(e) => setGovReceiver(e.target.value.toUpperCase().replace(/\s/g, ""))}
                         fullWidth
                         size="small"
                         placeholder="60-character Qubic identity"
                         inputProps={{ maxLength: 60 }}
                     />
-                    <TextField
+                    <AmountSlider
                         label="Amount"
-                        type="number"
                         value={govAmount}
-                        onChange={(e) => setGovAmount(e.target.value)}
-                        fullWidth
-                        size="small"
-                        placeholder="e.g. 1"
+                        max={qtryGovBalance}
+                        unit="QTRYGOV"
+                        onChange={setGovAmount}
+                        disabled={!connected}
                     />
                 </ActionCard>
 
                 <ActionCard
                     icon={<SwapHorizIcon color="primary" />}
                     title="Transfer Share Management Rights"
-                    subtitle="Move management rights of an asset to a different contract index."
+                    subtitle="Move GARTH management rights from the current managing contract to another contract."
                     onSubmit={handleTransferShareMgmt}
                     submitting={smrSubmitting}
                     submitLabel="Transfer Management Rights"
+                    connected={connected}
+                    disabled={
+                        smartContractsLoading ||
+                        smrAvailableLoading ||
+                        !selectedSmrSource ||
+                        !selectedSmrDestination ||
+                        !!smrFeeWarning
+                    }
                 >
+                    {smartContractsError && <Alert severity="warning">{smartContractsError}</Alert>}
+                    {smrFeeWarning && <Alert severity="warning">{smrFeeWarning}</Alert>}
                     <TextField
-                        label="Issuer Identity"
-                        value={smrIssuer}
-                        onChange={(e) => setSmrIssuer(e.target.value.trim())}
+                        select
+                        label="Current Managing Contract"
+                        value={smrSourceContractIndex}
+                        onChange={(e) => setSmrSourceContractIndex(e.target.value)}
                         fullWidth
                         size="small"
-                        placeholder="60-character Qubic identity of the asset issuer"
-                        inputProps={{ maxLength: 60 }}
-                    />
+                        disabled={!connected || smartContractsLoading || smrAvailableLoading || smrSourceContracts.length === 0}
+                        helperText={
+                            smartContractsLoading || smrAvailableLoading
+                                ? "Loading GARTH balances..."
+                                : smrSourceContracts.length === 0
+                                    ? "No GARTH managed by a supported contract was found for this wallet."
+                                    : " "
+                        }
+                    >
+                        {smrSourceContracts.map((contract) => (
+                            <MenuItem key={contract.contractIndex} value={String(contract.contractIndex)}>
+                                <Stack spacing={0.25}>
+                                    <Typography variant="body2">{contractLabel(contract)}</Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        Available: {formatQubicAmount(contract.availableBalance)} GARTH | Procedure #{contract.procedureId} | Fee {formatQubicAmount(contract.procedureFee)} QU
+                                    </Typography>
+                                </Stack>
+                            </MenuItem>
+                        ))}
+                    </TextField>
                     <TextField
-                        label="Asset Name"
-                        value={smrAssetName}
-                        onChange={(e) => setSmrAssetName(e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 7))}
+                        select
+                        label="Destination Contract"
+                        value={smrDestinationContractIndex}
+                        onChange={(e) => setSmrDestinationContractIndex(e.target.value)}
                         fullWidth
                         size="small"
-                        placeholder="e.g. GARTH"
-                        inputProps={{ maxLength: 7 }}
+                        disabled={!connected || !selectedSmrSource || filteredSmrDestinationContracts.length === 0}
+                        helperText={
+                            filteredSmrDestinationContracts.length === 0
+                                ? "No compatible destination contract found."
+                                : " "
+                        }
+                    >
+                        {filteredSmrDestinationContracts.map((contract) => (
+                            <MenuItem key={contract.contractIndex} value={String(contract.contractIndex)}>
+                                {contractLabel(contract)}
+                            </MenuItem>
+                        ))}
+                    </TextField>
+                    <AmountSlider
+                        label="Number of Shares"
+                        value={smrShares}
+                        max={smrAvailable}
+                        unit="GARTH"
+                        onChange={setSmrShares}
+                        disabled={!connected || smrAvailableLoading}
                     />
-                    <Tooltip title="Number of shares whose management rights will be transferred.">
-                        <TextField
-                            label="Number of Shares"
-                            type="number"
-                            value={smrShares}
-                            onChange={(e) => setSmrShares(e.target.value)}
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. 100"
-                        />
-                    </Tooltip>
-                    <Tooltip title="The SC index that will become the new manager. Use 0 to release management back to the owner.">
-                        <TextField
-                            label="New Managing Contract Index"
-                            type="number"
-                            value={smrContractIndex}
-                            onChange={(e) => setSmrContractIndex(e.target.value)}
-                            fullWidth
-                            size="small"
-                            placeholder="e.g. 0"
-                        />
-                    </Tooltip>
                 </ActionCard>
             </Stack>
         </Container>

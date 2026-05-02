@@ -14,6 +14,7 @@ const FUNC_GET_TOP_PROPOSALS = 8;
 const QTRYGOV_ASSET_NAME = 'QTRYGOV';
 const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
 const QTRYGOV_MANAGE_SC_INDEX = 2;
+const QUBIC_STATIC_SMART_CONTRACTS_URL = 'https://static.qubic.org/v1/general/data/smart_contracts.json';
 
 async function bobPost(bobUrl, path, payload, maxRetries = 10) {
     const url = `${bobUrl}${path}`;
@@ -190,20 +191,59 @@ export async function getQtryGovBalance(bobUrl, identity) {
     if (!identity) return null;
 
     try {
+        return await getAssetBalance(
+            bobUrl,
+            identity,
+            QTRYGOV_ISSUER,
+            QTRYGOV_ASSET_NAME,
+            QTRYGOV_MANAGE_SC_INDEX
+        );
+    } catch (e) {
+        console.warn('[getQtryGovBalance] Could not fetch QTRYGOV balance:', e.message);
+        return null;
+    }
+}
+
+export async function getAssetBalance(bobUrl, identity, issuer, assetName, managingContractIndex = 2) {
+    if (!identity || !issuer || !assetName) return null;
+
+    try {
         const res = await fetch(
-            `${bobUrl}/asset/${identity}/${QTRYGOV_ISSUER}/${QTRYGOV_ASSET_NAME}/${QTRYGOV_MANAGE_SC_INDEX}`
+            `${bobUrl}/asset/${identity}/${issuer}/${assetName.toUpperCase()}/${managingContractIndex}`
         );
         if (!res.ok) return null;
 
         const data = await res.json();
-        const balance = Number(data?.ownershipBalance ?? 0);
+        const balance = Number(
+            data?.ownershipBalance
+            ?? data?.possessionBalance
+            ?? data?.managementBalance
+            ?? data?.ownedAmount
+            ?? data?.amount
+            ?? 0
+        );
+
         if (!Number.isFinite(balance) || balance < 0) {
             return 0;
         }
+
         return balance;
     } catch (e) {
-        console.warn('[getQtryGovBalance] Could not fetch QTRYGOV balance:', e.message);
+        console.warn('[getAssetBalance] Could not fetch asset balance:', e.message);
         return null;
+    }
+}
+
+export async function getStaticSmartContracts() {
+    try {
+        const res = await fetch(QUBIC_STATIC_SMART_CONTRACTS_URL);
+        if (!res.ok) return [];
+
+        const data = await res.json();
+        return Array.isArray(data?.smart_contracts) ? data.smart_contracts : [];
+    } catch (e) {
+        console.warn('[getStaticSmartContracts] Could not fetch smart contracts:', e.message);
+        return [];
     }
 }
 

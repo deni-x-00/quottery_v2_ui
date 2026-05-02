@@ -44,7 +44,7 @@ function contractDestination() {
 }
 
 
-export function buildQuotteryTx(sourcePubkey, tick, inputType, amount, payload) {
+export function buildContractTx(sourcePubkey, destinationPubkey, tick, inputType, amount, payload) {
     const payloadSize = payload ? payload.length : 0;
     const totalSize = TX_HEADER_SIZE + payloadSize + SIGNATURE_SIZE;
     const packet = new Uint8Array(totalSize);
@@ -54,7 +54,7 @@ export function buildQuotteryTx(sourcePubkey, tick, inputType, amount, payload) 
     packet.set(sourcePubkey, 0);
 
     // Destination public key [32:64]
-    packet.set(contractDestination(), 32);
+    packet.set(destinationPubkey, 32);
 
     // Amount [64:72]  (int64 LE)
     view.setBigInt64(64, BigInt(amount), true);
@@ -75,6 +75,10 @@ export function buildQuotteryTx(sourcePubkey, tick, inputType, amount, payload) 
 
     // Signature area [80+N:] left as zeros — wallet will fill it
     return packet;
+}
+
+export function buildQuotteryTx(sourcePubkey, tick, inputType, amount, payload) {
+    return buildContractTx(sourcePubkey, contractDestination(), tick, inputType, amount, payload);
 }
 
 export function packOrderPayload(eventId, option, amount, price) {
@@ -146,12 +150,24 @@ export function encodeAssetName(name) {
 }
 
 export function packTransferShareMgmtPayload(issuerPubkey, assetName, numberOfShares, newContractIndex) {
-    const buf = new ArrayBuffer(56);
+    const buf = new ArrayBuffer(52);
     const arr = new Uint8Array(buf);
     arr.set(issuerPubkey, 0);
+    const encodedName = new TextEncoder().encode(assetName.toUpperCase());
+    arr.set(encodedName.slice(0, 8), 32);
     const v = new DataView(buf);
-    v.setBigUint64(32, encodeAssetName(assetName), true);
     v.setBigInt64(40, BigInt(numberOfShares), true);
     v.setUint32(48, newContractIndex, true);
+    return arr;
+}
+
+export function packRevokeShareMgmtPayload(issuerPubkey, assetName, numberOfShares) {
+    const buf = new ArrayBuffer(48);
+    const arr = new Uint8Array(buf);
+    arr.set(issuerPubkey, 0);
+    const encodedName = new TextEncoder().encode(assetName.toUpperCase());
+    arr.set(encodedName.slice(0, 8), 32);
+    const v = new DataView(buf);
+    v.setBigInt64(40, BigInt(numberOfShares), true);
     return arr;
 }
