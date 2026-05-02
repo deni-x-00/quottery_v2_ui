@@ -183,6 +183,11 @@ function readUint64LE(bytes, offset) {
     return Number(view.getBigUint64(offset, true));
 }
 
+function readBigUint64LE(bytes, offset) {
+    const view = new DataView(bytes.buffer, bytes.byteOffset);
+    return view.getBigUint64(offset, true);
+}
+
 function readInt64LE(bytes, offset) {
     const view = new DataView(bytes.buffer, bytes.byteOffset);
     return Number(view.getBigInt64(offset, true));
@@ -460,11 +465,11 @@ export async function getUserPositions(bobUrl, identity) {
         const base = 8 + i * 16;
         if (base + 16 > raw.length) break;
 
-        const eo = readUint64LE(raw, base);
+        const eo = readBigUint64LE(raw, base);
         const amount = readInt64LE(raw, base + 8);
 
-        const option = Number(BigInt(eo) >> 63n) & 1;
-        const eventId = Number(BigInt(eo) & 0x3FFFFFFFFFFFFFFFn);
+        const option = Number((eo >> 63n) & 1n);
+        const eventId = Number(eo & 0x7FFFFFFFFFFFFFFFn);
 
         positions.push({ eventId, option, amount });
     }
