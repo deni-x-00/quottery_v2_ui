@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Dialog,
     DialogTitle,
@@ -45,6 +45,12 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
     const [price, setPrice] = useState(50000);
     const [priceInput, setPriceInput] = useState('50000');
     const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (open) {
+            setSelectedOption(initialOption);
+        }
+    }, [open, initialOption]);
 
     const probability = ((price / WHOLE_SHARE_PRICE) * 100).toFixed(2);
     const cost = shares * price;

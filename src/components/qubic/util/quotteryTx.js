@@ -32,6 +32,8 @@ export const QTRY_RESOLVE_DISPUTE = 9;
 export const QTRY_USER_CLAIM_REWARD = 10;
 export const QTRY_GO_FORCE_CLAIM  = 11;
 export const QTRY_TRANSFER_QUSD  = 12;
+export const QTRY_TRANSFER_SHARE_MGMT = 13;
+export const QTRY_TRANSFER_QTRYGOV = 15;
 
 function contractDestination() {
     const dest = new Uint8Array(32);
@@ -105,4 +107,37 @@ export function packResolveDisputePayload(eventId, vote) {
     v.setBigUint64(0, BigInt(eventId), true);
     v.setBigInt64(8, BigInt(vote), true);
     return new Uint8Array(buf);
+}
+
+export function packTransferPayload(receiverPubkey, amount) {
+    const buf = new ArrayBuffer(40);
+    const arr = new Uint8Array(buf);
+    arr.set(receiverPubkey, 0);
+    const v = new DataView(buf);
+    v.setBigInt64(32, BigInt(amount), true);
+    return arr;
+}
+
+export function encodeAssetName(name) {
+    let result = BigInt(0);
+    const upper = name.toUpperCase();
+    for (let i = 0; i < 7 && i < upper.length; i++) {
+        const c = upper.charCodeAt(i);
+        if (c < 65 || c > 90) {
+            throw new Error(`Invalid character '${upper[i]}' in asset name. Only A-Z allowed.`);
+        }
+        result |= BigInt(c - 64) << BigInt(i * 8);
+    }
+    return result;
+}
+
+export function packTransferShareMgmtPayload(issuerPubkey, assetName, numberOfShares, newContractIndex) {
+    const buf = new ArrayBuffer(56);
+    const arr = new Uint8Array(buf);
+    arr.set(issuerPubkey, 0);
+    const v = new DataView(buf);
+    v.setBigUint64(32, encodeAssetName(assetName), true);
+    v.setBigInt64(40, BigInt(numberOfShares), true);
+    v.setUint32(48, newContractIndex, true);
+    return arr;
 }

@@ -7,6 +7,7 @@ import EventDetailsPage from './pages/EventDetailsPage';
 import EventPublishPage from './pages/EventPublishPage';
 import UserOrdersPage from "./pages/UserOrdersPage";
 import GovernancePage from "./pages/GovernancePage";
+import MiscPage from "./pages/MiscPage";
 import Footer from './components/layout/Footer';
 import { ThemeContextProvider } from './contexts/ThemeContext';
 import { ConfigProvider } from './contexts/ConfigContext';
@@ -36,6 +37,7 @@ function App() {
                         <Route path='/user-events' element={<UserEvents />} />
                         <Route path="/orders" element={<UserOrdersPage />} />
                         <Route path="/governance" element={<GovernancePage />} />
+                        <Route path="/misc" element={<MiscPage />} />
                       </Routes>
                     </Box>
                     <Footer />

@@ -73,6 +73,9 @@ const Header = () => {
                       <Button component={Link} to='/governance' color='inherit' size='small'>
                         <Typography variant="h6" color="text.secondary">Governance</Typography>
                       </Button>
+                      <Button component={Link} to='/misc' color='inherit' size='small'>
+                        <Typography variant="h6" color="text.secondary">Utilities</Typography>
+                      </Button>
                       <IconButton onClick={handleRefreshBalance} color='inherit' size='small' disabled={refreshing}>
                         <RefreshIcon fontSize='small'
                                      sx={refreshing ? {

@@ -42,23 +42,28 @@ async function bobPost(bobUrl, path, payload, maxRetries = 10) {
                 return { error: `Non-JSON response (${res.status}): ${text.slice(0, 200)}` };
             }
 
-            if (res.ok && !body.error) {
-                return body;
-            }
-
             if (body.error === 'pending') {
                 await new Promise((r) => setTimeout(r, 200));
                 continue;
             }
 
-            return body;
-        } catch (e) {
-            console.error(`[bobPost] attempt ${attempt + 1} error:`, e);
-            if (attempt < maxRetries - 1) {
-                await new Promise((r) => setTimeout(r, 500));
+            if (body.pending === true) {
+                await new Promise((r) => setTimeout(r, 200));
                 continue;
             }
-            throw e;
+
+            if (res.ok && !body.error) {
+                return body;
+            }
+
+            return body;
+        } catch (e) {
+            if (attempt === maxRetries - 1) {
+                console.warn(`[bobPost] ${path} failed after ${maxRetries} attempts:`, e.message);
+                throw e;
+            }
+            await new Promise((r) => setTimeout(r, 500));
+            continue;
         }
     }
 
@@ -100,8 +105,9 @@ export async function getLatestTick(bobUrl) {
         const res = await fetch(`${bobUrl}/status`);
         const data = await res.json();
 
-        // Pick the highest tick from all available fields to avoid scheduling in the past
+        // Pick the highest tick from all known fields.
         const candidates = [
+            data?.lastSeenNetworkTick,
             data?.latestTick,
             data?.lastProcessedTick,
             data?.currentTick,
@@ -111,8 +117,7 @@ export async function getLatestTick(bobUrl) {
         ].map(Number).filter(n => n > 0);
 
         return candidates.length > 0 ? Math.max(...candidates) : 0;
-    } catch (e) {
-        console.error('[getLatestTick] error:', e);
+    } catch {
         return 0;
     }
 }
@@ -133,7 +138,9 @@ export async function getTxByHash(bobUrl, txHash) {
         const res = await fetch(`${bobUrl}/tx/${txHash}`);
         if (!res.ok) return null;
         const data = await res.json();
-        if (data?.error || data?.ok === false) return null;
+        if (data?.found === false) return null;
+        if (data?.error) return null;
+        if (data?.ok === false) return null;
         return data;
     } catch {
         return null;
@@ -297,6 +304,9 @@ export async function getEventInfo(bobUrl, eventId) {
     const openDate = readDatetime(raw, 8);
     const endDate = readDatetime(raw, 16);
 
+    // QtryEventInfo layout (280 bytes):
+    // [0:8] eid, [8:16] openDate, [16:24] endDate
+    // [24:152] description + tag, [152:216] option0, [216:280] option1
     const descBytes = raw.slice(24, 150);       // 126 bytes (text only, excluding tag)
     const tag = readUint16LE(raw, 150);         // tag at desc[126:128] = offset 24+126
     const opt0Bytes = raw.slice(152, 216);      // 64 bytes

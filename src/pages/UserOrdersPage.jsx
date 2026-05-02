@@ -25,9 +25,7 @@ import {
   broadcastTransaction,
   getBasicInfo,
   getUserPositions,
-  getUserOrdersFromBob,
 } from "../components/qubic/util/bobApi";
-import { tickOffset } from "../components/qubic/connect/config";
 import {
   buildQuotteryTx,
   packOrderPayload,
@@ -39,7 +37,7 @@ const UserOrdersPage = () => {
   const {
     walletPublicIdentity,
     walletPublicKeyBytes,
-    getCurrentTick,
+    getScheduledTick,
     allEvents,
     fetchOpenOrders,
   } = useQuotteryContext();
@@ -53,7 +51,6 @@ const UserOrdersPage = () => {
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState(null);
-  const [ordersSource, setOrdersSource] = useState(null);
 
   // Positions state (via GetUserPosition SC function 6)
   const [positions, setPositions] = useState([]);
@@ -106,7 +103,7 @@ const UserOrdersPage = () => {
     }
   }, [bobUrl, walletPublicIdentity]);
 
-  // ---- Load orders: try Bob logs first, fallback to order book scan ----
+  // ---- Load orders: scan order books for current open orders ----
   const loadOrders = useCallback(async () => {
     if (!walletPublicIdentity) {
       setOrders([]);
@@ -117,29 +114,12 @@ const UserOrdersPage = () => {
     setOrdersError(null);
 
     try {
-      // Try Bob log query first
-      const bobOrders = await getUserOrdersFromBob(
-          bobUrl,
-          walletPublicIdentity
-      );
-
-      if (bobOrders !== null) {
-        const enriched = bobOrders.map((o) => ({
-          ...o,
-          event_desc: getEventName(o.market_id),
-        }));
-        setOrders(enriched);
-        setOrdersSource("bob");
-        return;
-      }
-
-      // Fallback: scan order books
-      console.info(
-          "[Orders] Bob logs unavailable, falling back to order book scan"
-      );
       const result = await fetchOpenOrders(walletPublicIdentity);
-      setOrders(result?.orders ?? []);
-      setOrdersSource("orderbook");
+      const openOrders = (result?.orders ?? []).map((o) => ({
+        ...o,
+        event_desc: getEventName(o.market_id),
+      }));
+      setOrders(openOrders);
     } catch (err) {
       console.error("Failed to load orders:", err);
       setOrdersError("Failed to load orders");
@@ -147,7 +127,7 @@ const UserOrdersPage = () => {
     } finally {
       setOrdersLoading(false);
     }
-  }, [bobUrl, walletPublicIdentity, fetchOpenOrders, getEventName]);
+  }, [walletPublicIdentity, fetchOpenOrders, getEventName]);
 
   useEffect(() => {
     loadPositions();
@@ -170,13 +150,13 @@ const UserOrdersPage = () => {
         return;
       }
 
-      const [currentTick, basicInfo] = await Promise.all([
-        getCurrentTick(),
+      const [tickInfo, basicInfo] = await Promise.all([
+        getScheduledTick(),
         getBasicInfo(bobUrl),
       ]);
 
-      if (!currentTick) {
-        showSnackbar("Failed to get current tick from network.", "error");
+      if (!tickInfo) {
+        showSnackbar("Failed to get scheduled tick from network.", "error");
         return;
       }
       if (!basicInfo) {
@@ -184,7 +164,7 @@ const UserOrdersPage = () => {
         return;
       }
 
-      const scheduledTick = currentTick + tickOffset;
+      const { scheduledTick } = tickInfo;
       const antiSpamAmount = basicInfo.antiSpamAmount || 0;
       const inputType = order.isBid
           ? QTRY_REMOVE_BID_ORDER
@@ -264,16 +244,8 @@ const UserOrdersPage = () => {
               mb: 2,
             }}
         >
-          <Typography variant="h4">My Recent Orders (last 20 ticks)</Typography>
+          <Typography variant="h4">My Open Orders</Typography>
           <Box display="flex" alignItems="center" gap={1}>
-            {ordersSource && (
-                <Chip
-                    label={ordersSource === "bob" ? "Bob Logs" : "Order Book"}
-                    size="small"
-                    variant="outlined"
-                    color={ordersSource === "bob" ? "primary" : "default"}
-                />
-            )}
             {(ordersLoading || positionsLoading) && (
                 <Chip label="Refreshing" size="small" variant="outlined" />
             )}
@@ -328,7 +300,6 @@ const UserOrdersPage = () => {
                     <TableCell align="right">Price</TableCell>
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>Status</TableCell>
-                    {ordersSource === "bob" && <TableCell>Tick</TableCell>}
                     <TableCell align="center">Action</TableCell>
                   </TableRow>
                 </TableHead>
@@ -355,9 +326,6 @@ const UserOrdersPage = () => {
                         <TableCell sx={{ textTransform: "capitalize" }}>
                           {order.status || "open"}
                         </TableCell>
-                        {ordersSource === "bob" && (
-                            <TableCell>{order.tick || "-"}</TableCell>
-                        )}
                         <TableCell align="center">
                           {order.status !== "cancelled" && (
                               <IconButton

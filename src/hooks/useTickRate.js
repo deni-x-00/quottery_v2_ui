@@ -20,29 +20,33 @@ export function useTickRate(bobUrl) {
         let active = true;
 
         const poll = async () => {
-            const tick = await getLatestTick(bobUrl);
-            if (!active || !tick) return;
+            try {
+                const tick = await getLatestTick(bobUrl);
+                if (!active || !tick) return;
 
-            const now = Date.now();
-            const samples = samplesRef.current;
-            samples.push({ tick, time: now });
+                const now = Date.now();
+                const samples = samplesRef.current;
+                samples.push({ tick, time: now });
 
-            // Trim to sliding window
-            while (samples.length > MAX_SAMPLES) samples.shift();
+                // Trim to sliding window
+                while (samples.length > MAX_SAMPLES) samples.shift();
 
-            setLatestTick(tick);
+                setLatestTick(tick);
 
-            // Need at least 3 samples over ≥2s for a reasonable rate
-            if (samples.length >= 3) {
-                const oldest = samples[0];
-                const newest = samples[samples.length - 1];
-                const dtMs = newest.time - oldest.time;
-                const dTick = newest.tick - oldest.tick;
+                // Need at least 3 samples over >=2s for a reasonable rate
+                if (samples.length >= 3) {
+                    const oldest = samples[0];
+                    const newest = samples[samples.length - 1];
+                    const dtMs = newest.time - oldest.time;
+                    const dTick = newest.tick - oldest.tick;
 
-                if (dtMs >= 2000 && dTick > 0) {
-                    const rate = dTick / (dtMs / 1000);
-                    setTickRate(rate);
+                    if (dtMs >= 2000 && dTick > 0) {
+                        const rate = dTick / (dtMs / 1000);
+                        setTickRate(rate);
+                    }
                 }
+            } catch {
+                // Ignore transient Bob/status failures.
             }
         };
 
