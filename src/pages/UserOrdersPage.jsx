@@ -24,6 +24,7 @@ import { byteArrayToHexString } from "../components/qubic/util";
 import {
   broadcastTransaction,
   getBasicInfo,
+  getEventInfo,
   getUserPositions,
 } from "../components/qubic/util/bobApi";
 import {
@@ -56,29 +57,33 @@ const UserOrdersPage = () => {
   const [positions, setPositions] = useState([]);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [positionsError, setPositionsError] = useState(null);
+  const [positionEvents, setPositionEvents] = useState({});
 
-  // Helper: resolve event name from allEvents
+  const getKnownEvent = useCallback(
+      (eventId) =>
+          (allEvents || []).find((e) => String(e.eid) === String(eventId)) ||
+          positionEvents[String(eventId)],
+      [allEvents, positionEvents]
+  );
+
+  // Helper: resolve event name from active events or position-specific event info.
   const getEventName = useCallback(
       (eventId) => {
-        const evt = (allEvents || []).find(
-            (e) => String(e.eid) === String(eventId)
-        );
+        const evt = getKnownEvent(eventId);
         return evt ? evt.desc : `Event #${eventId}`;
       },
-      [allEvents]
+      [getKnownEvent]
   );
 
   const getOptionName = useCallback(
       (eventId, option) => {
-        const evt = (allEvents || []).find(
-            (e) => String(e.eid) === String(eventId)
-        );
+        const evt = getKnownEvent(eventId);
         if (!evt) return `Option ${option}`;
-        return option === 0
+        return Number(option) === 0
             ? evt.option0Desc || "Option 0"
             : evt.option1Desc || "Option 1";
       },
-      [allEvents]
+      [getKnownEvent]
   );
 
   // ---- Load positions via GetUserPosition (SC function 6) ----
@@ -93,7 +98,41 @@ const UserOrdersPage = () => {
 
     try {
       const result = await getUserPositions(bobUrl, walletPublicIdentity);
-      setPositions(result?.positions ?? []);
+      const nextPositions = result?.positions ?? [];
+      setPositions(nextPositions);
+
+      const missingEventIds = [
+        ...new Set(
+            nextPositions
+                .map((pos) => pos.eventId)
+                .filter((eventId) => eventId !== undefined && eventId !== null)
+                .filter((eventId) => !getKnownEvent(eventId))
+        ),
+      ];
+
+      if (missingEventIds.length > 0) {
+        const fetchedEvents = await Promise.all(
+            missingEventIds.map(async (eventId) => {
+              try {
+                return await getEventInfo(bobUrl, eventId);
+              } catch (eventErr) {
+                console.warn(`Failed to load event info for position event ${eventId}:`, eventErr);
+                return null;
+              }
+            })
+        );
+
+        const eventsById = fetchedEvents.reduce((acc, evt) => {
+          if (evt && evt.eid !== undefined && evt.eid !== null) {
+            acc[String(evt.eid)] = evt;
+          }
+          return acc;
+        }, {});
+
+        if (Object.keys(eventsById).length > 0) {
+          setPositionEvents((prev) => ({ ...prev, ...eventsById }));
+        }
+      }
     } catch (err) {
       console.error("Failed to load positions:", err);
       setPositionsError("Failed to load positions");
@@ -101,7 +140,7 @@ const UserOrdersPage = () => {
     } finally {
       setPositionsLoading(false);
     }
-  }, [bobUrl, walletPublicIdentity]);
+  }, [bobUrl, walletPublicIdentity, getKnownEvent]);
 
   // ---- Load orders: scan order books for current open orders ----
   const loadOrders = useCallback(async () => {
