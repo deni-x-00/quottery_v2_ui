@@ -9,6 +9,7 @@ import {
     Paper,
     CircularProgress,
     Fade,
+    Popper,
 } from '@mui/material';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
@@ -130,66 +131,73 @@ const ConnectLink = () => {
                     )}
                 </motion.div>
 
-                {/* Balance bubble */}
-                <Fade in={showBalanceBubble}>
-                    <Paper
-                        ref={bubbleRef}
-                        elevation={8}
-                        sx={{
-                            position: 'absolute',
-                            top: '100%',
-                            right: 0,
-                            mt: 1,
-                            p: 2,
-                            minWidth: 220,
-                            zIndex: theme.zIndex.tooltip,
-                            borderRadius: 2,
-                            bgcolor: theme.palette.background.paper,
-                            border: `1px solid ${theme.palette.divider}`,
-                        }}
-                    >
-                        {loadingBalances ? (
-                            <Box display="flex" justifyContent="center" py={1}>
-                                <CircularProgress size={20} />
-                            </Box>
-                        ) : (
-                            <Stack spacing={1.5}>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                        GARTH Balance
-                                    </Typography>
-                                    <Typography variant="body1" fontWeight={700}>
-                                        {formatQubicAmount(balance ?? 0)} GARTH
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                        QU Balance
-                                    </Typography>
-                                    <Typography variant="body1" fontWeight={700}>
-                                        {quBalance !== null ? `${formatQubicAmount(quBalance)} QU` : 'Unavailable'}
-                                    </Typography>
-                                </Box>
-                                <Box>
-                                    <Typography variant="caption" color="text.secondary">
-                                        QTRYGOV Balance
-                                    </Typography>
-                                    <Typography variant="body1" fontWeight={700}>
-                                        {qtryGovBalance !== null ? `${formatQubicAmount(qtryGovBalance)} QTRYGOV` : 'Unavailable'}
-                                    </Typography>
-                                </Box>
-                                <Button
-                                    variant="text" size="small"
-                                    onClick={(e) => { e.stopPropagation(); toggleConnectModal(); setShowBalanceBubble(false); }}
-                                    sx={{ textTransform: 'none', fontWeight: 600, justifyContent: 'flex-start', px: 0 }}
-                                >
-                                    Wallet Settings
-                                </Button>
-                            </Stack>
-                        )}
-                    </Paper>
-                </Fade>
             </Box>
+
+            {/* Balance bubble */}
+            <Popper
+                open={showBalanceBubble}
+                anchorEl={buttonRef.current}
+                placement="bottom-end"
+                transition
+                sx={{ zIndex: theme.zIndex.modal + 1 }}
+            >
+                {({ TransitionProps }) => (
+                    <Fade {...TransitionProps} timeout={150}>
+                        <Paper
+                            ref={bubbleRef}
+                            elevation={8}
+                            sx={{
+                                mt: 1,
+                                p: 2,
+                                minWidth: 220,
+                                borderRadius: 2,
+                                bgcolor: theme.palette.background.paper,
+                                border: `1px solid ${theme.palette.divider}`,
+                            }}
+                        >
+                            {loadingBalances ? (
+                                <Box display="flex" justifyContent="center" py={1}>
+                                    <CircularProgress size={20} />
+                                </Box>
+                            ) : (
+                                <Stack spacing={1.5}>
+                                    <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                            GARTH Balance
+                                        </Typography>
+                                        <Typography variant="body1" fontWeight={700}>
+                                            {formatQubicAmount(balance ?? 0)} GARTH
+                                        </Typography>
+                                    </Box>
+                                    <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                            QU Balance
+                                        </Typography>
+                                        <Typography variant="body1" fontWeight={700}>
+                                            {quBalance !== null ? `${formatQubicAmount(quBalance)} QU` : 'Unavailable'}
+                                        </Typography>
+                                    </Box>
+                                    <Box>
+                                        <Typography variant="caption" color="text.secondary">
+                                            QTRYGOV Balance
+                                        </Typography>
+                                        <Typography variant="body1" fontWeight={700}>
+                                            {qtryGovBalance !== null ? `${formatQubicAmount(qtryGovBalance)} QTRYGOV` : 'Unavailable'}
+                                        </Typography>
+                                    </Box>
+                                    <Button
+                                        variant="text" size="small"
+                                        onClick={(e) => { e.stopPropagation(); toggleConnectModal(); setShowBalanceBubble(false); }}
+                                        sx={{ textTransform: 'none', fontWeight: 600, justifyContent: 'flex-start', px: 0 }}
+                                    >
+                                        Wallet Settings
+                                    </Button>
+                                </Stack>
+                            )}
+                        </Paper>
+                    </Fade>
+                )}
+            </Popper>
 
             <ConnectModal open={showConnectModal} onClose={toggleConnectModal} />
         </>

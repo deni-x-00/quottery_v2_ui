@@ -13,6 +13,7 @@ import {
     Alert,
     MenuItem,
     CircularProgress,
+    Chip,
 } from "@mui/material";
 import RedeemIcon from "@mui/icons-material/Redeem";
 import SendIcon from "@mui/icons-material/Send";
@@ -55,6 +56,7 @@ const TRANSFER_RIGHTS_IDENTIFIERS = [
     "TransferSharesManagementRights",
 ];
 const REVOKE_RIGHTS_IDENTIFIERS = ["RevokeAssetManagementRights"];
+const AMOUNT_PRESETS = [25, 50, 75, 100];
 
 const toPositiveInt = (value) => {
     const parsed = parseInt(value, 10);
@@ -138,9 +140,22 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
     const numericValue = toPositiveInt(value);
     const sliderMax = Math.max(1, Number(max || 0));
     const cappedValue = Math.min(numericValue, sliderMax);
+    const isDisabled = disabled || !max || max <= 0;
+    const presetMarks = AMOUNT_PRESETS.map((percent) => ({
+        value: Math.floor((sliderMax * percent) / 100),
+        label: `${percent}%`,
+    }));
+
+    const setPreset = (percent) => {
+        if (isDisabled) return;
+        const nextValue = percent === 100
+            ? Number(max)
+            : Math.max(1, Math.floor((Number(max) * percent) / 100));
+        onChange(String(nextValue));
+    };
 
     return (
-        <Stack spacing={1}>
+        <Stack spacing={1.25}>
             <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
                 <Typography variant="body2" color="text.secondary">
                     {label}
@@ -154,11 +169,33 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                 min={0}
                 max={sliderMax}
                 step={1}
-                disabled={disabled || !max || max <= 0}
+                disabled={isDisabled}
                 onChange={(_, nextValue) => onChange(String(nextValue))}
                 valueLabelDisplay="auto"
                 valueLabelFormat={(nextValue) => formatQubicAmount(nextValue)}
+                marks={presetMarks}
+                sx={{
+                    mx: 1,
+                    "& .MuiSlider-markLabel": {
+                        fontSize: "0.7rem",
+                        color: "text.secondary",
+                    },
+                }}
             />
+            <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                {AMOUNT_PRESETS.map((percent) => (
+                    <Chip
+                        key={percent}
+                        label={percent === 100 ? "Max" : `${percent}%`}
+                        size="small"
+                        variant={percent === 100 ? "filled" : "outlined"}
+                        color={percent === 100 ? "primary" : "default"}
+                        onClick={() => setPreset(percent)}
+                        disabled={isDisabled}
+                        sx={{ minWidth: 56 }}
+                    />
+                ))}
+            </Stack>
             <TextField
                 label={label}
                 value={value}
@@ -167,7 +204,7 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                 size="small"
                 placeholder={max ? `Max ${formatQubicAmount(max)} ${unit}` : "Unavailable"}
                 inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
-                disabled={disabled || !max || max <= 0}
+                disabled={isDisabled}
             />
         </Stack>
     );
@@ -744,7 +781,7 @@ function MiscPage() {
                     submitting={garthSubmitting}
                     submitLabel="Transfer GARTH"
                     connected={connected}
-                    disabled={!hasTransferFee(quBalance)}
+                    disabled={!hasTransferFee(quBalance) || !toPositiveInt(garthAmount) || !balance || balance <= 0}
                 >
                     {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
                     <TextField
@@ -774,7 +811,7 @@ function MiscPage() {
                     submitting={govSubmitting}
                     submitLabel="Transfer QTRYGOV"
                     connected={connected}
-                    disabled={!hasTransferFee(quBalance)}
+                    disabled={!hasTransferFee(quBalance) || !toPositiveInt(govAmount) || !qtryGovBalance || qtryGovBalance <= 0}
                 >
                     {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
                     <TextField
@@ -809,6 +846,9 @@ function MiscPage() {
                         smrAvailableLoading ||
                         !selectedSmrSource ||
                         !selectedSmrDestination ||
+                        !toPositiveInt(smrShares) ||
+                        !smrAvailable ||
+                        smrAvailable <= 0 ||
                         !!smrFeeWarning
                     }
                 >
@@ -835,7 +875,7 @@ function MiscPage() {
                                 <Stack spacing={0.25}>
                                     <Typography variant="body2">{contractLabel(contract)}</Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        Available: {formatQubicAmount(contract.availableBalance)} GARTH | Procedure #{contract.procedureId} | Fee {formatQubicAmount(contract.procedureFee)} QU
+                                        Available: {formatQubicAmount(contract.availableBalance)} GARTH | Fee {formatQubicAmount(contract.procedureFee)} QU
                                     </Typography>
                                 </Stack>
                             </MenuItem>
