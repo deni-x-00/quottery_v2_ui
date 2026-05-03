@@ -3,7 +3,12 @@ import { useQuotteryContext } from '../contexts/QuotteryContext';
 import { useSnackbar } from '../contexts/SnackbarContext';
 
 export const useBalanceNotifier = () => {
-    const { walletPublicIdentity, fetchBalance } = useQuotteryContext();
+    const {
+        walletPublicIdentity,
+        fetchBalance,
+        fetchQuBalance,
+        fetchQtryGovBalance,
+    } = useQuotteryContext();
     const { showSnackbar } = useSnackbar();
 
     const refreshBalanceWithNotifications = useCallback(async () => {
@@ -11,7 +16,15 @@ export const useBalanceNotifier = () => {
             return null;
         }
 
-        const result = await fetchBalance(walletPublicIdentity);
+        const [result] = await Promise.all([
+            fetchBalance(walletPublicIdentity),
+            typeof fetchQuBalance === 'function'
+                ? fetchQuBalance(walletPublicIdentity)
+                : Promise.resolve(null),
+            typeof fetchQtryGovBalance === 'function'
+                ? fetchQtryGovBalance(walletPublicIdentity)
+                : Promise.resolve(null),
+        ]);
         if (!result || !result.changed) return result;
 
         const {
@@ -54,7 +67,7 @@ export const useBalanceNotifier = () => {
         }
 
         return result;
-    }, [walletPublicIdentity, fetchBalance, showSnackbar]);
+    }, [walletPublicIdentity, fetchBalance, fetchQuBalance, fetchQtryGovBalance, showSnackbar]);
 
     const scheduleBalanceRefresh = useCallback(
         (delayMs = 2000) => {

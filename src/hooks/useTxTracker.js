@@ -9,7 +9,13 @@ export function useTxTracker() {
     const [pendingTxs, setPendingTxs] = useState([]);
     const { bobUrl } = useConfig();
     const { showSnackbar } = useSnackbar();
-    const { walletPublicIdentity, fetchBalance, fetchOpenOrders } = useQuotteryContext();
+    const {
+        walletPublicIdentity,
+        fetchBalance,
+        fetchQuBalance,
+        fetchQtryGovBalance,
+        fetchOpenOrders,
+    } = useQuotteryContext();
     const intervalRef = useRef(null);
 
     const trackTx = useCallback((tx) => {
@@ -28,6 +34,18 @@ export function useTxTracker() {
     const removeTx = useCallback((txId) => {
         setPendingTxs((prev) => prev.filter((t) => t.id !== txId));
     }, []);
+
+    const refreshWalletBalances = useCallback(async () => {
+        if (!walletPublicIdentity) return null;
+
+        const [balanceResult] = await Promise.all([
+            fetchBalance ? fetchBalance(walletPublicIdentity) : Promise.resolve(null),
+            fetchQuBalance ? fetchQuBalance(walletPublicIdentity) : Promise.resolve(null),
+            fetchQtryGovBalance ? fetchQtryGovBalance(walletPublicIdentity) : Promise.resolve(null),
+        ]);
+
+        return balanceResult;
+    }, [walletPublicIdentity, fetchBalance, fetchQuBalance, fetchQtryGovBalance]);
 
     const hasMatchingOpenOrder = useCallback(async (tx) => {
         if (tx.type !== 'order' || !walletPublicIdentity || !fetchOpenOrders) return false;
@@ -74,9 +92,7 @@ export function useTxTracker() {
                                 'success'
                             );
                             removeTx(tx.id);
-                            if (walletPublicIdentity && fetchBalance) {
-                                fetchBalance(walletPublicIdentity);
-                            }
+                            refreshWalletBalances();
                             continue;
                         }
                     }
@@ -113,9 +129,7 @@ export function useTxTracker() {
                                     'success'
                                 );
                             }
-                            if (walletPublicIdentity && fetchBalance) {
-                                fetchBalance(walletPublicIdentity);
-                            }
+                            refreshWalletBalances();
                             removeTx(tx.id);
                             continue;
                         }
@@ -123,7 +137,7 @@ export function useTxTracker() {
                         // Check balance for state change (matches cause balance/position changes)
                         let balanceChanged = false;
                         if (walletPublicIdentity && fetchBalance) {
-                            const result = await fetchBalance(walletPublicIdentity);
+                            const result = await refreshWalletBalances();
                             balanceChanged = result?.changed || result?.balanceChanged || result?.positionsChanged;
                         }
 
@@ -175,7 +189,7 @@ export function useTxTracker() {
                 intervalRef.current = null;
             }
         };
-    }, [pendingTxs, bobUrl, walletPublicIdentity, fetchBalance, showSnackbar, removeTx, hasMatchingOpenOrder]);
+    }, [pendingTxs, bobUrl, walletPublicIdentity, fetchBalance, showSnackbar, removeTx, hasMatchingOpenOrder, refreshWalletBalances]);
 
     return { trackTx, pendingTxs };
 }

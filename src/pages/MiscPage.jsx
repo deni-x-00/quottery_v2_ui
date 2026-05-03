@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Box,
     Typography,
@@ -419,10 +419,7 @@ function MiscPage() {
         };
     }, []);
 
-    useEffect(() => {
-        let cancelled = false;
-
-        const loadSourceContracts = async () => {
+    const loadSourceContracts = useCallback(async (isCancelled = null) => {
             if (!connected || !walletPublicIdentity || smartContracts.length === 0) {
                 setSmrSourceContracts([]);
                 setSmrDestinationContracts([]);
@@ -484,7 +481,7 @@ function MiscPage() {
                     .filter((contract) => contract.availableBalance > 0)
                     .sort((a, b) => b.availableBalance - a.availableBalance);
 
-                if (cancelled) return;
+                if (isCancelled && isCancelled()) return;
 
                 setSmrSourceContracts(availableSources);
                 setSmrDestinationContracts(destinationContracts);
@@ -495,22 +492,27 @@ function MiscPage() {
                 ));
             } catch (error) {
                 console.error("Failed to load GARTH management contracts:", error);
-                if (!cancelled) {
+                if (!isCancelled || !isCancelled()) {
                     setSmrSourceContracts([]);
                     setSmrDestinationContracts([]);
                     setSmartContractsError("Failed to load GARTH management contracts.");
                 }
             } finally {
-                if (!cancelled) setSmrAvailableLoading(false);
+                if (!isCancelled || !isCancelled()) setSmrAvailableLoading(false);
             }
-        };
+        },
+        [bobUrl, connected, smartContracts, walletPublicIdentity]
+    );
 
-        loadSourceContracts();
+    useEffect(() => {
+        let cancelled = false;
+
+        loadSourceContracts(() => cancelled);
 
         return () => {
             cancelled = true;
         };
-    }, [bobUrl, connected, smartContracts, walletPublicIdentity]);
+    }, [loadSourceContracts]);
 
     useEffect(() => {
         if (!selectedSmrSource) {
@@ -562,7 +564,7 @@ function MiscPage() {
             return null;
         }
 
-        const { scheduledTick, tickRate, offset } = tickInfo;
+        const { currentTick, scheduledTick, tickRate, offset } = tickInfo;
         console.debug(
             `[Misc] ${description}: rate=${tickRate.toFixed(2)} t/s, offset=${offset}, scheduledTick=${scheduledTick}`
         );
@@ -582,7 +584,14 @@ function MiscPage() {
         if (res?.txHash) {
             showSnackbar(`${description} broadcast at tick ${scheduledTick}. Tx: ${res.txHash}`, "success");
             trackTx({ txHash: res.txHash, scheduledTick, description });
-            scheduleBalanceRefresh(3000);
+            const postTickDelay = Math.max(
+                3000,
+                Math.ceil(((scheduledTick - (currentTick || scheduledTick)) / Math.max(tickRate || 1, 1)) * 1000) + 5000
+            );
+            scheduleBalanceRefresh(postTickDelay);
+            setTimeout(() => {
+                loadSourceContracts();
+            }, postTickDelay);
             return res;
         }
 
