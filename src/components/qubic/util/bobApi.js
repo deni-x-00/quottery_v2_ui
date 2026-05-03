@@ -14,6 +14,9 @@ const FUNC_GET_TOP_PROPOSALS = 8;
 const QTRYGOV_ASSET_NAME = 'QTRYGOV';
 const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
 const QTRYGOV_MANAGE_SC_INDEX = 2;
+export const GARTH_ASSET_NAME = 'GARTH';
+export const GARTH_ISSUER = 'PHOENIXCLQOBHDZCHJOCKCPZVTKALQBMXYOEDBUHSDCJRMTUCUBPLSUFNBIE';
+export const QUOTTERY_CONTRACT_INDEX = 2;
 const QUBIC_STATIC_SMART_CONTRACTS_URL = 'https://static.qubic.org/v1/general/data/smart_contracts.json';
 const PUBLIC_TICK_TOLERANCE = 50;
 const PUBLIC_TICK_TIMEOUT_MS = 3000;
@@ -376,14 +379,7 @@ export async function getAssetBalance(bobUrl, identity, issuer, assetName, manag
         if (!res.ok) return null;
 
         const data = await res.json();
-        const balance = Number(
-            data?.ownershipBalance
-            ?? data?.possessionBalance
-            ?? data?.managementBalance
-            ?? data?.ownedAmount
-            ?? data?.amount
-            ?? 0
-        );
+        const balance = extractManagedAssetBalance(data);
 
         if (!Number.isFinite(balance) || balance < 0) {
             return 0;
@@ -394,6 +390,38 @@ export async function getAssetBalance(bobUrl, identity, issuer, assetName, manag
         console.warn('[getAssetBalance] Could not fetch asset balance:', e.message);
         return null;
     }
+}
+
+function toFiniteNonNegativeNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function extractManagedAssetBalance(data) {
+    const managementBalance = toFiniteNonNegativeNumber(
+        data?.managementBalance
+        ?? data?.managedBalance
+        ?? data?.managedAmount
+    );
+
+    if (managementBalance !== null) return managementBalance;
+
+    const ownershipBalance = toFiniteNonNegativeNumber(
+        data?.ownershipBalance
+        ?? data?.ownedAmount
+        ?? data?.ownershipAmount
+    );
+    const possessionBalance = toFiniteNonNegativeNumber(
+        data?.possessionBalance
+        ?? data?.possessedAmount
+        ?? data?.possessionAmount
+    );
+
+    if (ownershipBalance !== null && possessionBalance !== null) {
+        return Math.min(ownershipBalance, possessionBalance);
+    }
+
+    return ownershipBalance ?? possessionBalance ?? toFiniteNonNegativeNumber(data?.amount) ?? 0;
 }
 
 export async function getStaticSmartContracts() {
@@ -745,7 +773,13 @@ export async function fetchFullOrderbook(bobUrl, eventId) {
 
 export async function fetchUserBalanceAndPositions(bobUrl, identity) {
     const [approved, posResult] = await Promise.all([
-        getApprovedAmount(bobUrl, identity),
+        getAssetBalance(
+            bobUrl,
+            identity,
+            GARTH_ISSUER,
+            GARTH_ASSET_NAME,
+            QUOTTERY_CONTRACT_INDEX
+        ),
         getUserPositions(bobUrl, identity),
     ]);
 

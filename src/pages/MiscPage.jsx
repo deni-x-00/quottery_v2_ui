@@ -27,6 +27,8 @@ import { useSnackbar } from "../contexts/SnackbarContext";
 import { formatQubicAmount, byteArrayToHexString } from "../components/qubic/util";
 import {
     broadcastTransaction,
+    GARTH_ASSET_NAME,
+    GARTH_ISSUER,
     getAssetBalance,
     getBasicInfo,
     getEventInfo,
@@ -49,8 +51,6 @@ import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 
 const TRANSFER_QUBIC_FEE = 100;
 const WHOLE_SHARE_PRICE = 100000;
-const GARTH_ASSET_NAME = "GARTH";
-const GARTH_ISSUER = "PHOENIXCLQOBHDZCHJOCKCPZVTKALQBMXYOEDBUHSDCJRMTUCUBPLSUFNBIE";
 const TRANSFER_RIGHTS_IDENTIFIERS = [
     "TransferShareManagementRights",
     "TransferSharesManagementRights",
