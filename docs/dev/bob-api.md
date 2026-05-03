@@ -12,7 +12,7 @@ Generic POST helper with automatic retry on `202 Accepted` (pending) responses. 
 
 ### `querySc(bobUrl, funcNumber, inputHex)`
 
-Queries a Quottery SC view function. Generates a random nonce, POSTs to `/querySmartContract`, and returns the decoded hex response as a `Uint8Array`.
+Queries a Quottery SC view function and returns decoded bytes. When Bob is in sync, it POSTs hex data to Bob's `/querySmartContract`. When Bob lags behind public tick, it POSTs base64 data to public RPC `/querySmartContract` and decodes `responseData` from base64.
 
 Parameters passed to Bob:
 - `nonce` — Random uint32 (for request deduplication).
@@ -80,11 +80,25 @@ Returns `{ option0: { bids, asks }, option1: { bids, asks } }`.
 
 ### `broadcastTransaction(bobUrl, signedHex)`
 
-POSTs `{ data: signedHex }` to `/broadcastTransaction`. Bob relays the raw transaction bytes to the Qubic node. Returns the tx hash from Bob's response.
+Broadcasts a signed transaction. When Bob is in sync, POSTs hex `{ data }` to Bob `/broadcastTransaction`; when Bob lags, POSTs base64 `{ encodedTransaction }` to public RPC `/broadcast-transaction`. Falls back between sources on failure.
 
 ### `getLatestTick(bobUrl)`
 
 GETs `/status` and extracts the highest tick value from all available fields (`latestTick`, `lastProcessedTick`, `currentTick`, `tick`, `lastTick`, `currentFetchingTick`). Uses `Math.max()` across all fields to avoid using a stale tick for scheduling.
+
+### `getBobProcessedTick(bobUrl)`
+
+GETs `/status` and extracts Bob's local processed tick. Unlike `getLatestTick()`, it ignores public/network-observed fields such as `lastSeenNetworkTick`; this value is used to detect whether Bob is lagging behind public RPC.
+
+### Public RPC reads
+
+When `getNetworkTick()` selects `source: "public"`, read methods prefer public RPC:
+- QUBIC balance: `GET /balance/{identity}`.
+- SC view functions: `POST /querySmartContract` with `contractIndex`, `inputType`, `inputSize`, and base64 `requestData`.
+- Asset balances: `GET /assets/ownerships?...`.
+- Transaction lookup: `POST /getTransactionByHash`.
+
+If public RPC fails, methods fall back to Bob and may return stale data if Bob is still behind.
 
 ### `getEntityBalance(bobUrl, identity)`
 

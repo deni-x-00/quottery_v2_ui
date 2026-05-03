@@ -72,7 +72,7 @@ export const useBalanceNotifier = () => {
     const scheduleBalanceRefresh = useCallback(
         (delayMs = 2000) => {
             return setTimeout(() => {
-                // fire and forget – errors are already logged in fetchBalance
+                // fire and forget - errors are already logged in fetchBalance
                 refreshBalanceWithNotifications();
             }, delayMs);
         },

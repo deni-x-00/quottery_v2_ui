@@ -83,6 +83,16 @@ export function useTxTracker() {
                 for (const tx of pendingTxs) {
                     if (tx.status !== 'pending') continue;
 
+                    // Timeout after 3 minutes
+                    if (Date.now() - tx.addedAt > 180000) {
+                        showSnackbar(
+                            `Tx tracking timed out for tick ${tx.scheduledTick}. Check manually.\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
+                            'warning'
+                        );
+                        removeTx(tx.id);
+                        continue;
+                    }
+
                     // Before tick passes: try GET /tx/{hash} for early confirmation
                     if (tx.txHash && tx.scheduledTick) {
                         const txData = await getTxByHash(bobUrl, tx.txHash);
@@ -98,7 +108,9 @@ export function useTxTracker() {
                     }
 
                     // After tick passes: final check
-                    if (currentTick > tx.scheduledTick && !tx.checked) {
+                    const networkTickPassed = currentTick > tx.scheduledTick;
+
+                    if (networkTickPassed && !tx.checked) {
                         setPendingTxs((prev) =>
                             prev.map((t) => t.id === tx.id ? { ...t, checked: true } : t)
                         );
@@ -169,14 +181,6 @@ export function useTxTracker() {
                         continue;
                     }
 
-                    // Timeout after 3 minutes
-                    if (Date.now() - tx.addedAt > 180000) {
-                        showSnackbar(
-                            `Tx tracking timed out for tick ${tx.scheduledTick}. Check manually.\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
-                            'warning'
-                        );
-                        removeTx(tx.id);
-                    }
                 }
             } catch (e) {
                 console.warn('[useTxTracker] poll error:', e);

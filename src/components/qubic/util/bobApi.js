@@ -30,6 +30,12 @@ const PUBLIC_BROADCAST_URLS = [
     'https://rpc.qubic.org/live/v1/broadcast-transaction',
     'https://rpc.qubic.org/v1/broadcast-transaction',
 ];
+const PUBLIC_RPC_BASE_URLS = [
+    'https://rpc.qubic.org/live/v1',
+    'https://rpc.qubic.org/v1',
+];
+const SOURCE_CACHE_MS = 3000;
+let sourceCache = { bobUrl: '', at: 0, source: 'bob', tickInfo: null };
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = PUBLIC_TICK_TIMEOUT_MS) {
     const controller = new AbortController();
@@ -100,6 +106,20 @@ async function bobPost(bobUrl, path, payload, maxRetries = 10) {
 }
 
 async function querySc(bobUrl, funcNumber, inputHex = '') {
+    const source = await getPreferredDataSource(bobUrl);
+
+    if (source === 'public') {
+        try {
+            return await queryScViaPublicRpc(funcNumber, inputHex);
+        } catch (e) {
+            console.warn(`[querySc] Public RPC failed for function ${funcNumber}, falling back to Bob:`, e.message);
+        }
+    }
+
+    return queryScViaBob(bobUrl, funcNumber, inputHex);
+}
+
+async function queryScViaBob(bobUrl, funcNumber, inputHex = '') {
     const nonce = Math.floor(Math.random() * 0xffffffff) + 1;
     const payload = {
         nonce,
@@ -116,6 +136,19 @@ async function querySc(bobUrl, funcNumber, inputHex = '') {
 }
 
 export async function broadcastTransaction(bobUrl, signedHex) {
+    const source = await getPreferredDataSource(bobUrl);
+
+    if (source === 'public') {
+        const rpcRes = await broadcastTransactionViaPublicRpc(signedHex);
+        if (!rpcRes?.error) {
+            return {
+                ...rpcRes,
+                broadcastSource: 'public-rpc',
+            };
+        }
+        console.warn('[broadcastTransaction] Public RPC broadcast failed, trying Bob:', rpcRes.error);
+    }
+
     let bobError = null;
     try {
         const res = await bobPost(bobUrl, '/broadcastTransaction', { data: signedHex });
@@ -176,6 +209,29 @@ export async function getLatestTick(bobUrl) {
     }
 }
 
+export async function getBobProcessedTick(bobUrl) {
+    try {
+        const res = await fetch(`${bobUrl}/status`);
+        const data = await res.json();
+
+        // For state reads we need Bob's local processed tick, not a public/network
+        // tick that Bob has only observed. Otherwise SC/balance queries can read
+        // before Bob has applied the transaction tick.
+        const candidates = [
+            data?.lastProcessedTick,
+            data?.latestTick,
+            data?.currentTick,
+            data?.tick,
+            data?.lastTick,
+            data?.currentFetchingTick,
+        ].map(Number).filter(n => n > 0);
+
+        return candidates.length > 0 ? Math.max(...candidates) : 0;
+    } catch {
+        return 0;
+    }
+}
+
 export async function getPublicTick() {
     for (const { url, parse } of PUBLIC_TICK_URLS) {
         try {
@@ -197,7 +253,7 @@ export async function getPublicTick() {
 
 export async function getNetworkTick(bobUrl) {
     const [bobTick, publicInfo] = await Promise.all([
-        getLatestTick(bobUrl),
+        getBobProcessedTick(bobUrl),
         getPublicTick(),
     ]);
 
@@ -229,7 +285,34 @@ export async function getNetworkTick(bobUrl) {
     };
 }
 
+async function getPreferredDataSource(bobUrl) {
+    const now = Date.now();
+    if (
+        sourceCache.bobUrl === bobUrl &&
+        sourceCache.tickInfo &&
+        now - sourceCache.at < SOURCE_CACHE_MS
+    ) {
+        return sourceCache.source;
+    }
+
+    const tickInfo = await getNetworkTick(bobUrl);
+    const source = tickInfo.source === 'public' ? 'public' : 'bob';
+    sourceCache = { bobUrl, at: now, source, tickInfo };
+    return source;
+}
+
 export async function getEntityBalance(bobUrl, identity) {
+    if (!identity) return null;
+
+    const source = await getPreferredDataSource(bobUrl);
+    if (source === 'public') {
+        try {
+            return await getEntityBalanceViaPublicRpc(identity);
+        } catch (e) {
+            console.warn('[getEntityBalance] Public RPC failed, falling back to Bob:', e.message);
+        }
+    }
+
     try {
         const res = await fetch(`${bobUrl}/balance/${identity}`);
         const data = await res.json();
@@ -241,6 +324,15 @@ export async function getEntityBalance(bobUrl, identity) {
 }
 
 export async function getTxByHash(bobUrl, txHash) {
+    const source = await getPreferredDataSource(bobUrl);
+    if (source === 'public') {
+        try {
+            return await getTxByHashViaPublicRpc(txHash);
+        } catch (e) {
+            console.warn('[getTxByHash] Public RPC failed, falling back to Bob:', e.message);
+        }
+    }
+
     try {
         const res = await fetch(`${bobUrl}/tx/${txHash}`);
         if (!res.ok) return null;
@@ -302,6 +394,15 @@ function bytesToBase64(bytes) {
     return btoa(binary);
 }
 
+function base64ToBytes(base64) {
+    const binary = atob(base64 || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+
 function hexToBase64(hex) {
     return bytesToBase64(hexToBytes(hex));
 }
@@ -352,6 +453,95 @@ async function broadcastTransactionViaPublicRpc(signedHex) {
     return { error: 'All public RPC broadcast endpoints failed' };
 }
 
+async function queryScViaPublicRpc(funcNumber, inputHex = '') {
+    const requestData = inputHex ? hexToBase64(inputHex) : '';
+    const inputSize = Math.floor((inputHex || '').length / 2);
+    const payload = {
+        contractIndex: SC_INDEX,
+        inputType: funcNumber,
+        inputSize,
+        requestData,
+    };
+
+    for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
+        try {
+            const res = await fetchWithTimeout(`${baseUrl}/querySmartContract`, {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            }, 10000);
+
+            const body = await res.json();
+            if (!res.ok || body?.error || !body?.responseData) {
+                const message = body?.error || body?.message || `HTTP ${res.status}`;
+                console.warn(`[queryScViaPublicRpc] ${baseUrl} failed:`, message);
+                continue;
+            }
+
+            return base64ToBytes(body.responseData);
+        } catch (e) {
+            console.warn(`[queryScViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
+        }
+    }
+
+    throw new Error('All public RPC querySmartContract endpoints failed');
+}
+
+async function getEntityBalanceViaPublicRpc(identity) {
+    for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
+        try {
+            const res = await fetchWithTimeout(`${baseUrl}/balance/${identity}`, {}, 10000);
+            const body = await res.json();
+            if (!res.ok || body?.error) {
+                const message = body?.error || body?.message || `HTTP ${res.status}`;
+                console.warn(`[getEntityBalanceViaPublicRpc] ${baseUrl} failed:`, message);
+                continue;
+            }
+
+            const balance = Number(body?.balance?.balance ?? body?.balance ?? body?.amount ?? 0);
+            return Number.isFinite(balance) && balance >= 0 ? balance : 0;
+        } catch (e) {
+            console.warn(`[getEntityBalanceViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
+        }
+    }
+
+    throw new Error('All public RPC balance endpoints failed');
+}
+
+async function getTxByHashViaPublicRpc(txHash) {
+    if (!txHash) return null;
+
+    for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
+        try {
+            const res = await fetchWithTimeout(`${baseUrl}/getTransactionByHash`, {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ hash: txHash }),
+            }, 10000);
+            const body = await res.json();
+
+            if (res.status === 404 || body?.found === false) continue;
+            if (!res.ok || body?.error || body?.ok === false) {
+                const message = body?.error || body?.message || `HTTP ${res.status}`;
+                console.warn(`[getTxByHashViaPublicRpc] ${baseUrl} failed:`, message);
+                continue;
+            }
+
+            return body?.hash || body?.transactionId || body?.moneyFlew !== undefined ? body : null;
+        } catch (e) {
+            console.warn(`[getTxByHashViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
+        }
+    }
+
+    return null;
+}
+
 export async function getQtryGovBalance(bobUrl, identity) {
     if (!identity) return null;
 
@@ -372,6 +562,15 @@ export async function getQtryGovBalance(bobUrl, identity) {
 export async function getAssetBalance(bobUrl, identity, issuer, assetName, managingContractIndex = 2) {
     if (!identity || !issuer || !assetName) return null;
 
+    const source = await getPreferredDataSource(bobUrl);
+    if (source === 'public') {
+        try {
+            return await getAssetBalanceViaPublicRpc(identity, issuer, assetName, managingContractIndex);
+        } catch (e) {
+            console.warn('[getAssetBalance] Public RPC failed, falling back to Bob:', e.message);
+        }
+    }
+
     try {
         const res = await fetch(
             `${bobUrl}/asset/${identity}/${issuer}/${assetName.toUpperCase()}/${managingContractIndex}`
@@ -390,6 +589,75 @@ export async function getAssetBalance(bobUrl, identity, issuer, assetName, manag
         console.warn('[getAssetBalance] Could not fetch asset balance:', e.message);
         return null;
     }
+}
+
+export async function getOwnedAssets(bobUrl, identity) {
+    if (!identity) return [];
+
+    const source = await getPreferredDataSource(bobUrl);
+    if (source === 'public') {
+        try {
+            return await getOwnedAssetsViaPublicRpc(identity);
+        } catch (e) {
+            console.warn('[getOwnedAssets] Public RPC failed:', e.message);
+        }
+    }
+
+    return [];
+}
+
+async function getAssetBalanceViaPublicRpc(identity, issuer, assetName, managingContractIndex = 2) {
+    const params = new URLSearchParams({
+        issuerIdentity: issuer,
+        assetName: assetName.toUpperCase(),
+        ownerIdentity: identity,
+        ownershipManagingContract: String(managingContractIndex),
+    });
+
+    for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
+        try {
+            const res = await fetchWithTimeout(`${baseUrl}/assets/ownerships?${params.toString()}`, {}, 10000);
+            const body = await res.json();
+            if (!res.ok || body?.error) {
+                const message = body?.error || body?.message || `HTTP ${res.status}`;
+                console.warn(`[getAssetBalanceViaPublicRpc] ${baseUrl} failed:`, message);
+                continue;
+            }
+
+            const assets = Array.isArray(body?.assets) ? body.assets : [];
+            const total = assets.reduce((sum, asset) => {
+                const data = asset?.data || {};
+                if (Number(data?.managingContractIndex) !== Number(managingContractIndex)) return sum;
+                return sum + Number(data?.numberOfUnits || 0);
+            }, 0);
+
+            return Number.isFinite(total) && total >= 0 ? total : 0;
+        } catch (e) {
+            console.warn(`[getAssetBalanceViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
+        }
+    }
+
+    throw new Error('All public RPC asset ownership endpoints failed');
+}
+
+async function getOwnedAssetsViaPublicRpc(identity) {
+    for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
+        try {
+            const res = await fetchWithTimeout(`${baseUrl}/assets/${identity}/owned`, {}, 10000);
+            const body = await res.json();
+            if (!res.ok || body?.error) {
+                const message = body?.error || body?.message || `HTTP ${res.status}`;
+                console.warn(`[getOwnedAssetsViaPublicRpc] ${baseUrl} failed:`, message);
+                continue;
+            }
+
+            return Array.isArray(body?.ownedAssets) ? body.ownedAssets : [];
+        } catch (e) {
+            console.warn(`[getOwnedAssetsViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
+        }
+    }
+
+    throw new Error('All public RPC owned asset endpoints failed');
 }
 
 function toFiniteNonNegativeNumber(value) {
@@ -773,13 +1041,7 @@ export async function fetchFullOrderbook(bobUrl, eventId) {
 
 export async function fetchUserBalanceAndPositions(bobUrl, identity) {
     const [approved, posResult] = await Promise.all([
-        getAssetBalance(
-            bobUrl,
-            identity,
-            GARTH_ISSUER,
-            GARTH_ASSET_NAME,
-            QUOTTERY_CONTRACT_INDEX
-        ),
+        getApprovedAmount(bobUrl, identity),
         getUserPositions(bobUrl, identity),
     ]);
 
