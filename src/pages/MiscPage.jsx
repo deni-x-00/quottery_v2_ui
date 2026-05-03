@@ -57,6 +57,8 @@ const TRANSFER_RIGHTS_IDENTIFIERS = [
 ];
 const REVOKE_RIGHTS_IDENTIFIERS = ["RevokeAssetManagementRights"];
 const AMOUNT_PRESETS = [25, 50, 75, 100];
+const QX_CONTRACT_INDEX = 1;
+const QUOTTERY_CONTRACT_INDEX = 2;
 
 const toPositiveInt = (value) => {
     const parsed = parseInt(value, 10);
@@ -141,10 +143,7 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
     const sliderMax = Math.max(1, Number(max || 0));
     const cappedValue = Math.min(numericValue, sliderMax);
     const isDisabled = disabled || !max || max <= 0;
-    const presetMarks = AMOUNT_PRESETS.map((percent) => ({
-        value: Math.floor((sliderMax * percent) / 100),
-        label: `${percent}%`,
-    }));
+    const presetMarks = AMOUNT_PRESETS.map((percent) => Math.floor((sliderMax * percent) / 100));
 
     const setPreset = (percent) => {
         if (isDisabled) return;
@@ -173,13 +172,10 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                 onChange={(_, nextValue) => onChange(String(nextValue))}
                 valueLabelDisplay="auto"
                 valueLabelFormat={(nextValue) => formatQubicAmount(nextValue)}
-                marks={presetMarks}
+                marks={presetMarks.map((mark) => ({ value: mark }))}
                 sx={{
                     mx: 1,
-                    "& .MuiSlider-markLabel": {
-                        fontSize: "0.7rem",
-                        color: "text.secondary",
-                    },
+                    mb: 0.25,
                 }}
             />
             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
@@ -271,7 +267,7 @@ function MiscPage() {
     const filteredSmrDestinationContracts = useMemo(() => {
         if (!selectedSmrSource) return smrDestinationContracts;
         if (selectedSmrSource.procedureType === "revoke") {
-            return smrDestinationContracts.filter((contract) => Number(contract.contractIndex) === 1);
+            return smrDestinationContracts.filter((contract) => Number(contract.contractIndex) === QX_CONTRACT_INDEX);
         }
         return smrDestinationContracts.filter((contract) => Number(contract.contractIndex) !== Number(selectedSmrSource.contractIndex));
     }, [selectedSmrSource, smrDestinationContracts]);
@@ -507,13 +503,21 @@ function MiscPage() {
         setSmrShares((currentShares) => clampToMax(currentShares, selectedSmrSource.availableBalance));
 
         const filteredDestinations = selectedSmrSource.procedureType === "revoke"
-            ? smrDestinationContracts.filter((contract) => Number(contract.contractIndex) === 1)
+            ? smrDestinationContracts.filter((contract) => Number(contract.contractIndex) === QX_CONTRACT_INDEX)
             : smrDestinationContracts.filter((contract) => Number(contract.contractIndex) !== Number(selectedSmrSource.contractIndex));
+
+        const preferredDestination = filteredDestinations.find((contract) =>
+            Number(contract.contractIndex) === (
+                Number(selectedSmrSource.contractIndex) === QX_CONTRACT_INDEX
+                    ? QUOTTERY_CONTRACT_INDEX
+                    : QX_CONTRACT_INDEX
+            )
+        ) || filteredDestinations[0];
 
         setSmrDestinationContractIndex((currentIndex) => (
             filteredDestinations.some((contract) => String(contract.contractIndex) === String(currentIndex))
                 ? currentIndex
-                : (filteredDestinations[0] ? String(filteredDestinations[0].contractIndex) : "")
+                : (preferredDestination ? String(preferredDestination.contractIndex) : "")
         ));
     }, [selectedSmrSource, smrDestinationContracts]);
 
