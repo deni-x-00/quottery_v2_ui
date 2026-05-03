@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getLatestTick, getTxByHash } from '../components/qubic/util/bobApi';
+import { getNetworkTick, getTxByHash } from '../components/qubic/util/bobApi';
 import { useConfig } from '../contexts/ConfigContext';
 import { useSnackbar } from '../contexts/SnackbarContext';
 import { useQuotteryContext } from '../contexts/QuotteryContext';
@@ -58,7 +58,8 @@ export function useTxTracker() {
             if (!bobUrl) return;
 
             try {
-                const currentTick = await getLatestTick(bobUrl);
+                const tickInfo = await getNetworkTick(bobUrl);
+                const currentTick = tickInfo.tick;
                 if (!currentTick) return;
 
                 for (const tx of pendingTxs) {

@@ -15,6 +15,28 @@ const QTRYGOV_ASSET_NAME = 'QTRYGOV';
 const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
 const QTRYGOV_MANAGE_SC_INDEX = 2;
 const QUBIC_STATIC_SMART_CONTRACTS_URL = 'https://static.qubic.org/v1/general/data/smart_contracts.json';
+const PUBLIC_TICK_TOLERANCE = 50;
+const PUBLIC_TICK_TIMEOUT_MS = 3000;
+const PUBLIC_TICK_URLS = [
+    { url: 'https://api.qubic.global/currenttick', parse: (d) => d?.tick || d?.currentTick || d },
+    { url: 'https://api.qubic.li/public/currenttick', parse: (d) => d?.tick || d?.currentTick || d },
+    { url: 'https://rpc.qubic.org/live/v1/tick-info', parse: (d) => d?.tickInfo?.tick || d?.tick || d },
+    { url: 'https://rpc.qubic.org/v1/tick-info', parse: (d) => d?.tickInfo?.tick || d?.tick || d },
+];
+const PUBLIC_BROADCAST_URLS = [
+    'https://rpc.qubic.org/live/v1/broadcast-transaction',
+    'https://rpc.qubic.org/v1/broadcast-transaction',
+];
+
+async function fetchWithTimeout(url, options = {}, timeoutMs = PUBLIC_TICK_TIMEOUT_MS) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
 async function bobPost(bobUrl, path, payload, maxRetries = 10) {
     const url = `${bobUrl}${path}`;
@@ -91,16 +113,41 @@ async function querySc(bobUrl, funcNumber, inputHex = '') {
 }
 
 export async function broadcastTransaction(bobUrl, signedHex) {
-    const res = await bobPost(bobUrl, '/broadcastTransaction', { data: signedHex });
+    let bobError = null;
+    try {
+        const res = await bobPost(bobUrl, '/broadcastTransaction', { data: signedHex });
 
-    console.debug('[broadcastTransaction] Bob response:', JSON.stringify(res));
+        console.debug('[broadcastTransaction] Bob response:', JSON.stringify(res));
 
-    const txHash = res?.transactionHash || res?.txHash || res?.hash || res?.id
-        || res?.txId || res?.transaction_hash || null;
+        if (!res?.error) {
+            const txHash = extractTxHash(res);
+
+            return {
+                ...res,
+                txHash,
+                broadcastSource: 'bob',
+            };
+        }
+
+        bobError = res?.error || 'Bob broadcast failed';
+    } catch (e) {
+        bobError = e?.message || 'Bob broadcast failed';
+        console.warn('[broadcastTransaction] Bob broadcast failed, trying public RPC:', e);
+    }
+
+    const rpcRes = await broadcastTransactionViaPublicRpc(signedHex);
+    if (rpcRes?.error) {
+        return {
+            error: `Bob broadcast failed: ${bobError}. Public RPC failed: ${rpcRes.error}`,
+            bobError,
+            publicRpcError: rpcRes.error,
+        };
+    }
 
     return {
-        ...res,
-        txHash,
+        ...rpcRes,
+        bobError,
+        broadcastSource: 'public-rpc',
     };
 }
 
@@ -124,6 +171,59 @@ export async function getLatestTick(bobUrl) {
     } catch {
         return 0;
     }
+}
+
+export async function getPublicTick() {
+    for (const { url, parse } of PUBLIC_TICK_URLS) {
+        try {
+            const res = await fetchWithTimeout(url);
+            if (!res.ok) continue;
+
+            const data = await res.json();
+            const tick = Number(parse(data));
+            if (tick > 0) {
+                return { tick, source: url };
+            }
+        } catch {
+            // try next public source
+        }
+    }
+
+    return { tick: null, source: null };
+}
+
+export async function getNetworkTick(bobUrl) {
+    const [bobTick, publicInfo] = await Promise.all([
+        getLatestTick(bobUrl),
+        getPublicTick(),
+    ]);
+
+    const publicTick = publicInfo.tick;
+    const publicSource = publicInfo.source;
+    const lag = bobTick && publicTick ? publicTick - bobTick : 0;
+    const isBobLagging = Boolean(bobTick && publicTick && lag > PUBLIC_TICK_TOLERANCE);
+
+    if (isBobLagging || (!bobTick && publicTick)) {
+        return {
+            tick: publicTick,
+            source: 'public',
+            bobTick,
+            publicTick,
+            publicSource,
+            lag,
+            isBobLagging,
+        };
+    }
+
+    return {
+        tick: bobTick || publicTick || 0,
+        source: bobTick ? 'bob' : 'public',
+        bobTick,
+        publicTick,
+        publicSource,
+        lag,
+        isBobLagging: false,
+    };
 }
 
 export async function getEntityBalance(bobUrl, identity) {
@@ -185,6 +285,68 @@ function pack4xUint64LE(a, b, c, d) {
 function readUint64LE(bytes, offset) {
     const view = new DataView(bytes.buffer, bytes.byteOffset);
     return Number(view.getBigUint64(offset, true));
+}
+
+function bytesToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.subarray(i, i + chunkSize);
+        binary += String.fromCharCode.apply(null, chunk);
+    }
+
+    return btoa(binary);
+}
+
+function hexToBase64(hex) {
+    return bytesToBase64(hexToBytes(hex));
+}
+
+function extractTxHash(res) {
+    return res?.transactionHash || res?.txHash || res?.hash || res?.id
+        || res?.txId || res?.transaction_hash || res?.transactionId || null;
+}
+
+async function broadcastTransactionViaPublicRpc(signedHex) {
+    const encodedTransaction = hexToBase64(signedHex);
+
+    for (const url of PUBLIC_BROADCAST_URLS) {
+        try {
+            const res = await fetchWithTimeout(url, {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ encodedTransaction }),
+            }, 10000);
+
+            const text = await res.text();
+            let body = {};
+            try {
+                body = text ? JSON.parse(text) : {};
+            } catch {
+                body = { raw: text };
+            }
+
+            if (!res.ok || body?.error) {
+                const message = body?.error || body?.message || body?.raw || `HTTP ${res.status}`;
+                console.warn(`[broadcastTransactionViaPublicRpc] ${url} failed:`, message);
+                continue;
+            }
+
+            return {
+                ...body,
+                txHash: extractTxHash(body),
+                rpcUrl: url,
+            };
+        } catch (e) {
+            console.warn(`[broadcastTransactionViaPublicRpc] ${url} failed:`, e?.message || e);
+        }
+    }
+
+    return { error: 'All public RPC broadcast endpoints failed' };
 }
 
 export async function getQtryGovBalance(bobUrl, identity) {

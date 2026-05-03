@@ -13,7 +13,7 @@ import {
   fetchFullOrderbook,
   fetchUserBalanceAndPositions,
   getOrders,
-  getLatestTick,
+  getNetworkTick,
   getEntityBalance,
   getQtryGovBalance,
 } from '../components/qubic/util/bobApi';
@@ -42,10 +42,11 @@ export const QuotteryProvider = ({ children }) => {
   const [obError, setObError] = useState(null);
 
   // Adaptive tick rate measurement
-  const { tickRate, adaptiveOffset, getScheduledTick } = useTickRate(bobUrl);
+  const { tickRate, tickSource, bobLag, adaptiveOffset, getScheduledTick } = useTickRate(bobUrl);
 
   const getCurrentTick = async () => {
-    return await getLatestTick(bobUrl);
+    const tickInfo = await getNetworkTick(bobUrl);
+    return tickInfo.tick;
   };
 
   // Fetch all active events from the SC via Bob
@@ -349,6 +350,8 @@ export const QuotteryProvider = ({ children }) => {
     getCurrentTick,
     getScheduledTick,
     tickRate,
+    tickSource,
+    bobLag,
     adaptiveOffset,
     buildOrderSideEntries,
     orderbook,
