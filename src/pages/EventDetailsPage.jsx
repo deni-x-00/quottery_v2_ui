@@ -25,6 +25,7 @@ import {
     ToggleButton,
     Tabs,
     Tab,
+    Alert,
 } from "@mui/material";
 
 import {
@@ -71,6 +72,7 @@ import gcLogo from "../assets/gc.png";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { getTagInfo } from "../components/qubic/util/tagMap";
+import TradeAmountSlider from "../components/TradeAmountSlider";
 const thumbnails = require.context("../assets", false, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
     try {
@@ -134,6 +136,15 @@ function EventDetailsPage() {
     // Cost estimation: shares × price (in GARTH)
     const tradeCoins = Number(tradeAmount || 0) * Number(tradePrice || 0);
     const availableTradeShares = getPositionAmount(eventPositions, event?.eid, selectedOption);
+    const maxTradeAmount = tradeSide === "sell"
+        ? availableTradeShares
+        : tradePrice > 0 ? Math.floor(Number(balance || 0) / tradePrice) : 0;
+    const insufficientTradeResource = tradeSide === "buy"
+        ? Number(balance || 0) < tradeCoins
+        : availableTradeShares < Number(tradeAmount || 0);
+    const tradeResourceError = tradeSide === "buy"
+        ? `Insufficient GARTH: need ${formatQubicAmount(tradeCoins)}, available ${formatQubicAmount(balance || 0)}.`
+        : `Insufficient shares: need ${formatQubicAmount(tradeAmount || 0)}, available ${formatQubicAmount(availableTradeShares)}.`;
     const tradeSubmitDisabled =
         submitting ||
         !connected ||
@@ -142,8 +153,7 @@ function EventDetailsPage() {
         tradeAmount <= 0 ||
         tradePrice <= 0 ||
         tradePrice >= 100000 ||
-        (tradeSide === "buy" && Number(balance || 0) < tradeCoins) ||
-        (tradeSide === "sell" && availableTradeShares < Number(tradeAmount || 0));
+        insufficientTradeResource;
 
     // Order book UI state
     const [orderBookExpanded, setOrderBookExpanded] = useState(true);
@@ -407,13 +417,13 @@ function EventDetailsPage() {
                 const optDesc = selectedOption === 0 ? event.option0Desc : event.option1Desc;
                 const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : '';
                 showSnackbar(
-                    `Order transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${tradeSide === "buy" ? "Bid" : "Ask"} ${tradeAmount} "${optDesc}" @ ${tradePrice}${hashInfo}`,
+                    `Order transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${tradeSide === "buy" ? "Bid" : "Ask"} ${formatQubicAmount(tradeAmount)} "${optDesc}" @ ${formatQubicAmount(tradePrice)}${hashInfo}`,
                     "info"
                 );
                 trackTx({
                     txHash: res.txHash,
                     scheduledTick,
-                    description: `${tradeSide === "buy" ? "Bid" : "Ask"} ${tradeAmount} "${optDesc}" @ ${tradePrice}`,
+                    description: `${tradeSide === "buy" ? "Bid" : "Ask"} ${formatQubicAmount(tradeAmount)} "${optDesc}" @ ${formatQubicAmount(tradePrice)}`,
                     type: "order",
                     eventId: event.eid,
                     option: selectedOption,
@@ -819,21 +829,18 @@ function EventDetailsPage() {
                                     <ToggleButton value={1}>{event?.option1Desc || "Option 1"}</ToggleButton>
                                 </ToggleButtonGroup>
 
-                                {/* Shares input */}
-                                <TextField label="Shares" type="number" size="small"
-                                           value={tradeAmountInput}
-                                           onChange={(e) => {
-                                               const raw = e.target.value;
-                                               if (raw === "") { setTradeAmountInput(""); setTradeAmount(0); return; }
-                                               const normalized = raw.replace(/^0+(?=\d)/, "");
-                                               if (!/^\d+$/.test(normalized)) return;
-                                               setTradeAmountInput(normalized);
-                                               setTradeAmount(Math.max(0, Number(normalized)));
-                                           }}
-                                           sx={{
-                                               "& input[type=number]": { MozAppearance: "textfield" },
-                                               "& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button": { WebkitAppearance: "none", margin: 0 },
-                                           }}
+                                <TradeAmountSlider
+                                    label="Shares"
+                                    value={tradeAmountInput}
+                                    max={maxTradeAmount}
+                                    unit="shares"
+                                    availableValue={tradeSide === "buy" ? Number(balance || 0) : availableTradeShares}
+                                    availableUnit={tradeSide === "buy" ? "GARTH" : "shares"}
+                                    disabled={submitting}
+                                    onChange={(nextValue) => {
+                                        setTradeAmountInput(nextValue);
+                                        setTradeAmount(Number(nextValue || 0));
+                                    }}
                                 />
 
                                 {/* Price input + probability display */}
@@ -881,25 +888,11 @@ function EventDetailsPage() {
                                     </Box>
                                 </Box>
 
-                                {/* Shares quick-add */}
-                                <Stack direction="row" spacing={1}>
-                                    {[1, 20, 100].map((inc) => (
-                                        <Button key={inc} variant="outlined" size="small"
-                                                onClick={() => { setTradeAmount((a) => { const next = a + inc; setTradeAmountInput(String(next)); return next; }); }}>
-                                            +{inc}
-                                        </Button>
-                                    ))}
-                                    <Button variant="outlined" size="small" sx={{ ml: "auto" }}
-                                            onClick={() => {
-                                                const maxShares = tradeSide === "sell"
-                                                    ? availableTradeShares
-                                                    : tradePrice > 0 ? Math.floor((balance || 0) / tradePrice) : 0;
-                                                setTradeAmount(maxShares);
-                                                setTradeAmountInput(String(maxShares));
-                                            }}>
-                                        Max
-                                    </Button>
-                                </Stack>
+                                {tradeAmount > 0 && insufficientTradeResource && (
+                                    <Alert severity="error" variant="outlined" sx={{ py: 0 }}>
+                                        {tradeResourceError}
+                                    </Alert>
+                                )}
 
                                 {/* Submit */}
                                 <Button variant="contained" fullWidth size="medium"

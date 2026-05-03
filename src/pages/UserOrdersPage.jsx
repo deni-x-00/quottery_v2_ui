@@ -20,7 +20,7 @@ import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext
 import { useConfig } from "../contexts/ConfigContext";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { useTxTracker } from "../hooks/useTxTracker";
-import { byteArrayToHexString } from "../components/qubic/util";
+import { byteArrayToHexString, formatQubicAmount } from "../components/qubic/util";
 import {
   broadcastTransaction,
   getBasicInfo,
@@ -237,7 +237,7 @@ const UserOrdersPage = () => {
 
       if (res && !res.error) {
         const side = order.isBid ? "Bid" : "Ask";
-        const description = `${side} ${order.qty} @ ${order.price} for ${getOptionName(order.market_id, order.option)} of ${getEventName(order.market_id)}`;
+        const description = `${side} ${formatQubicAmount(order.qty)} @ ${formatQubicAmount(order.price)} for ${getOptionName(order.market_id, order.option)} of ${getEventName(order.market_id)}`;
         const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : "";
         showSnackbar(
             `Order removal broadcasted for tick ${scheduledTick}. Waiting for execution: ${description}${hashInfo}`,
@@ -357,10 +357,10 @@ const UserOrdersPage = () => {
                           {order.side || "-"}
                         </TableCell>
                         <TableCell align="right">
-                          {order.price != null ? order.price : "-"}
+                          {order.price != null ? formatQubicAmount(order.price) : "-"}
                         </TableCell>
                         <TableCell align="right">
-                          {order.qty != null ? order.qty : "-"}
+                          {order.qty != null ? formatQubicAmount(order.qty) : "-"}
                         </TableCell>
                         <TableCell sx={{ textTransform: "capitalize" }}>
                           {order.status || "open"}

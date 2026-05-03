@@ -210,7 +210,13 @@ export const QuotteryProvider = ({ children }) => {
     }
 
     try {
-      const events = allEvents || [];
+      let events = allEvents || [];
+      if (events.length === 0) {
+        events = await fetchAllActiveEvents(bobUrl);
+        setAllEvents(events || []);
+      }
+
+      const identityPrefix = walletIdentity.slice(0, 56);
       const userOrders = [];
 
       for (const evt of events) {
@@ -229,7 +235,7 @@ export const QuotteryProvider = ({ children }) => {
           try {
             const orders = await getOrders(bobUrl, eid, option, isBid);
             for (const order of orders) {
-              if (order.entity === walletIdentity.slice(0, 56)) {
+              if (order.entity === identityPrefix) {
                 userOrders.push({
                   order_id: `${eid}-${option}-${isBid ? 'bid' : 'ask'}-${order.price}`,
                   market_id: eid,
