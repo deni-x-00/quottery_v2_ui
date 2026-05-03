@@ -101,6 +101,16 @@ const findManagementRightsProcedure = (contract) => {
 
 const contractLabel = (contract) => contract?.label || contract?.name || `Contract #${contract?.contractIndex}`;
 
+const managementRightsFee = (sourceContract, destinationContract) => {
+    const sourceFee = Number(sourceContract?.procedureFee || 0);
+    const destinationFee = Number(destinationContract?.procedureFee || 0);
+    const qxAcquireFee = Number(destinationContract?.contractIndex) === QX_CONTRACT_INDEX
+        ? TRANSFER_QUBIC_FEE
+        : 0;
+
+    return Math.max(sourceFee, destinationFee, qxAcquireFee);
+};
+
 const ActionCard = ({
     icon,
     title,
@@ -273,10 +283,10 @@ function MiscPage() {
     }, [selectedSmrSource, smrDestinationContracts]);
 
     const smrFeeWarning = useMemo(() => {
-        const fee = Number(selectedSmrSource?.procedureFee || 0);
-        if (!selectedSmrSource || quBalance === null || quBalance === undefined || quBalance >= fee) return "";
+        const fee = managementRightsFee(selectedSmrSource, selectedSmrDestination);
+        if (!selectedSmrSource || !selectedSmrDestination || quBalance === null || quBalance === undefined || quBalance >= fee) return "";
         return `Transfer rights requires ${formatQubicAmount(fee)} QU for the selected contract fee. Current QU balance: ${formatQubicAmount(quBalance ?? 0)}.`;
-    }, [quBalance, selectedSmrSource]);
+    }, [quBalance, selectedSmrDestination, selectedSmrSource]);
 
     useEffect(() => {
         let cancelled = false;
@@ -427,7 +437,17 @@ function MiscPage() {
 
             try {
                 const destinationContracts = smartContracts
-                    .filter((contract) => contract.allowTransferShares && findManagementRightsProcedure(contract))
+                    .map((contract) => {
+                        const mgmtProcedure = findManagementRightsProcedure(contract);
+                        if (!contract.allowTransferShares || !mgmtProcedure) return null;
+                        return {
+                            ...contract,
+                            procedureId: mgmtProcedure.procedure.id,
+                            procedureFee: mgmtProcedure.procedure.fee ?? 0,
+                            procedureType: mgmtProcedure.type,
+                        };
+                    })
+                    .filter(Boolean)
                     .sort((a, b) => contractLabel(a).localeCompare(contractLabel(b)));
 
                 const sourceCandidates = smartContracts
@@ -689,7 +709,7 @@ function MiscPage() {
             return;
         }
 
-        const procedureFee = Number(selectedSmrSource.procedureFee || 0);
+        const procedureFee = managementRightsFee(selectedSmrSource, selectedSmrDestination);
         if (quBalance !== null && quBalance !== undefined && quBalance < procedureFee) {
             showSnackbar(`Transfer rights requires ${formatQubicAmount(procedureFee)} QU for the selected contract fee.`, "error");
             return;

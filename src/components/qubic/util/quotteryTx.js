@@ -153,8 +153,9 @@ export function packTransferShareMgmtPayload(issuerPubkey, assetName, numberOfSh
     const buf = new ArrayBuffer(52);
     const arr = new Uint8Array(buf);
     arr.set(issuerPubkey, 0);
+    const encodedName = new TextEncoder().encode(assetName.toUpperCase().padEnd(8, "\0"));
+    arr.set(encodedName.slice(0, 8), 32);
     const v = new DataView(buf);
-    v.setBigUint64(32, encodeAssetName(assetName), true);
     v.setBigInt64(40, BigInt(numberOfShares), true);
     v.setUint32(48, newContractIndex, true);
     return arr;
@@ -164,8 +165,9 @@ export function packRevokeShareMgmtPayload(issuerPubkey, assetName, numberOfShar
     const buf = new ArrayBuffer(48);
     const arr = new Uint8Array(buf);
     arr.set(issuerPubkey, 0);
+    const encodedName = new TextEncoder().encode(assetName.toUpperCase().padEnd(8, "\0"));
+    arr.set(encodedName.slice(0, 8), 32);
     const v = new DataView(buf);
-    v.setBigUint64(32, encodeAssetName(assetName), true);
     v.setBigInt64(40, BigInt(numberOfShares), true);
     return arr;
 }
