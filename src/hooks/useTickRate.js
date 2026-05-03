@@ -4,8 +4,8 @@ import { getNetworkTick } from '../components/qubic/util/bobApi';
 const POLL_INTERVAL_MS = 3000;   // sample every 3 seconds
 const MAX_SAMPLES = 20;          // keep ~60s window
 const DEFAULT_RATE = 2;          // conservative default: 2 ticks/sec
-const TARGET_LEAD_SECONDS = 5;   // schedule tx ~5 real seconds ahead
-const MIN_OFFSET = 10;           // never less than 10 ticks
+const TARGET_LEAD_SECONDS = 15;  // leave enough room for wallet confirmation
+const MIN_OFFSET = 30;          // never less than 30 ticks for SC procedures
 
 
 export function useTickRate(bobUrl) {
