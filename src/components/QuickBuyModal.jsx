@@ -149,6 +149,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                         txHash: res.txHash,
                         scheduledTick,
                         description: `Bid ${formatQubicAmount(shares)} "${optDesc}" @ ${formatQubicAmount(price)}`,
+                        inputType: QTRY_ADD_BID_ORDER,
                         type: 'order',
                         eventId: eid,
                         option: selectedOption,

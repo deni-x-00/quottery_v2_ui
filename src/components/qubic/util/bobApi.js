@@ -12,8 +12,8 @@ const FUNC_GET_EVENT_BATCH = 5;
 const FUNC_GET_POSITION = 6;
 const FUNC_GET_APPROVED = 7;
 const FUNC_GET_TOP_PROPOSALS = 8;
-const QTRYGOV_ASSET_NAME = 'QTRYGOV';
-const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
+export const QTRYGOV_ASSET_NAME = 'QTRYGOV';
+export const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
 const QTRYGOV_MANAGE_SC_INDEX = 2;
 export const GARTH_ASSET_NAME = 'GARTH';
 export const GARTH_ISSUER = 'PHOENIXCLQOBHDZCHJOCKCPZVTKALQBMXYOEDBUHSDCJRMTUCUBPLSUFNBIE';
@@ -345,6 +345,63 @@ export async function getTxByHash(bobUrl, txHash) {
     } catch {
         return null;
     }
+}
+
+async function fetchBobJson(url) {
+    const res = await fetch(url);
+    if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+    }
+    return res.json();
+}
+
+export async function getTxExecutionLogsFromBob(bobUrl, txHash) {
+    if (!bobUrl || !txHash) return null;
+
+    const tx = await fetchBobJson(`${bobUrl}/tx/${txHash}`);
+    if (!tx || tx?.found === false || tx?.error || tx?.ok === false) {
+        return null;
+    }
+
+    if (tx.executed !== true) {
+        return {
+            tx,
+            tick: tx.tick ?? tx.tickNumber,
+            logs: [],
+        };
+    }
+
+    const tick = tx.tick ?? tx.tickNumber;
+    if (tick === null || tick === undefined) {
+        throw new Error('Bob /tx response does not include tick');
+    }
+
+    let epoch = tx.epoch;
+    if (epoch === null || epoch === undefined) {
+        const tickData = await fetchBobJson(`${bobUrl}/tick/${tick}`);
+        epoch = tickData?.tickdata?.epoch ?? tickData?.tickData?.epoch ?? tickData?.epoch;
+    }
+
+    if (epoch === null || epoch === undefined) {
+        throw new Error('Could not resolve transaction epoch');
+    }
+
+    const logFrom = tx.logIdFrom ?? tx.log_id_from ?? tx.logFrom;
+    const logTo = tx.logIdTo ?? tx.log_id_to ?? tx.logTo;
+    if (logFrom === null || logFrom === undefined || logTo === null || logTo === undefined) {
+        throw new Error('Bob /tx response does not include log id range');
+    }
+
+    const logs = await fetchBobJson(`${bobUrl}/log/${epoch}/${logFrom}/${logTo}`);
+
+    return {
+        tx,
+        tick,
+        epoch,
+        logFrom,
+        logTo,
+        logs,
+    };
 }
 
 function hexToBytes(hex) {

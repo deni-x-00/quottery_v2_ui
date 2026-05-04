@@ -3,6 +3,7 @@ import { getNetworkTick, getTxByHash } from '../components/qubic/util/bobApi';
 import { useConfig } from '../contexts/ConfigContext';
 import { useSnackbar } from '../contexts/SnackbarContext';
 import { useQuotteryContext } from '../contexts/QuotteryContext';
+import { verifyTxWithBobLogs } from '../components/qubic/util/txLogVerifier';
 
 
 export function useTxTracker() {
@@ -114,6 +115,42 @@ export function useTxTracker() {
                         setPendingTxs((prev) =>
                             prev.map((t) => t.id === tx.id ? { ...t, checked: true } : t)
                         );
+
+                        if (tx.txHash) {
+                            try {
+                                const logVerification = await verifyTxWithBobLogs(bobUrl, tx, walletPublicIdentity);
+
+                                if (logVerification.verified) {
+                                    if (tx.type === 'order') {
+                                        const isRemove = tx.action === 'remove';
+                                        showSnackbar(
+                                            `${isRemove ? 'Order cancelled' : 'Order added'} at tick ${logVerification.tick || tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
+                                            'success'
+                                        );
+                                    } else {
+                                        showSnackbar(
+                                            `Tx executed at tick ${logVerification.tick || tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
+                                            'success'
+                                        );
+                                    }
+                                    refreshWalletBalances();
+                                    removeTx(tx.id);
+                                    continue;
+                                }
+
+                                if (logVerification.inconclusive === false) {
+                                    showSnackbar(
+                                        `Tx was included but not executed at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
+                                        'warning'
+                                    );
+                                    refreshWalletBalances();
+                                    removeTx(tx.id);
+                                    continue;
+                                }
+                            } catch (e) {
+                                console.warn('[useTxTracker] Bob log verification unavailable:', e);
+                            }
+                        }
 
                         // Try /tx/{hash} one final time
                         let txFound = false;

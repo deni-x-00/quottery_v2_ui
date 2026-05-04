@@ -247,6 +247,7 @@ const UserOrdersPage = () => {
           txHash: res.txHash,
           scheduledTick,
           description,
+          inputType,
           type: "order",
           action: "remove",
           eventId: order.market_id,

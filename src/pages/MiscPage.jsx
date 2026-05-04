@@ -44,6 +44,7 @@ import {
     packTransferShareMgmtPayload,
     QTRY_USER_CLAIM_REWARD,
     QTRY_TRANSFER_QUSD,
+    QTRY_TRANSFER_SHARE_MGMT,
     QTRY_TRANSFER_QTRYGOV,
 } from "../components/qubic/util/quotteryTx";
 import { useTxTracker } from "../hooks/useTxTracker";
@@ -549,7 +550,7 @@ function MiscPage() {
         return new Uint8Array(idBytes);
     };
 
-    const signAndBroadcast = async (inputType, amount, payload, description, destinationPubkey = null) => {
+    const signAndBroadcast = async (inputType, amount, payload, description, destinationPubkey = null, trackMeta = {}) => {
         const [tickInfo, basicInfo] = await Promise.all([
             getScheduledTick(),
             getBasicInfo(bobUrl),
@@ -583,7 +584,14 @@ function MiscPage() {
 
         if (res?.txHash) {
             showSnackbar(`${description} broadcast at tick ${scheduledTick}. Tx: ${res.txHash}`, "success");
-            trackTx({ txHash: res.txHash, scheduledTick, description });
+            trackTx({
+                txHash: res.txHash,
+                scheduledTick,
+                description,
+                inputType,
+                txAmount,
+                ...trackMeta,
+            });
             const postTickDelay = Math.max(
                 3000,
                 Math.ceil(((scheduledTick - (currentTick || scheduledTick)) / Math.max(tickRate || 1, 1)) * 1000) + 5000
@@ -622,7 +630,14 @@ function MiscPage() {
         setClaimSubmitting(true);
         try {
             const payload = packEventIdPayload(eid);
-            await signAndBroadcast(QTRY_USER_CLAIM_REWARD, null, payload, `Claim reward for event ${eid}`);
+            await signAndBroadcast(
+                QTRY_USER_CLAIM_REWARD,
+                null,
+                payload,
+                `Claim reward for event ${eid}`,
+                null,
+                { eventId: eid }
+            );
         } catch (e) {
             showSnackbar(`Claim failed: ${e.message}`, "error");
         } finally {
@@ -655,7 +670,14 @@ function MiscPage() {
         try {
             const receiverBytes = await identityToBytes(garthReceiver);
             const payload = packTransferPayload(receiverBytes, amt);
-            await signAndBroadcast(QTRY_TRANSFER_QUSD, 0, payload, `Transfer ${formatQubicAmount(amt)} GARTH`);
+            await signAndBroadcast(
+                QTRY_TRANSFER_QUSD,
+                0,
+                payload,
+                `Transfer ${formatQubicAmount(amt)} GARTH`,
+                null,
+                { receiver: garthReceiver, amount: amt }
+            );
         } catch (e) {
             showSnackbar(`Transfer failed: ${e.message}`, "error");
         } finally {
@@ -688,7 +710,14 @@ function MiscPage() {
         try {
             const receiverBytes = await identityToBytes(govReceiver);
             const payload = packTransferPayload(receiverBytes, amt);
-            await signAndBroadcast(QTRY_TRANSFER_QTRYGOV, 0, payload, `Transfer ${amt} QTRYGOV`);
+            await signAndBroadcast(
+                QTRY_TRANSFER_QTRYGOV,
+                0,
+                payload,
+                `Transfer ${amt} QTRYGOV`,
+                null,
+                { receiver: govReceiver, amount: amt }
+            );
         } catch (e) {
             showSnackbar(`Transfer failed: ${e.message}`, "error");
         } finally {
@@ -744,7 +773,16 @@ function MiscPage() {
                 procedureFee,
                 payload,
                 `${isRevoke ? "Revoke" : "Transfer"} ${formatQubicAmount(shares)} GARTH management rights from ${contractLabel(selectedSmrSource)} to ${contractLabel(selectedSmrDestination)}`,
-                sourceContractBytes
+                sourceContractBytes,
+                {
+                    inputType: QTRY_TRANSFER_SHARE_MGMT,
+                    amount: shares,
+                    shares,
+                    owner: walletPublicIdentity,
+                    possessor: walletPublicIdentity,
+                    sourceContractIndex: selectedSmrSource.contractIndex,
+                    destinationContractIndex: selectedSmrDestination.contractIndex,
+                }
             );
         } catch (e) {
             showSnackbar(`Transfer failed: ${e.message}`, "error");

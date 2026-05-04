@@ -416,6 +416,7 @@ function EventDetailsPage() {
           txHash: res.txHash,
           scheduledTick,
           description: `${tradeSide === "buy" ? "Bid" : "Ask"} ${formatQubicAmount(tradeAmount)} "${optDesc}" @ ${formatQubicAmount(tradePrice)}`,
+          inputType,
           type: "order",
           eventId: event.eid,
           option: selectedOption,
@@ -486,7 +487,15 @@ function EventDetailsPage() {
       if (res && !res.error) {
         const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : '';
         showSnackbar(`Dispute submitted for tick ${scheduledTick}${hashInfo}`, "success");
-        trackTx({ txHash: res.txHash, scheduledTick, description: `Dispute event ${event.eid}` });
+        trackTx({
+          txHash: res.txHash,
+          scheduledTick,
+          description: `Dispute event ${event.eid}`,
+          inputType: QTRY_DISPUTE,
+          eventId: event.eid,
+          depositAmount,
+          txAmount: depositAmount,
+        });
       } else {
         showSnackbar(`Dispute failed: ${res?.error || 'Unknown error'}`, "error");
       }
