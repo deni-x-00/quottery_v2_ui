@@ -10,7 +10,7 @@ import {
   IconButton,
   Tooltip,
 } from "@mui/material";
-import GamepadIcon from "@mui/icons-material/Gamepad";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useConfig } from "../contexts/ConfigContext";
@@ -150,15 +150,14 @@ function StartPage() {
                   loop={1} cursor cursorStyle='_' typeSpeed={33} deleteSpeed={50} delaySpeed={1000}
               />
             </Typography>
-            {isConnected && (
-                <Button onClick={() => navigate("/create")} startIcon={<GamepadIcon />}
+            <Button onClick={() => navigate("/about")} startIcon={<InfoOutlinedIcon />}
                         variant='contained'
-                        color={theme.palette.mode === "dark" ? "secondary" : theme.palette.background.paper}
+                        color={theme.palette.mode === "dark" ? "secondary" : "primary"}
                         component={motion.button}
                         sx={{
                           display: "flex", alignItems: "center", justifyContent: "center",
                           borderRadius: 10, boxShadow: theme.shadows[1],
-                          color: theme.palette.primary.contrastText,
+                          color: theme.palette.mode === "dark" ? theme.palette.primary.contrastText : "white",
                           "&:focus": { backgroundColor: theme.palette.primary.main },
                           mt: { xs: 2, sm: 3 }, mb: { xs: 2, sm: 0 },
                           py: { xs: 0.5, sm: 1 }, px: { xs: 1.5, sm: 2 },
@@ -169,11 +168,10 @@ function StartPage() {
                             color: theme.palette.mode === "dark" ? theme.palette.primary.contrastText : "white",
                           },
                           "& .MuiSvgIcon-root": { transition: "transform 0.5s" },
-                          textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: "bold",
+                          textTransform: "uppercase", letterSpacing: 0, fontWeight: "bold",
                         }}>
                   Learn more
                 </Button>
-            )}
           </Box>
 
           {/* Connected: show filter, search, events */}

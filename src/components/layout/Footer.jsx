@@ -55,23 +55,6 @@ const Footer = () => {
         />
 
         <Link
-          href='https://github.com/qubic/quottery-frontend/wiki'
-          target='_blank'
-          rel='noreferrer'
-          underline='hover'
-          color='text.primary'
-          variant='body2'
-          aria-label='Wiki'
-        >
-          Wiki
-        </Link>
-        <Divider
-          orientation='vertical'
-          flexItem
-          sx={{ mx: 1, bgcolor: theme.palette.divider }}
-        />
-
-        <Link
           href='https://qubic.org/privacy-policy'
           target='_blank'
           rel='noreferrer'

@@ -129,6 +129,9 @@ const Header = () => {
                 scrollbarWidth: 'none',
                 '&::-webkit-scrollbar': { display: 'none' },
               }}>
+                <Button component={Link} to='/about' color='inherit' size='small' sx={{ flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } }}>
+                  <Typography color="text.secondary" sx={{ fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' }}>About</Typography>
+                </Button>
                 {isConnected && (
                     <>
                       <Button component={Link} to='/orders' color='inherit' size='small' sx={{ flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } }}>
