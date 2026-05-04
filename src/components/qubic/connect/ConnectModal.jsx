@@ -4,13 +4,17 @@ import {
   DialogTitle,
   DialogContent,
   Button,
+  Divider,
   IconButton,
+  Slider,
   Typography,
   Box,
   useTheme,
   useMediaQuery,
   Fade,
   Grow,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -81,7 +85,16 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
     isConnected,
     requestAccounts,
   } = useWalletConnect();
-  const { walletPublicIdentity, balance, eventPositions } = useQuotteryContext();
+  const {
+    walletPublicIdentity,
+    balance,
+    eventPositions,
+    tickRate,
+    adaptiveOffset,
+    txTickSettings,
+    setTxTickSettings,
+  } = useQuotteryContext();
+  const approvalTicks = Math.max(15, Math.ceil((tickRate || 2) * (txTickSettings?.approvalSeconds || 15)));
 
   const generateURI = async () => {
     setQrCode('');
@@ -202,6 +215,76 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                               </>
                           )}
                         </Box>
+                        <Box
+                            sx={{
+                              p: 2,
+                              borderRadius: 1,
+                              border: `1px solid ${theme.palette.divider}`,
+                              backgroundColor: theme.palette.background.paper,
+                            }}
+                        >
+                          <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={1.5}>
+                            <Typography variant="overline" color="text.secondary">Transaction Tick</Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              +{adaptiveOffset} ticks
+                            </Typography>
+                          </Box>
+                          <ToggleButtonGroup
+                              exclusive
+                              fullWidth
+                              size="small"
+                              value={txTickSettings?.mode || 'approval'}
+                              onChange={(_, value) => {
+                                if (value) setTxTickSettings({ mode: value });
+                              }}
+                              sx={{ mb: 1.5 }}
+                          >
+                            <ToggleButton value="approval" sx={{ textTransform: 'none' }}>
+                              Approval time
+                            </ToggleButton>
+                            <ToggleButton value="fixed" sx={{ textTransform: 'none' }}>
+                              Fixed ticks
+                            </ToggleButton>
+                          </ToggleButtonGroup>
+                          {(txTickSettings?.mode || 'approval') === 'fixed' ? (
+                              <>
+                                <Box display="flex" justifyContent="space-between" alignItems="baseline">
+                                  <Typography variant="body2" color="text.secondary">Ticks added</Typography>
+                                  <Typography variant="body2" fontWeight={700}>
+                                    {txTickSettings?.fixedTicks || 20}
+                                  </Typography>
+                                </Box>
+                                <Slider
+                                    size="small"
+                                    value={txTickSettings?.fixedTicks || 20}
+                                    min={15}
+                                    max={300}
+                                    step={5}
+                                    onChange={(_, value) => setTxTickSettings({ fixedTicks: value })}
+                                    valueLabelDisplay="auto"
+                                />
+                              </>
+                          ) : (
+                              <>
+                                <Box display="flex" justifyContent="space-between" alignItems="baseline">
+                                  <Typography variant="body2" color="text.secondary">Approval window</Typography>
+                                  <Typography variant="body2" fontWeight={700}>
+                                    {txTickSettings?.approvalSeconds || 15}s / +{approvalTicks} ticks
+                                  </Typography>
+                                </Box>
+                                <Slider
+                                    size="small"
+                                    value={txTickSettings?.approvalSeconds || 15}
+                                    min={5}
+                                    max={60}
+                                    step={1}
+                                    onChange={(_, value) => setTxTickSettings({ approvalSeconds: value })}
+                                    valueLabelDisplay="auto"
+                                />
+                              </>
+                          )}
+                        </Box>
+                        <Divider />
                         <Button variant='outlined' color='primary' size='large'
                                 startIcon={<AccountBalanceWalletIcon />}
                                 onClick={() => disconnect()} fullWidth sx={{ mt: 1 }}>

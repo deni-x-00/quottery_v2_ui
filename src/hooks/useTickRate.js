@@ -5,10 +5,10 @@ const POLL_INTERVAL_MS = 3000;   // sample every 3 seconds
 const MAX_SAMPLES = 20;          // keep ~60s window
 const DEFAULT_RATE = 2;          // conservative default: 2 ticks/sec
 const TARGET_LEAD_SECONDS = 15;  // leave enough room for wallet confirmation
-const MIN_OFFSET = 30;          // never less than 30 ticks for SC procedures
+const MIN_OFFSET = 15;          // never less than 15 ticks for SC procedures
 
 
-export function useTickRate(bobUrl) {
+export function useTickRate(bobUrl, options = {}) {
     const [tickRate, setTickRate] = useState(DEFAULT_RATE);
     const [latestTick, setLatestTick] = useState(0);
     const [tickSource, setTickSource] = useState('unknown');
@@ -67,9 +67,13 @@ export function useTickRate(bobUrl) {
     // Compute adaptive offset for a given lead time
     const computeOffset = useCallback(
         (leadSeconds = TARGET_LEAD_SECONDS) => {
-            return Math.max(MIN_OFFSET, Math.ceil(tickRate * leadSeconds));
+            if (options.mode === 'fixed') {
+                return Math.max(MIN_OFFSET, Number(options.fixedTicks || MIN_OFFSET));
+            }
+            const seconds = Number(options.approvalSeconds || leadSeconds);
+            return Math.max(MIN_OFFSET, Math.ceil(tickRate * seconds));
         },
-        [tickRate]
+        [tickRate, options.mode, options.fixedTicks, options.approvalSeconds]
     );
 
     const getScheduledTick = useCallback(
@@ -78,7 +82,7 @@ export function useTickRate(bobUrl) {
             const tick = freshTick.tick || latestTick;
             if (!tick) return null;
 
-            const offset = Math.max(MIN_OFFSET, Math.ceil(tickRate * leadSeconds));
+            const offset = computeOffset(leadSeconds);
             return {
                 currentTick: tick,
                 scheduledTick: tick + offset,
@@ -91,7 +95,7 @@ export function useTickRate(bobUrl) {
                 isBobLagging: freshTick.isBobLagging,
             };
         },
-        [bobUrl, latestTick, tickRate]
+        [bobUrl, latestTick, tickRate, computeOffset]
     );
 
     return {

@@ -20,6 +20,29 @@ import {
 import { useTickRate } from '../hooks/useTickRate';
 
 const QuotteryContext = createContext();
+const TICK_SETTINGS_KEY = 'quottery.txTickSettings';
+const DEFAULT_TICK_SETTINGS = {
+  mode: 'approval',
+  fixedTicks: 20,
+  approvalSeconds: 15,
+};
+
+function readTickSettings() {
+  if (typeof window === 'undefined') return DEFAULT_TICK_SETTINGS;
+
+  try {
+    const raw = window.localStorage.getItem(TICK_SETTINGS_KEY);
+    if (!raw) return DEFAULT_TICK_SETTINGS;
+    const parsed = JSON.parse(raw);
+    return {
+      mode: parsed?.mode === 'fixed' ? 'fixed' : 'approval',
+      fixedTicks: Math.min(300, Math.max(15, Number(parsed?.fixedTicks || DEFAULT_TICK_SETTINGS.fixedTicks))),
+      approvalSeconds: Math.min(60, Math.max(5, Number(parsed?.approvalSeconds || DEFAULT_TICK_SETTINGS.approvalSeconds))),
+    };
+  } catch {
+    return DEFAULT_TICK_SETTINGS;
+  }
+}
 
 export const QuotteryProvider = ({ children }) => {
   const [allEvents, setAllEvents] = useState(null);
@@ -34,6 +57,7 @@ export const QuotteryProvider = ({ children }) => {
   const [currentFilterOption, setCurrentFilterOption] = useState(1);
   const [currentPage, setCurrentPage] = useState(1);
   const [inputPage, setInputPage] = useState('');
+  const [txTickSettings, setTxTickSettingsState] = useState(readTickSettings);
   const { bobUrl } = useConfig();
 
   // Shared order book state
@@ -42,7 +66,30 @@ export const QuotteryProvider = ({ children }) => {
   const [obError, setObError] = useState(null);
 
   // Adaptive tick rate measurement
-  const { tickRate, tickSource, bobLag, adaptiveOffset, getScheduledTick } = useTickRate(bobUrl);
+  const { tickRate, tickSource, bobLag, adaptiveOffset, getScheduledTick } = useTickRate(bobUrl, txTickSettings);
+
+  const setTxTickSettings = useCallback((patch) => {
+    setTxTickSettingsState((prev) => {
+      const next = {
+        ...prev,
+        ...patch,
+      };
+
+      const normalized = {
+        mode: next.mode === 'fixed' ? 'fixed' : 'approval',
+        fixedTicks: Math.min(300, Math.max(15, Number(next.fixedTicks || DEFAULT_TICK_SETTINGS.fixedTicks))),
+        approvalSeconds: Math.min(60, Math.max(5, Number(next.approvalSeconds || DEFAULT_TICK_SETTINGS.approvalSeconds))),
+      };
+
+      try {
+        window.localStorage.setItem(TICK_SETTINGS_KEY, JSON.stringify(normalized));
+      } catch {
+        // Ignore storage failures; the in-memory setting still applies.
+      }
+
+      return normalized;
+    });
+  }, []);
 
   const getCurrentTick = async () => {
     const tickInfo = await getNetworkTick(bobUrl);
@@ -359,6 +406,8 @@ export const QuotteryProvider = ({ children }) => {
     tickSource,
     bobLag,
     adaptiveOffset,
+    txTickSettings,
+    setTxTickSettings,
     buildOrderSideEntries,
     orderbook,
     obLoading,
