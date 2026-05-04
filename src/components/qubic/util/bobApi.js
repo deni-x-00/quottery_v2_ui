@@ -1,4 +1,5 @@
 /* global BigInt */
+import { QubicHelper } from '@qubic-lib/qubic-ts-library/dist/qubicHelper';
 
 const SC_INDEX = 2; // Quottery contract index
 
@@ -773,6 +774,15 @@ export function pubkeyToIdentity(pubkey) {
     return chars.join('');
 }
 
+export async function pubkeyToFullIdentity(pubkey) {
+    try {
+        return await new QubicHelper().getIdentity(pubkey);
+    } catch (e) {
+        console.warn('[pubkeyToFullIdentity] Falling back to 56-character identity:', e?.message || e);
+        return pubkeyToIdentity(pubkey);
+    }
+}
+
 function decodeDatetime(val) {
     if (val === 0 || val === 0n) return '0000-00-00 00:00:00';
     const bigVal = BigInt(val);
@@ -815,7 +825,7 @@ export async function getBasicInfo(bobUrl) {
         feePerDay: readUint64LE(raw, 56),
         antiSpamAmount: readUint64LE(raw, 64),
         depositAmountForDispute: readUint64LE(raw, 72),
-        gameOperator: pubkeyToIdentity(raw.slice(80, 112)),
+        gameOperator: await pubkeyToFullIdentity(raw.slice(80, 112)),
     };
 }
 
@@ -1128,7 +1138,7 @@ export async function getUserOrdersFromBob(bobUrl, identity, tickRange = 20) {
     }
 }
 
-function decodeGovParams(bytes, offset = 0) {
+async function decodeGovParams(bytes, offset = 0) {
     const opIdBytes = bytes.slice(offset + 40, offset + 72);
     const hasOperator = opIdBytes.length === 32 && !opIdBytes.every((b) => b === 0);
 
@@ -1138,7 +1148,7 @@ function decodeGovParams(bytes, offset = 0) {
         operationFee: readUint64LE(bytes, offset + 16),
         feePerDay: readInt64LE(bytes, offset + 24),
         depositAmountForDispute: readInt64LE(bytes, offset + 32),
-        operationId: hasOperator ? pubkeyToIdentity(opIdBytes) : '',
+        operationId: hasOperator ? await pubkeyToFullIdentity(opIdBytes) : '',
     };
 }
 
@@ -1156,7 +1166,7 @@ export async function getTopProposals(bobUrl) {
             if (base + ENTRY_SIZE > raw.length) break;
 
             const totalVotes = readInt64LE(raw, base + 72);
-            const govParams = decodeGovParams(raw, base);
+            const govParams = await decodeGovParams(raw, base);
             const isEmpty = totalVotes <= 0 && !govParams.operationId;
             if (isEmpty) continue;
 

@@ -11,6 +11,7 @@ import {
   useMediaQuery,
   Fade,
   Grow,
+  Tooltip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -167,9 +168,22 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                       <>
                         <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${theme.palette.divider}`, backgroundColor: theme.palette.background.paper }}>
                           <Typography variant='overline' color='text.secondary'>Identity</Typography>
-                          <Typography variant='body2' sx={{ wordBreak: 'break-all', fontFamily: 'monospace' }}>
-                            {walletPublicIdentity || '-'}
-                          </Typography>
+                          <Box display='flex' alignItems='center' gap={0.75}>
+                            <Typography variant='body2' sx={{ wordBreak: 'break-all', fontFamily: 'monospace', flex: 1 }}>
+                              {walletPublicIdentity || '-'}
+                            </Typography>
+                            {!!walletPublicIdentity && (
+                                <Tooltip title='Copy identity'>
+                                  <IconButton
+                                      size='small'
+                                      onClick={() => copyText(walletPublicIdentity)}
+                                      aria-label='Copy wallet identity'
+                                  >
+                                    <ContentCopyIcon fontSize='small' />
+                                  </IconButton>
+                                </Tooltip>
+                            )}
+                          </Box>
                           <Box mt={1} />
                           <Typography variant='overline' color='text.secondary'>Balance (GARTH)</Typography>
                           <Typography variant='body2'>

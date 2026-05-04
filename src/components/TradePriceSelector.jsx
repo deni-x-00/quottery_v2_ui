@@ -8,32 +8,28 @@ import {
 } from "@mui/material";
 import { formatQubicAmount } from "./qubic/util";
 
-const AMOUNT_PRESETS = [10, 25, 50, 75, 100];
+const PRICE_PRESETS = [10, 25, 50, 75, 90];
+const WHOLE_SHARE_PRICE = 100000;
+const MAX_PRICE = WHOLE_SHARE_PRICE - 1;
 
-const toPositiveInt = (value) => {
+const toPrice = (value) => {
     const parsed = parseInt(value, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+    return Number.isFinite(parsed) ? Math.min(MAX_PRICE, Math.max(0, parsed)) : 0;
 };
 
-const availableLabel = (value, unit) => (
-    value === null || value === undefined
-        ? "Available: unavailable"
-        : `Available: ${formatQubicAmount(value)} ${unit}`
-);
-
-export default function TradeAmountSlider({
-    label = "Shares",
+export default function TradePriceSelector({
     value,
-    max,
-    unit = "shares",
-    availableValue,
-    availableUnit,
     onChange,
     disabled,
+    label = "Price",
 }) {
-    const numericValue = toPositiveInt(value);
-    const numericMax = Number(max || 0);
-    const controlsDisabled = disabled || numericMax <= 0;
+    const numericValue = toPrice(value);
+    const probability = ((numericValue / WHOLE_SHARE_PRICE) * 100).toFixed(2);
+
+    const setPrice = (nextPrice) => {
+        const safePrice = Math.min(MAX_PRICE, Math.max(0, Number(nextPrice || 0)));
+        onChange(String(safePrice));
+    };
 
     const handleInputChange = (raw) => {
         if (raw === "") {
@@ -42,22 +38,8 @@ export default function TradeAmountSlider({
         }
         const normalized = raw.replace(/^0+(?=\d)/, "");
         if (!/^\d+$/.test(normalized)) return;
-        onChange(normalized);
+        setPrice(normalized);
     };
-
-    const setPreset = (percent) => {
-        if (controlsDisabled) return;
-        const nextValue = percent === 100
-            ? numericMax
-            : Math.max(1, Math.floor((numericMax * percent) / 100));
-        onChange(String(nextValue));
-    };
-
-    const presetValue = (percent) => (
-        percent === 100
-            ? numericMax
-            : Math.max(1, Math.floor((numericMax * percent) / 100))
-    );
 
     return (
         <Stack spacing={1.25}>
@@ -66,16 +48,16 @@ export default function TradeAmountSlider({
                     {label}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                    {availableLabel(availableValue ?? max, availableUnit ?? unit)}
+                    Probability: {probability}%
                 </Typography>
             </Box>
             <TextField
-                label={label}
+                label="Price (out of 100,000)"
                 value={value}
                 onChange={(e) => handleInputChange(e.target.value)}
                 fullWidth
                 size="small"
-                placeholder={numericMax > 0 ? `Max ${formatQubicAmount(numericMax)} shares` : "Unavailable"}
+                placeholder={formatQubicAmount(50000)}
                 inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
                 disabled={disabled}
             />
@@ -87,13 +69,13 @@ export default function TradeAmountSlider({
                     gap: 0.75,
                 }}
             >
-                {AMOUNT_PRESETS.map((percent) => (
+                {PRICE_PRESETS.map((pct) => (
                     <Button
-                        key={percent}
+                        key={pct}
                         size="small"
-                        variant={numericValue === presetValue(percent) ? "contained" : "outlined"}
-                        onClick={() => setPreset(percent)}
-                        disabled={controlsDisabled}
+                        variant={numericValue === pct * 1000 ? "contained" : "outlined"}
+                        onClick={() => setPrice(pct * 1000)}
+                        disabled={disabled}
                         sx={{
                             minWidth: 0,
                             width: 44,
@@ -105,7 +87,7 @@ export default function TradeAmountSlider({
                             textTransform: "none",
                         }}
                     >
-                        {percent}%
+                        {pct}%
                     </Button>
                 ))}
             </Box>

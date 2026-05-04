@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
     Box, Typography, Container, Paper, Grid, IconButton, Tooltip, Stack, Card, CardContent, Divider, Button, Alert,
 } from "@mui/material";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import GavelIcon from "@mui/icons-material/Gavel";
 import HowToVoteIcon from "@mui/icons-material/HowToVote";
@@ -11,6 +12,7 @@ import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
+import { copyText } from "../utils";
 import { byteArrayToHexString, formatQubicAmount } from "../components/qubic/util";
 import {
     broadcastTransaction,
@@ -71,6 +73,22 @@ function GovernancePage() {
             <Typography variant="body2" color="text.secondary">{label}</Typography>
             <Typography variant="body2" fontWeight={600}>
                 {typeof value === 'number' ? formatQubicAmount(value) : value}{unit}
+            </Typography>
+        </Box>
+    );
+
+    const formatGovPercent = (value) => {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return value ?? "-";
+        const percent = numeric / 10;
+        return `${Number.isInteger(percent) ? formatQubicAmount(percent) : percent.toFixed(1)}%`;
+    };
+
+    const renderGovPercentParam = (label, value) => (
+        <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ py: 0.25 }}>
+            <Typography variant="body2" color="text.secondary">{label}</Typography>
+            <Typography variant="body2" fontWeight={600}>
+                {formatGovPercent(value)}
             </Typography>
         </Box>
     );
@@ -161,19 +179,45 @@ function GovernancePage() {
                     <Typography variant="h6" gutterBottom>Current Parameters</Typography>
                     <Grid container spacing={2}>
                         <Grid item xs={12} sm={6}>
-                            {renderGovParam("Shareholder Fee", basicInfo.shareholderFee, ' / 1000')}
-                            {renderGovParam("Burn Fee", basicInfo.burnFee, ' / 1000')}
-                            {renderGovParam("Operation Fee", basicInfo.operationFee, ' / 1000')}
+                            {renderGovPercentParam("Shareholder Fee", basicInfo.shareholderFee)}
+                            {renderGovPercentParam("Burn Fee", basicInfo.burnFee)}
+                            {renderGovPercentParam("Operation Fee", basicInfo.operationFee)}
                         </Grid>
                         <Grid item xs={12} sm={6}>
                             {renderGovParam("Fee Per Day", basicInfo.feePerDay)}
-                            {renderGovParam("Dispute Deposit", basicInfo.depositAmountForDispute)}
-                            {renderGovParam("Anti-Spam", basicInfo.antiSpamAmount)}
+                            {renderGovParam("Dispute Deposit", basicInfo.depositAmountForDispute, " QU")}
+                            {renderGovParam("Anti-Spam", basicInfo.antiSpamAmount, " QU")}
                         </Grid>
                     </Grid>
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        Game Operator: {basicInfo.gameOperator?.slice(0, 30)}…
-                    </Typography>
+                    <Box sx={{ mt: 1.5 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                            Game Operator
+                        </Typography>
+                        <Box display="flex" alignItems="center" gap={0.75}>
+                            <Typography
+                                variant="body2"
+                                sx={{
+                                    fontFamily: "monospace",
+                                    fontSize: "0.9rem",
+                                    fontWeight: 600,
+                                    wordBreak: "break-all",
+                                }}
+                            >
+                                {basicInfo.gameOperator || "-"}
+                            </Typography>
+                            {!!basicInfo.gameOperator && (
+                                <Tooltip title="Copy Game Operator">
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => copyText(basicInfo.gameOperator)}
+                                        aria-label="Copy Game Operator"
+                                    >
+                                        <ContentCopyIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            )}
+                        </Box>
+                    </Box>
                 </Paper>
             )}
 

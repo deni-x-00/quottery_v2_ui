@@ -11,7 +11,6 @@ import {
   Grid,
   IconButton,
   Paper,
-  TextField,
   Typography,
   useMediaQuery,
   Table,
@@ -73,6 +72,7 @@ import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { getTagInfo } from "../components/qubic/util/tagMap";
 import TradeAmountSlider from "../components/TradeAmountSlider";
+import TradePriceSelector from "../components/TradePriceSelector";
 const thumbnails = require.context("../assets", false, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
   try {
@@ -128,9 +128,6 @@ function EventDetailsPage() {
   const [tradePrice, setTradePrice] = useState(50000); // price out of 100k
   const [tradeAmountInput, setTradeAmountInput] = useState("");
   const [tradePriceInput, setTradePriceInput] = useState("50000");
-
-  // Probability display (price / 100k * 100)
-  const tradeProbability = ((tradePrice / WHOLE_SHARE_PRICE) * 100).toFixed(2);
 
   // Cost estimation: shares × price (in GARTH)
   const tradeCoins = Number(tradeAmount || 0) * Number(tradePrice || 0);
@@ -835,41 +832,13 @@ function EventDetailsPage() {
                       }}
                   />
 
-                  {/* Price input + probability display */}
-                  <Box>
-                    <TextField label="Price (out of 100,000)" type="number" size="small" fullWidth
-                               value={tradePriceInput}
-                               onChange={(e) => {
-                                 const raw = e.target.value;
-                                 if (raw === "") { setTradePriceInput(""); setTradePrice(0); return; }
-                                 const normalized = raw.replace(/^0+(?=\d)/, "");
-                                 if (!/^\d+$/.test(normalized)) return;
-                                 const val = Math.min(99999, Math.max(0, Number(normalized)));
-                                 setTradePriceInput(String(val));
-                                 setTradePrice(val);
-                               }}
-                               helperText={`Probability: ${tradeProbability}%`}
-                               sx={{
-                                 "& input[type=number]": { MozAppearance: "textfield" },
-                                 "& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button": { WebkitAppearance: "none", margin: 0 },
-                               }}
-                    />
-                  </Box>
-
-                  {/* Probability quick-set buttons */}
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    {[10, 25, 50, 75, 90].map((pct) => (
-                        <Button key={pct} variant="outlined" size="small"
-                                onClick={() => {
-                                  const p = pct * 1000;
-                                  setTradePrice(p);
-                                  setTradePriceInput(String(p));
-                                }}
-                                sx={{ minWidth: 0, px: 1.5, fontSize: 12 }}>
-                          {pct}%
-                        </Button>
-                    ))}
-                  </Stack>
+                  <TradePriceSelector
+                    value={tradePriceInput}
+                    onChange={(nextValue) => {
+                      setTradePriceInput(nextValue);
+                      setTradePrice(Number(nextValue || 0));
+                    }}
+                  />
 
                   {/* Cost estimation */}
                   <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -896,8 +865,8 @@ function EventDetailsPage() {
                   {/* Matching info hint */}
                   <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center", lineHeight: 1.3 }}>
                     {tradeSide === "buy"
-                        ? `Mint: matches if a bid on the opposite option has price ≥ ${formatQubicAmount(WHOLE_SHARE_PRICE - tradePrice)}`
-                        : `Trade: matches if a bid on same option has price ≥ your ask price`
+                        ? `Mint: matches if a bid on the opposite option has price >= ${formatQubicAmount(WHOLE_SHARE_PRICE - tradePrice)}`
+                        : `Trade: matches if a bid on same option has price >= your ask price`
                     }
                   </Typography>
                 </Stack>

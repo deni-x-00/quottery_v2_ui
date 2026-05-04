@@ -5,7 +5,6 @@ import {
     DialogContent,
     Box,
     Typography,
-    TextField,
     Button,
     IconButton,
     Stack,
@@ -28,6 +27,8 @@ import {
 } from './qubic/util/quotteryTx';
 import { isEventClosed, validateOrderPreflight } from './qubic/util/tradeValidation';
 import gcLogo from '../assets/gc.png';
+import TradePriceSelector from './TradePriceSelector';
+import TradeAmountSlider from './TradeAmountSlider';
 
 const WHOLE_SHARE_PRICE = 100000;
 
@@ -52,8 +53,8 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
         }
     }, [open, initialOption]);
 
-    const probability = ((price / WHOLE_SHARE_PRICE) * 100).toFixed(2);
     const cost = shares * price;
+    const maxShares = price > 0 ? Math.floor(Number(balance || 0) / price) : 0;
 
     const handleSubmit = async () => {
         if (!connected) { toggleConnectModal(); return; }
@@ -214,54 +215,28 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                         <ToggleButton value={1}>{event.option1Desc || 'Option 1'}</ToggleButton>
                     </ToggleButtonGroup>
 
-                    {/* Shares */}
-                    <TextField
-                        label="Shares" type="number" size="small" fullWidth
+                    <TradeAmountSlider
+                        label="Shares"
                         value={sharesInput}
-                        onChange={(e) => {
-                            const raw = e.target.value;
-                            if (raw === '') { setSharesInput(''); setShares(0); return; }
-                            const n = raw.replace(/^0+(?=\d)/, '');
-                            if (!/^\d+$/.test(n)) return;
-                            setSharesInput(n);
-                            setShares(Math.max(0, Number(n)));
-                        }}
-                        sx={{
-                            '& input[type=number]': { MozAppearance: 'textfield' },
-                            '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { WebkitAppearance: 'none' },
+                        max={maxShares}
+                        unit="shares"
+                        availableValue={balance}
+                        availableUnit="GARTH"
+                        disabled={submitting}
+                        onChange={(nextValue) => {
+                            setSharesInput(nextValue);
+                            setShares(Math.max(0, Number(nextValue || 0)));
                         }}
                     />
 
-                    {/* Price */}
-                    <TextField
-                        label="Price (out of 100,000)" type="number" size="small" fullWidth
+                    <TradePriceSelector
                         value={priceInput}
-                        helperText={`Probability: ${probability}%`}
-                        onChange={(e) => {
-                            const raw = e.target.value;
-                            if (raw === '') { setPriceInput(''); setPrice(0); return; }
-                            const n = raw.replace(/^0+(?=\d)/, '');
-                            if (!/^\d+$/.test(n)) return;
-                            const val = Math.min(99999, Math.max(0, Number(n)));
-                            setPriceInput(String(val));
-                            setPrice(val);
-                        }}
-                        sx={{
-                            '& input[type=number]': { MozAppearance: 'textfield' },
-                            '& input::-webkit-outer-spin-button, & input::-webkit-inner-spin-button': { WebkitAppearance: 'none' },
+                        disabled={submitting}
+                        onChange={(nextValue) => {
+                            setPriceInput(nextValue);
+                            setPrice(Number(nextValue || 0));
                         }}
                     />
-
-                    {/* Quick price buttons */}
-                    <Stack direction="row" spacing={1}>
-                        {[10, 25, 50, 75, 90].map((pct) => (
-                            <Button key={pct} variant="outlined" size="small"
-                                    onClick={() => { const p = pct * 1000; setPrice(p); setPriceInput(String(p)); }}
-                                    sx={{ minWidth: 0, px: 1, fontSize: 11 }}>
-                                {pct}%
-                            </Button>
-                        ))}
-                    </Stack>
 
                     {/* Cost */}
                     <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -291,7 +266,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                     </Button>
 
                     <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ lineHeight: 1.3 }}>
-                        Mint: matches if opposite option has bid ≥ {formatQubicAmount(WHOLE_SHARE_PRICE - price)}
+                        Mint: matches if opposite option has bid >= {formatQubicAmount(WHOLE_SHARE_PRICE - price)}
                     </Typography>
                 </Stack>
             </DialogContent>
