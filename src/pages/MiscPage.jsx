@@ -574,6 +574,7 @@ function MiscPage() {
         const packet = destinationPubkey
             ? buildContractTx(walletPublicKeyBytes, destinationPubkey, scheduledTick, inputType, txAmount, payload)
             : buildQuotteryTx(walletPublicKeyBytes, scheduledTick, inputType, txAmount, payload);
+        showSnackbar("Sign your transaction in wallet.", "info");
         const confirmed = await getSignedTx(packet);
         if (!confirmed) return null;
 

@@ -399,6 +399,7 @@ function EventDetailsPage() {
             );
 
             // 6. Sign via MetaMask Snap
+            showSnackbar("Sign your transaction in wallet.", "info");
             const confirmed = await getSignedTx(packet);
             if (!confirmed) return;
 
@@ -483,6 +484,7 @@ function EventDetailsPage() {
                 payload
             );
 
+            showSnackbar("Sign your transaction in wallet.", "info");
             const confirmed = await getSignedTx(packet);
             if (!confirmed) return;
 

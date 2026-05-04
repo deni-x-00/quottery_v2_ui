@@ -7,15 +7,19 @@ const SnackbarContext = createContext(null);
 export const SnackbarProvider = ({ children }) => {
   const [snackbars, setSnackbars] = useState([]);
 
-  const showSnackbar = useCallback((message, severity = "info") => {
+  const showSnackbar = useCallback((message, severity = "info", options = {}) => {
+    const id = Date.now() + Math.random();
     setSnackbars((prev) => [
       ...prev,
       {
-        id: Date.now() + Math.random(),
+        id,
         message,
         severity,
+        loading: Boolean(options.loading),
+        autoHideDuration: options.autoHideDuration,
       },
     ]);
+    return id;
   }, []);
 
   const closeSnackbar = useCallback((id) => {
@@ -23,7 +27,7 @@ export const SnackbarProvider = ({ children }) => {
   }, []);
 
   return (
-    <SnackbarContext.Provider value={{ showSnackbar }}>
+    <SnackbarContext.Provider value={{ showSnackbar, closeSnackbar }}>
       {children}
 
       {/* Render all active snackbars, stacked */}
@@ -33,6 +37,8 @@ export const SnackbarProvider = ({ children }) => {
           open={true}
           message={snack.message}
           severity={snack.severity}
+          loading={snack.loading}
+          autoHideDuration={snack.autoHideDuration}
           handleClose={() => closeSnackbar(snack.id)}
           index={index}             // used for vertical offset
         />

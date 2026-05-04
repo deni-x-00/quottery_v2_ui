@@ -9,7 +9,7 @@ import { verifyTxWithBobLogs } from '../components/qubic/util/txLogVerifier';
 export function useTxTracker() {
     const [pendingTxs, setPendingTxs] = useState([]);
     const { bobUrl } = useConfig();
-    const { showSnackbar } = useSnackbar();
+    const { showSnackbar, closeSnackbar } = useSnackbar();
     const {
         walletPublicIdentity,
         fetchBalance,
@@ -20,6 +20,12 @@ export function useTxTracker() {
     const intervalRef = useRef(null);
 
     const trackTx = useCallback((tx) => {
+        const waitingSnackbarId = showSnackbar(
+            `Checking transaction execution for tick ${tx.scheduledTick}: ${tx.description || ''}\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
+            'info',
+            { loading: true, autoHideDuration: null }
+        );
+
         setPendingTxs((prev) => [
             ...prev,
             {
@@ -28,13 +34,20 @@ export function useTxTracker() {
                 addedAt: Date.now(),
                 status: 'pending',
                 checked: false,
+                waitingSnackbarId,
             },
         ]);
-    }, []);
+    }, [showSnackbar]);
 
     const removeTx = useCallback((txId) => {
-        setPendingTxs((prev) => prev.filter((t) => t.id !== txId));
-    }, []);
+        setPendingTxs((prev) => {
+            const tx = prev.find((t) => t.id === txId);
+            if (tx?.waitingSnackbarId) {
+                closeSnackbar(tx.waitingSnackbarId);
+            }
+            return prev.filter((t) => t.id !== txId);
+        });
+    }, [closeSnackbar]);
 
     const refreshWalletBalances = useCallback(async () => {
         if (!walletPublicIdentity) return null;

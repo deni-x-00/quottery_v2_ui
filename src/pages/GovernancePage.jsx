@@ -133,6 +133,7 @@ function GovernancePage() {
                 bi.antiSpamAmount || 0,
                 payload
             );
+            showSnackbar("Sign your transaction in wallet.", "info");
             const confirmed = await getSignedTx(packet);
             if (!confirmed) return;
 
