@@ -4,6 +4,46 @@ import toast from 'react-hot-toast';
 
 const WalletConnectContext = createContext(undefined);
 
+const clearStoredWalletConnectWallet = () => {
+  try {
+    const storedWallet = localStorage.getItem('wallet');
+    if (!storedWallet) return;
+
+    const wallet = JSON.parse(storedWallet);
+    if (wallet?.connectType === 'walletconnect') {
+      localStorage.removeItem('wallet');
+    }
+  } catch {
+    localStorage.removeItem('wallet');
+  }
+};
+
+const getSessionEventName = (event) =>
+  event?.params?.event?.name || event?.event?.name || event?.name || '';
+
+const getSessionEventData = (event) =>
+  event?.params?.event?.data ?? event?.event?.data ?? event?.data;
+
+const getSessionAccounts = (session) => {
+  const namespaces = session?.namespaces || session?.params?.namespaces || {};
+  return Object.values(namespaces).flatMap((namespace) =>
+    Array.isArray(namespace?.accounts) ? namespace.accounts : []
+  );
+};
+
+const hasQubicAccounts = (session) =>
+  getSessionAccounts(session).some((account) => String(account).startsWith('qubic:'));
+
+const isEmptyAccountsChangedEvent = (event) => {
+  if (getSessionEventName(event) !== 'accountsChanged') return false;
+
+  const data = getSessionEventData(event);
+  if (Array.isArray(data)) return data.length === 0;
+  if (Array.isArray(data?.accounts)) return data.accounts.length === 0;
+
+  return false;
+};
+
 export function WalletConnectProvider({ children }) {
   const [signClient, setSignClient] = useState(null);
   const [sessionTopic, setSessionTopic] = useState('');
@@ -160,11 +200,24 @@ export function WalletConnectProvider({ children }) {
 
   useEffect(() => {
     let mounted = true;
+    let activeClient = null;
     const appUrl = window.location.origin;
     const clearSession = () => {
+      if (!mounted) return;
       setSessionTopic('');
       setIsConnected(false);
       localStorage.removeItem('sessionTopic');
+      clearStoredWalletConnectWallet();
+    };
+    const handleSessionEvent = (event) => {
+      if (isEmptyAccountsChangedEvent(event)) {
+        clearSession();
+      }
+    };
+    const handleSessionUpdate = (event) => {
+      if (!hasQubicAccounts(event)) {
+        clearSession();
+      }
     };
 
     SignClient.init({
@@ -177,26 +230,31 @@ export function WalletConnectProvider({ children }) {
       },
     }).then((client) => {
       if (!mounted) return;
+      activeClient = client;
       setSignClient(client);
 
       const storedTopic = localStorage.getItem('sessionTopic');
       if (storedTopic) {
         try {
           const session = client.session.get(storedTopic);
-          if (session) {
+          if (session && hasQubicAccounts(session)) {
             setSessionTopic(storedTopic);
             setIsConnected(true);
           } else {
             localStorage.removeItem('sessionTopic');
+            clearStoredWalletConnectWallet();
           }
         } catch (error) {
           console.warn('Failed to restore WalletConnect session:', error);
           localStorage.removeItem('sessionTopic');
+          clearStoredWalletConnectWallet();
         }
       }
 
       client.on('session_delete', clearSession);
       client.on('session_expire', clearSession);
+      client.on('session_event', handleSessionEvent);
+      client.on('session_update', handleSessionUpdate);
 
       setIsInitialized(true);
     }).catch((error) => {
@@ -208,6 +266,12 @@ export function WalletConnectProvider({ children }) {
 
     return () => {
       mounted = false;
+      if (activeClient) {
+        activeClient.off('session_delete', clearSession);
+        activeClient.off('session_expire', clearSession);
+        activeClient.off('session_event', handleSessionEvent);
+        activeClient.off('session_update', handleSessionUpdate);
+      }
     };
   }, []);
 

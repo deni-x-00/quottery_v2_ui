@@ -315,20 +315,33 @@ export const QuotteryProvider = ({ children }) => {
   }, [allEvents, bobUrl, walletPublicIdentity]);
 
   useEffect(() => {
+    let cancelled = false;
+
     const getIdentityAndBalance = async () => {
       const qHelper = new QubicHelper();
-      if (wallet) {
-        setWalletPublicIdentity(wallet.publicKey);
-        setWalletPublicKeyBytes(
-            await qHelper.getIdentityBytes(wallet.publicKey)
-        );
-        fetchBalance(wallet.publicKey);
-        fetchQtryGovBalance(wallet.publicKey);
+      if (!wallet) {
+        setWalletPublicIdentity('');
+        setWalletPublicKeyBytes(null);
+        setBalance(null);
+        setQuBalance(null);
+        setQtryGovBalance(null);
+        setEventPositions(null);
+        return;
       }
+
+      const publicKeyBytes = await qHelper.getIdentityBytes(wallet.publicKey);
+      if (cancelled) return;
+
+      setWalletPublicIdentity(wallet.publicKey);
+      setWalletPublicKeyBytes(publicKeyBytes);
+      fetchBalance(wallet.publicKey);
+      fetchQtryGovBalance(wallet.publicKey);
     };
 
     getIdentityAndBalance();
-    return () => {};
+    return () => {
+      cancelled = true;
+    };
     // fetchBalance intentionally reads current balance/position state for diffing.
     // Re-running this effect on every balance update would trigger extra network calls.
     // eslint-disable-next-line react-hooks/exhaustive-deps
