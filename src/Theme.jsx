@@ -32,7 +32,7 @@ export const lightTheme = createTheme({
     mode: "light",
     primary: {
       main: customColors.qubicBlueLight,
-      contrastText: customColors.black,
+      contrastText: customColors.white,
     },
     secondary: {
       main: customColors.gray200,
@@ -110,7 +110,7 @@ export const darkTheme = createTheme({
     },
     secondary: {
       main: customColors.gray200,
-      contrastText: customColors.white,
+      contrastText: customColors.black,
     },
     tertiary: {
       main: customColors.gray200,

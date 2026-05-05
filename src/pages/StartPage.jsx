@@ -137,7 +137,7 @@ function StartPage() {
               Predict To{" "}
               <Box component='span' sx={{
                 backgroundColor: theme.palette.primary.main,
-                color: theme.palette.mode === "dark" ? theme.palette.primary.contrastText : theme.palette.background.default,
+                color: theme.palette.primary.contrastText,
                 px: { xs: 0.5, sm: 1 }, fontSize: "inherit",
               }} fontWeight='bold'>Profit.</Box>
             </Typography>
@@ -152,12 +152,11 @@ function StartPage() {
             </Typography>
             <Button onClick={() => navigate("/about")} startIcon={<InfoOutlinedIcon />}
                         variant='contained'
-                        color={theme.palette.mode === "dark" ? "secondary" : "primary"}
+                        color="primary"
                         component={motion.button}
                         sx={{
                           display: "flex", alignItems: "center", justifyContent: "center",
                           borderRadius: 10, boxShadow: theme.shadows[1],
-                          color: theme.palette.mode === "dark" ? theme.palette.primary.contrastText : "white",
                           "&:focus": { backgroundColor: theme.palette.primary.main },
                           mt: { xs: 2, sm: 3 }, mb: { xs: 2, sm: 0 },
                           py: { xs: 0.5, sm: 1 }, px: { xs: 1.5, sm: 2 },
@@ -165,7 +164,6 @@ function StartPage() {
                           "&:hover": {
                             "& .MuiSvgIcon-root": { transform: "rotate(720deg)" },
                             backgroundColor: theme.palette.primary.main,
-                            color: theme.palette.mode === "dark" ? theme.palette.primary.contrastText : "white",
                           },
                           "& .MuiSvgIcon-root": { transition: "transform 0.5s" },
                           textTransform: "uppercase", letterSpacing: 0, fontWeight: "bold",

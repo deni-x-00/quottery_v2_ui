@@ -633,14 +633,14 @@ function EventDetailsPage() {
                   <AccordionSummary
                       expandIcon={
                         orderBookExpanded
-                            ? <KeyboardArrowUpIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText }} />
-                            : <ExpandMoreIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText }} />
+                            ? <KeyboardArrowUpIcon sx={{ color: theme.palette.primary.main }} />
+                            : <ExpandMoreIcon sx={{ color: theme.palette.primary.main }} />
                       }
                   >
                     <Box display="flex" alignItems="center" gap={1}>
-                      <MonetizationOnIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText, width: 20 }} />
+                      <MonetizationOnIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                       <Typography variant="body2"
-                                  color={theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText}>
+                                  color={theme.palette.primary.main}>
                         Order Book
                       </Typography>
                     </Box>
@@ -706,13 +706,13 @@ function EventDetailsPage() {
                                expanded={aiContextExpanded} onChange={() => setAiContextExpanded((e) => !e)} elevation={0}>
                       <AccordionSummary
                           expandIcon={aiContextExpanded
-                              ? <KeyboardArrowUpIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText }} />
-                              : <ExpandMoreIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText }} />
+                              ? <KeyboardArrowUpIcon sx={{ color: theme.palette.primary.main }} />
+                              : <ExpandMoreIcon sx={{ color: theme.palette.primary.main }} />
                           }>
                         <Box display="flex" alignItems="center" gap={1}>
-                          <InsightsIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText, width: 20 }} />
+                          <InsightsIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                           <Typography variant="body2"
-                                      color={theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText}>
+                                      color={theme.palette.primary.main}>
                             AI Context
                           </Typography>
                         </Box>
@@ -732,13 +732,13 @@ function EventDetailsPage() {
                            expanded={detailsExpanded} onChange={() => setDetailsExpanded((e) => !e)} elevation={0}>
                   <AccordionSummary
                       expandIcon={detailsExpanded
-                          ? <KeyboardArrowUpIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText }} />
-                          : <ExpandMoreIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText }} />
+                          ? <KeyboardArrowUpIcon sx={{ color: theme.palette.primary.main }} />
+                          : <ExpandMoreIcon sx={{ color: theme.palette.primary.main }} />
                       }>
                     <Box display="flex" alignItems="center" gap={1}>
-                      <InfoIcon sx={{ color: theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText, width: 20 }} />
+                      <InfoIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                       <Typography variant="body2"
-                                  color={theme.palette.mode === "dark" ? theme.palette.primary.main : theme.palette.primary.contrastText}>
+                                  color={theme.palette.primary.main}>
                         More Details
                       </Typography>
                     </Box>
