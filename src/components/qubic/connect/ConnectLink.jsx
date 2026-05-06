@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
     Box,
     Typography,
@@ -10,6 +11,7 @@ import {
     CircularProgress,
     Fade,
     Popper,
+    Link,
 } from '@mui/material';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
@@ -38,6 +40,7 @@ const ConnectLink = () => {
     const [loadingBalances, setLoadingBalances] = useState(false);
     const bubbleRef = useRef(null);
     const buttonRef = useRef(null);
+    const shouldShowGarthHint = Number(balance ?? 0) <= 0;
 
     const icon = connected ? (
         <AccountBalanceWalletIcon
@@ -166,6 +169,20 @@ const ConnectLink = () => {
                                         <Typography variant="body1" fontWeight={700}>
                                             {formatQubicAmount(balance ?? 0)} GARTH
                                         </Typography>
+                                        {shouldShowGarthHint && (
+                                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, maxWidth: 260 }}>
+                                                Do not see your GARTH? Go to{' '}
+                                                <Link
+                                                    component={RouterLink}
+                                                    to="/misc"
+                                                    underline="hover"
+                                                    onClick={() => setShowBalanceBubble(false)}
+                                                >
+                                                    Utilities
+                                                </Link>
+                                                {' '}and use Transfer Share Management Rights.
+                                            </Typography>
+                                        )}
                                     </Box>
                                     <Box>
                                         <Typography variant="caption" color="text.secondary">
