@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
-    Box, Typography, Container, Paper, Grid, IconButton, Tooltip, Stack, Card, CardContent, Divider, Button, Alert,
+    Box, Typography, Container, Paper, Grid, IconButton, Tooltip, Stack, Divider, Button, Alert,
 } from "@mui/material";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -25,6 +25,9 @@ import {
     packGovProposalPayload,
     QTRY_PROPOSAL_VOTE,
 } from "../components/qubic/util/quotteryTx";
+
+const GOV_TOTAL_VOTES = 676;
+const GOV_ACCEPTANCE_THRESHOLD = 451;
 
 function GovernancePage() {
     const { bobUrl } = useConfig();
@@ -92,6 +95,24 @@ function GovernancePage() {
             </Typography>
         </Box>
     );
+
+    const renderProposalVoteStatus = (totalVotes) => {
+        const votes = Number(totalVotes || 0);
+        const remaining = Math.max(0, GOV_ACCEPTANCE_THRESHOLD - votes);
+
+        return (
+            <Box textAlign="right">
+                <Typography variant="body2" color="text.secondary">
+                    Votes: {formatQubicAmount(votes)} / {formatQubicAmount(GOV_TOTAL_VOTES)}
+                </Typography>
+                <Typography variant="caption" color={remaining > 0 ? "text.secondary" : "success.main"}>
+                    {remaining > 0
+                        ? `${formatQubicAmount(remaining)} more to pass`
+                        : "Threshold reached"}
+                </Typography>
+            </Box>
+        );
+    };
 
     const handleVote = async (proposal) => {
         if (!connected) {
@@ -164,6 +185,7 @@ function GovernancePage() {
         }
     };
 
+    const hasGovTokens = connected && qtryGovBalance !== null && Number(qtryGovBalance) > 0;
     const hasNoGovTokens = connected && qtryGovBalance !== null && Number(qtryGovBalance) <= 0;
 
     return (
@@ -266,44 +288,69 @@ function GovernancePage() {
                     </Box>
                     <Stack spacing={2}>
                         {proposals.map((proposal) => (
-                            <Card key={proposal.rank} elevation={2}>
-                                <CardContent>
-                                    <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                                        <Typography variant="h6">Proposal #{proposal.rank}</Typography>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Votes: {formatQubicAmount(proposal.totalVotes)}
-                                        </Typography>
-                                    </Box>
+                            <Paper key={proposal.rank} elevation={1} sx={{ p: 3 }}>
+                                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+                                    <Typography variant="h6">Proposal #{proposal.rank}</Typography>
+                                    {renderProposalVoteStatus(proposal.totalVotes)}
+                                </Box>
 
-                                    <Divider sx={{ my: 1 }} />
-                                    <Grid container spacing={2}>
-                                        <Grid item xs={12} sm={6}>
-                                            {renderGovParam("Shareholder Fee", proposal.govParams.shareholderFee, ' / 1000')}
-                                            {renderGovParam("Burn Fee", proposal.govParams.burnFee, ' / 1000')}
-                                            {renderGovParam("Operation Fee", proposal.govParams.operationFee, ' / 1000')}
-                                        </Grid>
-                                        <Grid item xs={12} sm={6}>
-                                            {renderGovParam("Fee Per Day", proposal.govParams.feePerDay)}
-                                            {renderGovParam("Dispute Deposit", proposal.govParams.depositAmountForDispute)}
-                                        </Grid>
+                                <Divider sx={{ my: 1 }} />
+                                <Grid container spacing={2}>
+                                    <Grid item xs={12} sm={6}>
+                                        {renderGovPercentParam("Shareholder Fee", proposal.govParams.shareholderFee)}
+                                        {renderGovPercentParam("Burn Fee", proposal.govParams.burnFee)}
+                                        {renderGovPercentParam("Operation Fee", proposal.govParams.operationFee)}
                                     </Grid>
-                                    {proposal.govParams.operationId && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', wordBreak: 'break-all' }}>
-                                            Proposed Operator: {proposal.govParams.operationId}
+                                    <Grid item xs={12} sm={6}>
+                                        {renderGovParam("Fee Per Day", proposal.govParams.feePerDay)}
+                                        {renderGovParam("Dispute Deposit", proposal.govParams.depositAmountForDispute, " QU")}
+                                    </Grid>
+                                </Grid>
+                                {proposal.govParams.operationId && (
+                                    <Box sx={{ mt: 1.5 }}>
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                                            Proposed Operator
+                                        </Typography>
+                                        <Box display="flex" alignItems="center" gap={0.75}>
+                                            <Typography
+                                                variant="body2"
+                                                sx={{
+                                                    fontFamily: "monospace",
+                                                    fontSize: "0.9rem",
+                                                    fontWeight: 600,
+                                                    wordBreak: "break-all",
+                                                }}
+                                            >
+                                                {proposal.govParams.operationId}
+                                            </Typography>
+                                            <Tooltip title="Copy Proposed Operator">
+                                                <IconButton
+                                                    size="small"
+                                                    onClick={() => copyText(proposal.govParams.operationId)}
+                                                    aria-label="Copy Proposed Operator"
+                                                >
+                                                    <ContentCopyIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+                                    </Box>
+                                )}
+                                <Box display="flex" flexDirection="column" alignItems="flex-end" mt={2}>
+                                    <Button
+                                        variant="contained"
+                                        startIcon={<HowToVoteIcon />}
+                                        onClick={() => handleVote(proposal)}
+                                        disabled={!hasGovTokens || votingRank !== null}
+                                    >
+                                        {votingRank === proposal.rank ? "Signing..." : "Vote"}
+                                    </Button>
+                                    {!hasGovTokens && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, textAlign: "right" }}>
+                                            Only QTRYGOV holders can vote.
                                         </Typography>
                                     )}
-                                    <Box display="flex" justifyContent="flex-end" mt={2}>
-                                        <Button
-                                            variant="contained"
-                                            startIcon={<HowToVoteIcon />}
-                                            onClick={() => handleVote(proposal)}
-                                            disabled={votingRank !== null || hasNoGovTokens}
-                                        >
-                                            {votingRank === proposal.rank ? "Signing..." : "Vote"}
-                                        </Button>
-                                    </Box>
-                                </CardContent>
-                            </Card>
+                                </Box>
+                            </Paper>
                         ))}
                     </Stack>
                 </>

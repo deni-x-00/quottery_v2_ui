@@ -1,7 +1,8 @@
 import { useLocation } from "react-router-dom";
 import pkg from "../../../package.json";
 import logoShort from "../../assets/logo/logo-text-short.svg";
-import { Box, Typography, Link, useTheme, Divider } from "@mui/material";
+import { Box, Typography, Link, useTheme, Divider, IconButton, Tooltip } from "@mui/material";
+import { FaDiscord, FaXTwitter } from "react-icons/fa6";
 
 const Footer = () => {
   const { pathname } = useLocation();
@@ -28,6 +29,34 @@ const Footer = () => {
         <Typography variant='body2'>
           {"\u00A9"} {new Date().getFullYear()} / Qubic
         </Typography>
+        <Box display='flex' alignItems='center' gap={0.5}>
+          <Tooltip title='X'>
+            <IconButton
+              component='a'
+              href='https://x.com/QUOTTERY1'
+              target='_blank'
+              rel='noreferrer'
+              size='small'
+              aria-label='Quottery on X'
+              sx={{ color: theme.palette.text.primary }}
+            >
+              <FaXTwitter size={16} />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title='Discord'>
+            <IconButton
+              component='a'
+              href='https://discord.gg/5WNEHjEFpf'
+              target='_blank'
+              rel='noreferrer'
+              size='small'
+              aria-label='Quottery Discord'
+              sx={{ color: theme.palette.text.primary }}
+            >
+              <FaDiscord size={16} />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       <Box
