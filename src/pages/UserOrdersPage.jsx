@@ -238,11 +238,6 @@ const UserOrdersPage = () => {
       if (res && !res.error) {
         const side = order.isBid ? "Bid" : "Ask";
         const description = `${side} ${formatQubicAmount(order.qty)} @ ${formatQubicAmount(order.price)} for ${getOptionName(order.market_id, order.option)} of ${getEventName(order.market_id)}`;
-        const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : "";
-        showSnackbar(
-            `Order removal broadcasted for tick ${scheduledTick}. Waiting for execution: ${description}${hashInfo}`,
-            "info"
-        );
         trackTx({
           txHash: res.txHash,
           scheduledTick,

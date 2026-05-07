@@ -5,6 +5,21 @@ import { useSnackbar } from '../contexts/SnackbarContext';
 import { useQuotteryContext } from '../contexts/QuotteryContext';
 import { verifyTxWithBobLogs } from '../components/qubic/util/txLogVerifier';
 
+const txTrackingId = (tx) => (
+    tx.txHash ||
+    [
+        tx.scheduledTick,
+        tx.inputType,
+        tx.type,
+        tx.action,
+        tx.eventId,
+        tx.option,
+        tx.side,
+        tx.amount,
+        tx.price,
+    ].filter((value) => value !== undefined && value !== null).join(':') ||
+    `tx-${Date.now()}`
+);
 
 export function useTxTracker() {
     const [pendingTxs, setPendingTxs] = useState([]);
@@ -18,26 +33,42 @@ export function useTxTracker() {
         fetchOpenOrders,
     } = useQuotteryContext();
     const intervalRef = useRef(null);
+    const trackedTxIdsRef = useRef(new Set());
 
     const trackTx = useCallback((tx) => {
+        const id = txTrackingId(tx);
+        if (trackedTxIdsRef.current.has(id)) {
+            return id;
+        }
+
+        trackedTxIdsRef.current.add(id);
         const waitingSnackbarId = showSnackbar(
             `Checking transaction execution for tick ${tx.scheduledTick}: ${tx.description || ''}\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
             'info',
             { loading: true, autoHideDuration: null }
         );
 
-        setPendingTxs((prev) => [
-            ...prev,
-            {
-                ...tx,
-                id: tx.txHash || `tx-${Date.now()}`,
-                addedAt: Date.now(),
-                status: 'pending',
-                checked: false,
-                waitingSnackbarId,
-            },
-        ]);
-    }, [showSnackbar]);
+        setPendingTxs((prev) => {
+            if (prev.some((pendingTx) => pendingTx.id === id)) {
+                closeSnackbar(waitingSnackbarId);
+                return prev;
+            }
+
+            return [
+                ...prev,
+                {
+                    ...tx,
+                    id,
+                    addedAt: Date.now(),
+                    status: 'pending',
+                    checked: false,
+                    waitingSnackbarId,
+                },
+            ];
+        });
+
+        return id;
+    }, [closeSnackbar, showSnackbar]);
 
     const removeTx = useCallback((txId) => {
         setPendingTxs((prev) => {
@@ -45,6 +76,7 @@ export function useTxTracker() {
             if (tx?.waitingSnackbarId) {
                 closeSnackbar(tx.waitingSnackbarId);
             }
+            trackedTxIdsRef.current.delete(txId);
             return prev.filter((t) => t.id !== txId);
         });
     }, [closeSnackbar]);

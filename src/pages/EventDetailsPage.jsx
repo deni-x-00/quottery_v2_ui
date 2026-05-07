@@ -413,11 +413,6 @@ function EventDetailsPage() {
 
             if (res && !res.error) {
                 const optDesc = selectedOption === 0 ? event.option0Desc : event.option1Desc;
-                const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : '';
-                showSnackbar(
-                    `Order transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${tradeSide === "buy" ? "Bid" : "Ask"} ${formatQubicAmount(tradeAmount)} "${optDesc}" @ ${formatQubicAmount(tradePrice)}${hashInfo}`,
-                    "info"
-                );
                 trackTx({
                     txHash: res.txHash,
                     scheduledTick,
@@ -494,8 +489,6 @@ function EventDetailsPage() {
 
             const res = await broadcastTransaction(bobUrl, txHex);
             if (res && !res.error) {
-                const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : '';
-                showSnackbar(`Dispute submitted for tick ${scheduledTick}${hashInfo}`, "success");
                 trackTx({
                     txHash: res.txHash,
                     scheduledTick,

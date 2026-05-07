@@ -635,7 +635,6 @@ function MiscPage() {
         const res = await broadcastTransaction(bobUrl, txHex);
 
         if (res?.txHash) {
-            showSnackbar(`${description} broadcast at tick ${scheduledTick}. Tx: ${res.txHash}`, "success");
             trackTx({
                 txHash: res.txHash,
                 scheduledTick,

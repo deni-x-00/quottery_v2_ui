@@ -168,7 +168,6 @@ function GovernancePage() {
             }
 
             const description = `Vote for governance proposal #${proposal.rank}`;
-            showSnackbar(`${description} broadcast at tick ${tickInfo.scheduledTick}. Tx: ${res.txHash}`, "success");
             trackTx({
                 txHash: res.txHash,
                 scheduledTick: tickInfo.scheduledTick,

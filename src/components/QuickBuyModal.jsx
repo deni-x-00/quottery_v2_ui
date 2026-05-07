@@ -140,11 +140,6 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
 
             if (res && !res.error) {
                 const optDesc = selectedOption === 0 ? event.option0Desc : event.option1Desc;
-                const hashInfo = res.txHash ? `\nTx: ${res.txHash}` : '';
-                showSnackbar(
-                    `Bid transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${shares} shares of "${optDesc}" @ ${formatQubicAmount(price)}${hashInfo}`,
-                    'info'
-                );
                 if (onTxBroadcast) {
                     onTxBroadcast({
                         txHash: res.txHash,
@@ -158,6 +153,11 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                         amount: shares,
                         price,
                     });
+                } else {
+                    showSnackbar(
+                        `Bid transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${shares} shares of "${optDesc}" @ ${formatQubicAmount(price)}`,
+                        'info'
+                    );
                 }
                 onClose();
             } else {
