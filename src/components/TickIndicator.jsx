@@ -1,11 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Box, Typography, Tooltip, useTheme } from '@mui/material';
 import { formatQubicAmount } from './qubic/util';
-import { getNetworkTick } from './qubic/util/bobApi';
+import { getNetworkTick, PUBLIC_TICK_TOLERANCE } from './qubic/util/bobApi';
 import { useConfig } from '../contexts/ConfigContext';
 import { useQuotteryContext } from '../contexts/QuotteryContext';
-
-const TICK_TOLERANCE = 50; // ticks difference considered "in sync"
 
 const TickIndicator = () => {
     const theme = useTheme();
@@ -36,7 +34,7 @@ const TickIndicator = () => {
             setNetworkStatus('bad');
         } else if (pt === null) {
             setNetworkStatus('unknown');
-        } else if (Math.abs(bt - pt) <= TICK_TOLERANCE) {
+        } else if (Math.abs(bt - pt) <= PUBLIC_TICK_TOLERANCE) {
             setNetworkStatus('good');
         } else {
             setNetworkStatus('bad');

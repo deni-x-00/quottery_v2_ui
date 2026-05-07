@@ -84,7 +84,7 @@ Small indicator in the header showing:
 - The current Bob tick number.
 - Status label.
 
-In non-dev mode, it also fetches the public Qubic tick from multiple API endpoints and compares it to Bob's tick. A difference greater than 50 ticks is considered "out of sync".
+In non-dev mode, it also fetches the public Qubic tick from multiple API endpoints and compares it to Bob's tick. A difference greater than 15 ticks is considered "out of sync".
 
 The tooltip shows the measured tick rate and adaptive offset from `useTickRate`.
 

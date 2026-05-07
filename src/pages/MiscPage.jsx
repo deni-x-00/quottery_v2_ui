@@ -14,6 +14,7 @@ import {
     MenuItem,
     CircularProgress,
     Chip,
+    InputAdornment,
 } from "@mui/material";
 import RedeemIcon from "@mui/icons-material/Redeem";
 import SendIcon from "@mui/icons-material/Send";
@@ -60,9 +61,21 @@ const REVOKE_RIGHTS_IDENTIFIERS = ["RevokeAssetManagementRights"];
 const AMOUNT_PRESETS = [25, 50, 75, 100];
 const QX_CONTRACT_INDEX = 1;
 const QUOTTERY_CONTRACT_INDEX = 2;
+const RECEIVER_IDENTITY_REGEX = /^[A-Z]{60}$/;
+
+const normalizeNumericInput = (value) => String(value || "").replace(/\D/g, "");
+
+const normalizeIdentityInput = (value) => (
+    String(value || "")
+        .toUpperCase()
+        .replace(/[^A-Z]/g, "")
+        .slice(0, 60)
+);
+
+const isValidReceiverIdentity = (identity) => RECEIVER_IDENTITY_REGEX.test(identity);
 
 const toPositiveInt = (value) => {
-    const parsed = parseInt(value, 10);
+    const parsed = parseInt(normalizeNumericInput(value), 10);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
@@ -71,6 +84,12 @@ const clampToMax = (value, max) => {
     if (!max || max <= 0) return parsed ? String(parsed) : "";
     if (!parsed) return "";
     return String(Math.min(parsed, max));
+};
+
+const formatAmountInput = (value) => {
+    const digits = normalizeNumericInput(value);
+    if (!digits) return "";
+    return formatQubicAmount(digits);
 };
 
 const availableLabel = (value, unit) => (
@@ -205,15 +224,47 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
             </Stack>
             <TextField
                 label={label}
-                value={value}
+                value={formatAmountInput(value)}
                 onChange={(e) => onChange(clampToMax(e.target.value, max))}
                 fullWidth
                 size="small"
                 placeholder={max ? `Max ${formatQubicAmount(max)} ${unit}` : "Unavailable"}
-                inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+                inputProps={{ inputMode: "numeric", pattern: "[0-9,]*" }}
                 disabled={isDisabled}
             />
         </Stack>
+    );
+};
+
+const ReceiverIdentityField = ({ value, onChange }) => {
+    const hasValue = value.length > 0;
+    const isValid = isValidReceiverIdentity(value);
+
+    return (
+        <TextField
+            label="Receiver Identity"
+            value={value}
+            onChange={(e) => onChange(normalizeIdentityInput(e.target.value))}
+            fullWidth
+            size="small"
+            placeholder="60-character Qubic identity"
+            inputProps={{ maxLength: 60 }}
+            error={hasValue && !isValid}
+            helperText={hasValue && !isValid ? "Use exactly 60 uppercase Latin letters." : " "}
+            InputProps={{
+                endAdornment: (
+                    <InputAdornment position="end">
+                        <Typography
+                            variant="caption"
+                            color={isValid ? "success.main" : "text.secondary"}
+                            sx={{ fontFamily: "monospace" }}
+                        >
+                            {value.length}/60
+                        </Typography>
+                    </InputAdornment>
+                ),
+            }}
+        />
     );
 };
 
@@ -650,8 +701,8 @@ function MiscPage() {
         if (!requireWallet()) return;
 
         const amt = parseInt(garthAmount, 10);
-        if (!garthReceiver || garthReceiver.length !== 60) {
-            showSnackbar("Enter a valid 60-character receiver identity.", "error");
+        if (!isValidReceiverIdentity(garthReceiver)) {
+            showSnackbar("Enter a valid receiver identity: exactly 60 uppercase Latin letters.", "error");
             return;
         }
         if (Number.isNaN(amt) || amt <= 0) {
@@ -690,8 +741,8 @@ function MiscPage() {
         if (!requireWallet()) return;
 
         const amt = parseInt(govAmount, 10);
-        if (!govReceiver || govReceiver.length !== 60) {
-            showSnackbar("Enter a valid 60-character receiver identity.", "error");
+        if (!isValidReceiverIdentity(govReceiver)) {
+            showSnackbar("Enter a valid receiver identity: exactly 60 uppercase Latin letters.", "error");
             return;
         }
         if (Number.isNaN(amt) || amt <= 0) {
@@ -853,17 +904,12 @@ function MiscPage() {
                     submitting={garthSubmitting}
                     submitLabel="Transfer GARTH"
                     connected={connected}
-                    disabled={!hasTransferFee(quBalance) || !toPositiveInt(garthAmount) || !balance || balance <= 0}
+                    disabled={!hasTransferFee(quBalance) || !isValidReceiverIdentity(garthReceiver) || !toPositiveInt(garthAmount) || !balance || balance <= 0}
                 >
                     {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
-                    <TextField
-                        label="Receiver Identity"
+                    <ReceiverIdentityField
                         value={garthReceiver}
-                        onChange={(e) => setGarthReceiver(e.target.value.toUpperCase().replace(/\s/g, ""))}
-                        fullWidth
-                        size="small"
-                        placeholder="60-character Qubic identity"
-                        inputProps={{ maxLength: 60 }}
+                        onChange={setGarthReceiver}
                     />
                     <AmountSlider
                         label="Amount"
@@ -883,17 +929,12 @@ function MiscPage() {
                     submitting={govSubmitting}
                     submitLabel="Transfer QTRYGOV"
                     connected={connected}
-                    disabled={!hasTransferFee(quBalance) || !toPositiveInt(govAmount) || !qtryGovBalance || qtryGovBalance <= 0}
+                    disabled={!hasTransferFee(quBalance) || !isValidReceiverIdentity(govReceiver) || !toPositiveInt(govAmount) || !qtryGovBalance || qtryGovBalance <= 0}
                 >
                     {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
-                    <TextField
-                        label="Receiver Identity"
+                    <ReceiverIdentityField
                         value={govReceiver}
-                        onChange={(e) => setGovReceiver(e.target.value.toUpperCase().replace(/\s/g, ""))}
-                        fullWidth
-                        size="small"
-                        placeholder="60-character Qubic identity"
-                        inputProps={{ maxLength: 60 }}
+                        onChange={setGovReceiver}
                     />
                     <AmountSlider
                         label="Amount"
