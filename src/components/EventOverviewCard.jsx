@@ -16,7 +16,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import { getTagInfo } from "./qubic/util/tagMap";
 import QuickBuyModal from "./QuickBuyModal";
 
-const thumbnails = require.context("../assets", false, /\.(png|jpe?g|svg|gif|webp)$/);
+const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 
 function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
     const theme = useTheme();

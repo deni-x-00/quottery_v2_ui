@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Typography,
   Button,
@@ -7,110 +7,48 @@ import {
   Box,
   useTheme,
   Grid,
-  IconButton,
-  Tooltip,
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import { useQuotteryContext } from "../contexts/QuotteryContext";
-import { useConfig } from "../contexts/ConfigContext";
+import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import { Typewriter } from "react-simple-typewriter";
 import { motion, AnimatePresence } from "framer-motion";
-import ModernSearchFilter from "../components/SearchFilter";
 import AnimatedBars from "../components/qubic/ui/AnimateBars";
 import EventOverviewCard from "../components/EventOverviewCard";
-import { getAllTags } from "../components/qubic/util/tagMap";
+import { useConfig } from "../contexts/ConfigContext";
+import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
+
+const RECENT_EVENT_LIMIT = 6;
 
 function StartPage() {
   const navigate = useNavigate();
   const theme = useTheme();
   const { isConnected } = useConfig();
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isFilterLoading, setIsFilterLoading] = useState(false);
-  const [selectedTagIndex, setSelectedTagIndex] = useState(0);
+  const { allEvents, loading, fetchEvents } = useQuotteryContext();
   const { trackTx } = useTxTracker();
-
-  const {
-    allEvents,
-    loading,
-    fetchEvents
-  } = useQuotteryContext();
+  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
 
   useEffect(() => {
     if (!isConnected) return;
     const loadEvents = async () => {
-      setIsFilterLoading(true);
+      setIsLoadingEvents(true);
       try {
         await fetchEvents();
       } finally {
-        setIsFilterLoading(false);
+        setIsLoadingEvents(false);
       }
     };
     loadEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected]);
 
-  const handleRefresh = async () => {
-    setIsFilterLoading(true);
-    try {
-      await fetchEvents();
-    } finally {
-      setIsFilterLoading(false);
-    }
-  };
+  const recentEvents = useMemo(() => (
+      [...(Array.isArray(allEvents) ? allEvents : [])]
+          .sort((a, b) => Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0))
+          .slice(0, RECENT_EVENT_LIMIT)
+  ), [allEvents]);
 
-  const handleEventClick = (eventId) => {
-    navigate(`/event/${eventId}`);
-  };
-
-  const filteredEvents = (events) => {
-    const safeEvents = Array.isArray(events) ? events : [];
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) return safeEvents;
-
-    return safeEvents.filter((event) => {
-      const descMatches = (event.desc || "").toLowerCase().includes(term);
-      const opt0Matches = (event.option0Desc || "").toLowerCase().includes(term);
-      const opt1Matches = (event.option1Desc || "").toLowerCase().includes(term);
-      return descMatches || opt0Matches || opt1Matches;
-    });
-  };
-
-  const baseEventsToDisplay = filteredEvents(allEvents || []);
-
-  const filterOptions = React.useMemo(() => {
-    const allTags = getAllTags();
-    return [
-      { label: "All", value: "" },
-      ...allTags
-          .filter((t) => t.id > 0)
-          .map((t) => ({ label: t.label, value: String(t.id) })),
-    ];
-  }, []);
-
-  const eventsToDisplay = React.useMemo(() => {
-    const safeBaseEvents = Array.isArray(baseEventsToDisplay) ? baseEventsToDisplay : [];
-    const selected = filterOptions[selectedTagIndex]?.value;
-    if (!selected) return safeBaseEvents;
-    const tagId = Number(selected);
-    return safeBaseEvents.filter((e) => e.tag === tagId);
-  }, [baseEventsToDisplay, filterOptions, selectedTagIndex]);
-
-  const renderLoading = () => (
-      <Box sx={{
-        display: "flex", flexDirection: "column", justifyContent: "center",
-        alignItems: "center", mt: { xs: 4, sm: 6, md: 8 }, mb: { xs: 4, sm: 6, md: 8 }, gap: 2,
-      }}>
-        <AnimatedBars />
-        <Typography variant='h6' color='text.secondary' textAlign='center' marginTop={2}
-                    sx={{ fontSize: { xs: "1rem", sm: "1.2rem", md: "1.5rem" } }}>
-          Loading events, please wait...
-        </Typography>
-      </Box>
-  );
-
-  const isLoadingOverall = loading || isFilterLoading;
+  const isLoadingOverall = loading || isLoadingEvents;
 
   const cardVariants = {
     initial: { scale: 0.7, opacity: 0 },
@@ -120,121 +58,129 @@ function StartPage() {
 
   return (
       <Box sx={{
-        minHeight: "100vh", background: theme.palette.background.default,
-        pt: { xs: 10, sm: 12, md: 16 }, pb: { xs: 6, sm: 8, md: 10 }, overflow: "hidden",
+        minHeight: "100vh",
+        background: theme.palette.background.default,
+        pt: { xs: 10, sm: 12, md: 16 },
+        pb: { xs: 6, sm: 8, md: 10 },
+        overflow: "hidden",
       }}>
-        <Container maxWidth='lg'>
-          {/* Header Section */}
-          <Box component='header' sx={{
-            display: "flex", flexDirection: "column", alignItems: "center",
-            mb: { xs: 4, sm: 5, md: 6 }, mt: { xs: -2, sm: -3, md: -5 }, textAlign: "center",
+        <Container maxWidth="lg">
+          <Box component="header" sx={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            mb: { xs: 4, sm: 5, md: 6 },
+            mt: { xs: -2, sm: -3, md: -5 },
+            textAlign: "center",
           }}>
-            <Typography variant='h2' fontWeight='bold' gutterBottom
-                        component={motion.h2}
-                        initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.7 }} color='text.primary'
-                        sx={{ fontSize: { xs: "2.7rem", sm: "3rem", md: "3.5rem", lg: "3.5rem" }, lineHeight: 1.2, mt: 3 }}>
+            <Typography
+                variant="h2"
+                fontWeight="bold"
+                gutterBottom
+                component={motion.h2}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.7 }}
+                color="text.primary"
+                sx={{ fontSize: { xs: "2.7rem", sm: "3rem", md: "3.5rem", lg: "3.5rem" }, lineHeight: 1.2, mt: 3 }}
+            >
               Predict To{" "}
-              <Box component='span' sx={{
+              <Box component="span" sx={{
                 backgroundColor: theme.palette.primary.main,
                 color: theme.palette.primary.contrastText,
-                px: { xs: 0.5, sm: 1 }, fontSize: "inherit",
-              }} fontWeight='bold'>Profit.</Box>
+                px: { xs: 0.5, sm: 1 },
+                fontSize: "inherit",
+              }} fontWeight="bold">
+                Profit.
+              </Box>
             </Typography>
-            <Typography color='text.secondary' gutterBottom fontWeight='bold'
-                        component={motion.div} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                        transition={{ delay: 0.5, duration: 1 }}
-                        sx={{ fontSize: { xs: "0.9rem", sm: "1.1rem", md: "1.3rem", lg: "1.5rem" }, mx: "auto", fontWeight: "500" }}>
+            <Typography
+                color="text.secondary"
+                gutterBottom
+                component={motion.div}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5, duration: 1 }}
+                sx={{ fontSize: { xs: "0.9rem", sm: "1.1rem", md: "1.3rem", lg: "1.5rem" }, mx: "auto", fontWeight: 500 }}
+            >
               <Typewriter
                   words={["P2P prediction market powered by Qubic. Safe, Secure, and Exciting"]}
-                  loop={1} cursor cursorStyle='_' typeSpeed={33} deleteSpeed={50} delaySpeed={1000}
+                  loop={1}
+                  cursor
+                  cursorStyle="_"
+                  typeSpeed={33}
+                  deleteSpeed={50}
+                  delaySpeed={1000}
               />
             </Typography>
-            <Button onClick={() => navigate("/about")} startIcon={<InfoOutlinedIcon />}
-                        variant='contained'
-                        color="primary"
-                        component={motion.button}
-                        sx={{
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          borderRadius: 10, boxShadow: theme.shadows[1],
-                          "&:focus": { backgroundColor: theme.palette.primary.main },
-                          mt: { xs: 2, sm: 3 }, mb: { xs: 2, sm: 0 },
-                          py: { xs: 0.5, sm: 1 }, px: { xs: 1.5, sm: 2 },
-                          fontSize: { xs: "1rem", sm: "1rem" },
-                          "&:hover": {
-                            "& .MuiSvgIcon-root": { transform: "rotate(720deg)" },
-                            backgroundColor: theme.palette.primary.main,
-                          },
-                          "& .MuiSvgIcon-root": { transition: "transform 0.5s" },
-                          textTransform: "uppercase", letterSpacing: 0, fontWeight: "bold",
-                        }}>
-                  Learn more
-                </Button>
+            <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", justifyContent: "center", mt: { xs: 2, sm: 3 } }}>
+              <Button
+                  component={RouterLink}
+                  to="/events"
+                  startIcon={<EventAvailableIcon />}
+                  variant="contained"
+                  color="primary"
+                  sx={{ borderRadius: 1, textTransform: "none", fontWeight: 700 }}
+              >
+                All Events
+              </Button>
+              <Button
+                  onClick={() => navigate("/about")}
+                  startIcon={<InfoOutlinedIcon />}
+                  variant="outlined"
+                  color="primary"
+                  sx={{ borderRadius: 1, textTransform: "none", fontWeight: 700 }}
+              >
+                About
+              </Button>
+            </Box>
           </Box>
 
-          {/* Connected: show filter, search, events */}
           {isConnected && (
-              <>
-                {/* Filter, Search and Refresh */}
-                <Box sx={{ position: "relative", mb: { xs: 3, sm: 3 } }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <ModernSearchFilter
-                          searchTerm={searchTerm}
-                          onSearchChange={setSearchTerm}
-                          filterOptions={filterOptions}
-                          currentFilterOption={selectedTagIndex}
-                          onFilterChange={(idx) => setSelectedTagIndex(idx)}
-                      />
-                    </Box>
-                    <Tooltip title="Refresh events">
-                  <span>
-                    <IconButton aria-label='refresh events' onClick={handleRefresh}
-                                disabled={isLoadingOverall} size='small'>
-                      <RefreshIcon fontSize='small' sx={{ color: theme.palette.text.secondary }} />
-                    </IconButton>
-                  </span>
-                    </Tooltip>
-                  </Box>
+              <Box sx={{ mb: { xs: 4, sm: 5, md: 6 } }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2, mb: 2.5 }}>
+                  <Box />
+                  <Typography variant="h4" color="text.primary" sx={{ fontWeight: 700, fontSize: { xs: "1.5rem", md: "2rem" } }}>
+                    Recent Events
+                  </Typography>
+                  <Button component={RouterLink} to="/events" size="small" variant="text" sx={{ justifySelf: "end", textTransform: "none", fontWeight: 700 }}>
+                    All Events
+                  </Button>
                 </Box>
 
-                {/* Events Grid */}
-                {isLoadingOverall ? renderLoading() : (
-                    <Box sx={{ mb: { xs: 4, sm: 5, md: 6 } }}>
-                      {Array.isArray(eventsToDisplay) && eventsToDisplay.length > 0 ? (
-                          <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} justifyContent='center' alignItems='stretch'>
-                            <AnimatePresence>
-                              {eventsToDisplay.map((event, index) => {
-                                const stableKey = event?.eid ?? `evt-${index}`;
-                                return (
-                                    <Grid item xs={12} sm={6} md={4} lg={4} key={stableKey}
-                                          component={motion.div} variants={cardVariants}
-                                          initial='initial' animate='animate' exit='exit'
-                                          style={{ display: "flex" }}>
-                                      <EventOverviewCard
-                                          data={{ ...event, desc: event.desc }}
-                                          onClick={() => handleEventClick(event.eid)}
-                                          status={event.status}
-                                          onTxBroadcast={trackTx}
-                                      />
-                                    </Grid>
-                                );
-                              })}
-                            </AnimatePresence>
-                          </Grid>
-                      ) : (
-                          <Box sx={{ textAlign: "center", py: 6 }}>
-                            <Typography variant='h6' color='text.secondary' sx={{ fontWeight: 500 }}>
-                              No events found.
-                            </Typography>
-                          </Box>
-                      )}
+                {isLoadingOverall ? (
+                    <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", py: 8, gap: 2 }}>
+                      <AnimatedBars />
+                      <Typography variant="h6" color="text.secondary">Loading events, please wait...</Typography>
+                    </Box>
+                ) : recentEvents.length > 0 ? (
+                    <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} justifyContent="center" alignItems="stretch">
+                      <AnimatePresence>
+                        {recentEvents.map((event, index) => {
+                          const stableKey = event?.eid ?? `evt-${index}`;
+                          return (
+                              <Grid item xs={12} sm={6} md={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
+                                <EventOverviewCard
+                                    data={{ ...event, desc: event.desc }}
+                                    onClick={() => navigate(`/event/${event.eid}`)}
+                                    status={event.status}
+                                    onTxBroadcast={trackTx}
+                                />
+                              </Grid>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </Grid>
+                ) : (
+                    <Box sx={{ textAlign: "center", py: 6 }}>
+                      <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>
+                        No events found.
+                      </Typography>
                     </Box>
                 )}
-              </>
+              </Box>
           )}
         </Container>
-
       </Box>
   );
 }

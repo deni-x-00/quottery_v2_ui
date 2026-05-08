@@ -73,7 +73,7 @@ import { useTxTracker } from "../hooks/useTxTracker";
 import { getTagInfo } from "../components/qubic/util/tagMap";
 import TradeAmountSlider from "../components/TradeAmountSlider";
 import TradePriceSelector from "../components/TradePriceSelector";
-const thumbnails = require.context("../assets", false, /\.(png|jpe?g|svg|gif|webp)$/);
+const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
   try {
     return thumbnails(`./${name}`);

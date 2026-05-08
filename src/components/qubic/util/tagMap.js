@@ -1,28 +1,79 @@
 /**
- * tagMap.js — Maps tag IDs (stored in last 2 bytes of desc[32]) to
- * display labels and thumbnail filenames from src/assets/.
+ * Maps tag IDs stored in the last 2 bytes of event desc[32] to display labels
+ * and thumbnail filenames from src/assets/.
+ *
+ * Reserved ranges:
+ * - Crypto: 1-10
+ * - Sports: 11-20
+ * - Finance: 21-30
+ * - Other: 31-40
  */
 
 export const TAG_MAP = {
     0:  { label: 'General',         thumbnail: null },
+
+    // Crypto: 1-10
     1:  { label: 'Crypto',          thumbnail: 'crypto.png' },
-    2:  { label: 'Sport',           thumbnail: 'sport.png' },
-    3:  { label: 'Politics',        thumbnail: 'politics.png' },
-    4:  { label: 'Finance',         thumbnail: 'finance.png' },
-    5:  { label: 'Tech & Science',  thumbnail: 'tech_and_science.png' },
-    6:  { label: 'Celebrity',       thumbnail: 'celebrity_life.png' },
-    7:  { label: 'Qubic',           thumbnail: 'qubic.png' },
-    8:  { label: 'Football',        thumbnail: 'cfb.png' },
+    2:  { label: 'QUBIC',           thumbnail: 'logo/logo.svg' },
+    3:  { label: 'BTC',             thumbnail: 'bitcoin.svg' },
+    4:  { label: 'ETH',             thumbnail: 'ethereum.svg' },
+    5:  { label: 'SOL',             thumbnail: null },
+
+    // Sports: 11-20
+    11: { label: 'Football',        thumbnail: 'football.svg' },
+    12: { label: 'Basketball',      thumbnail: 'basketball.svg' },
+    13: { label: 'Tennis',          thumbnail: 'tennis.svg' },
+    14: { label: 'Hockey',          thumbnail: 'hockey.svg' },
+
+    // Finance: 21-30
+    21: { label: 'GOLD',            thumbnail: 'gold-bar.svg' },
+    22: { label: 'SILVER',          thumbnail: 'silver-bar.svg' },
+    23: { label: 'Stocks',          thumbnail: null },
+    24: { label: 'Economy',         thumbnail: null },
+
+    // Other: 31-40
+    31: { label: 'Cinema',          thumbnail: 'cinema.svg' },
+    32: { label: 'Science',         thumbnail: 'science.svg' },
+    33: { label: 'Politics',        thumbnail: 'politics.svg' },
+    34: { label: 'Weather',         thumbnail: 'weather.svg' },
+    35: { label: 'Gaming',          thumbnail: 'gaming.svg' },
+    36: { label: 'Celebrity',       thumbnail: 'celebrity.svg' },
 };
 
+export const TAG_GROUPS = [
+    { id: 'crypto', label: 'Crypto', min: 1, max: 10 },
+    { id: 'sports', label: 'Sports', min: 11, max: 20 },
+    { id: 'finance', label: 'Finance', min: 21, max: 30 },
+    { id: 'other', label: 'Other', min: 31, max: 40 },
+];
+
+export function getCanonicalTagId(tagId) {
+    const id = Number(tagId);
+    return TAG_MAP[id] ? id : 0;
+}
+
+export function getTagGroupId(tagId) {
+    const id = getCanonicalTagId(tagId);
+    const group = TAG_GROUPS.find(({ min, max }) => id >= min && id <= max);
+    return group?.id || 'other';
+}
 
 export function getTagInfo(tagId) {
-    return TAG_MAP[tagId] || TAG_MAP[7];
+    return TAG_MAP[getCanonicalTagId(tagId)] || TAG_MAP[0];
 }
 
 export function getAllTags() {
-    return Object.entries(TAG_MAP).map(([id, info]) => ({
-        id: Number(id),
-        ...info,
-    }));
+    return Object.entries(TAG_MAP)
+        .filter(([, info]) => !info.hidden)
+        .map(([id, info]) => ({
+            id: Number(id),
+            ...info,
+        }));
+}
+
+export function getTagsForGroup(groupId) {
+    const group = TAG_GROUPS.find((item) => item.id === groupId);
+    if (!group) return [];
+
+    return getAllTags().filter((tag) => tag.id >= group.min && tag.id <= group.max);
 }

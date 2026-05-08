@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Header from './components/layout/Header';
 import StartPage from './pages/StartPage';
 import AboutPage from './pages/AboutPage';
+import EventsPage from './pages/EventsPage';
 import EventDetailsPage from './pages/EventDetailsPage';
 import EventPublishPage from './pages/EventPublishPage';
 import UserOrdersPage from "./pages/UserOrdersPage";
@@ -34,6 +35,7 @@ function App() {
                       <Routes>
                         <Route path='/' element={<StartPage />} />
                         <Route path='/about' element={<AboutPage />} />
+                        <Route path='/events' element={<EventsPage />} />
                         <Route path='/event/:id' element={<EventDetailsPage />} />
                         <Route path='/publish/:id' element={<EventPublishPage />} />
                         <Route path='/user-events' element={<UserEvents />} />
