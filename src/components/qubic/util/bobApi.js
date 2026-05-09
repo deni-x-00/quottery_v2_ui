@@ -569,6 +569,10 @@ async function getEntityBalanceViaPublicRpc(identity) {
     throw new Error('All public RPC balance endpoints failed');
 }
 
+function isInvalidPublicTxIdResponse(body) {
+    return Number(body?.code) === 3 && String(body?.message || '').includes('invalid id format');
+}
+
 async function getTxByHashViaPublicRpc(txHash) {
     if (!txHash) return null;
 
@@ -584,6 +588,7 @@ async function getTxByHashViaPublicRpc(txHash) {
             }, 10000);
             const body = await res.json();
 
+            if (isInvalidPublicTxIdResponse(body)) return null;
             if (res.status === 404 || body?.found === false) continue;
             if (!res.ok || body?.error || body?.ok === false) {
                 const message = body?.error || body?.message || `HTTP ${res.status}`;

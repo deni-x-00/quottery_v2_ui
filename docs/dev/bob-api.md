@@ -96,7 +96,7 @@ When `getNetworkTick()` selects `source: "public"`, read methods prefer public R
 - QUBIC balance: `GET /balance/{identity}`.
 - SC view functions: `POST /querySmartContract` with `contractIndex`, `inputType`, `inputSize`, and base64 `requestData`.
 - Asset balances: `GET /assets/ownerships?...`.
-- Transaction lookup: `POST /getTransactionByHash`.
+- Transaction lookup: `POST /getTransactionByHash`; `moneyFlew: true` means executed, `moneyFlew: false` means included but not executed, and code `3` invalid id responses are treated as not found.
 
 If public RPC fails, methods fall back to Bob and may return stale data if Bob is still behind.
 

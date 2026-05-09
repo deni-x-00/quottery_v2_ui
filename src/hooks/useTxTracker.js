@@ -21,6 +21,9 @@ const txTrackingId = (tx) => (
     `tx-${Date.now()}`
 );
 
+const wasTxNotExecuted = (txData) => txData?.moneyFlew === false || txData?.moneyFlew === 'false';
+const wasTxExecuted = (txData) => txData && !wasTxNotExecuted(txData);
+
 export function useTxTracker() {
     const [pendingTxs, setPendingTxs] = useState([]);
     const { bobUrl } = useConfig();
@@ -142,7 +145,7 @@ export function useTxTracker() {
                     // Before tick passes: try GET /tx/{hash} for early confirmation
                     if (tx.txHash && tx.scheduledTick) {
                         const txData = await getTxByHash(bobUrl, tx.txHash);
-                        if (txData && tx.type !== 'order') {
+                        if (wasTxExecuted(txData) && tx.type !== 'order') {
                             showSnackbar(
                                 `Tx confirmed on tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
                                 'success'
@@ -161,7 +164,7 @@ export function useTxTracker() {
                             prev.map((t) => t.id === tx.id ? { ...t, checked: true } : t)
                         );
 
-                        if (tx.txHash) {
+                        if (tx.txHash && tickInfo.source !== 'public') {
                             try {
                                 const logVerification = await verifyTxWithBobLogs(bobUrl, tx, walletPublicIdentity);
 
@@ -199,9 +202,21 @@ export function useTxTracker() {
 
                         // Try /tx/{hash} one final time
                         let txFound = false;
+                        let txNotExecuted = false;
                         if (tx.txHash) {
                             const txData = await getTxByHash(bobUrl, tx.txHash);
-                            txFound = !!txData;
+                            txFound = wasTxExecuted(txData);
+                            txNotExecuted = wasTxNotExecuted(txData);
+                        }
+
+                        if (txNotExecuted) {
+                            showSnackbar(
+                                `Tx was included but not executed at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
+                                'warning'
+                            );
+                            refreshWalletBalances();
+                            removeTx(tx.id);
+                            continue;
                         }
 
                         if (txFound) {
