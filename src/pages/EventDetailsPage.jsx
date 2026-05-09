@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
     Accordion,
     AccordionDetails,
@@ -93,6 +93,7 @@ const formatBroadcastError = (error) => {
 function EventDetailsPage() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const theme = useTheme();
     const isMobile = useMediaQuery("(max-width:600px)");
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
@@ -129,6 +130,10 @@ function EventDetailsPage() {
     const [tradePrice, setTradePrice] = useState(50000); // price out of 100k
     const [tradeAmountInput, setTradeAmountInput] = useState("");
     const [tradePriceInput, setTradePriceInput] = useState("50000");
+    const backTarget = location.state?.from || "/events";
+    const handleBack = useCallback(() => {
+        navigate(backTarget);
+    }, [backTarget, navigate]);
 
     // Cost estimation: shares × price (in GARTH)
     const tradeCoins = Number(tradeAmount || 0) * Number(tradePrice || 0);
@@ -166,7 +171,7 @@ function EventDetailsPage() {
             setLoading(true);
             if (!id || excludedEventIds.includes(parseInt(id))) {
                 setEvent(null);
-                navigate("/");
+                navigate(backTarget);
                 return;
             }
             const eventId = parseInt(id);
@@ -181,7 +186,7 @@ function EventDetailsPage() {
         } finally {
             setLoading(false);
         }
-    }, [id, bobUrl, navigate]);
+    }, [id, bobUrl, backTarget, navigate]);
 
     const renderOrderRows = useCallback(
         (entries, emptyLabel, isBidSide) => {
@@ -539,9 +544,9 @@ function EventDetailsPage() {
                     variant="outlined"
                     startIcon={<KeyboardReturnIcon />}
                     sx={{ mt: 2 }}
-                    onClick={() => navigate("/")}
+                    onClick={handleBack}
                 >
-                    Back to Home
+                    Back to Events
                 </Button>
             </Container>
         );
@@ -567,7 +572,7 @@ function EventDetailsPage() {
             >
                 {/* Title bar */}
                 <Box display="flex" alignItems="center" mb={3}>
-                    <IconButton aria-label="go back" onClick={() => navigate("/")} sx={{ mr: 2 }}>
+                    <IconButton aria-label="go back" onClick={handleBack} sx={{ mr: 2 }}>
                         <ArrowBackIcon />
                     </IconButton>
                     <Box

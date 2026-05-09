@@ -219,6 +219,16 @@ export function useTxTracker() {
                             continue;
                         }
 
+                        if (!txFound && tickInfo.source === 'public' && tx.txHash) {
+                            showSnackbar(
+                                `Tx failed or was not found at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
+                                'error'
+                            );
+                            refreshWalletBalances();
+                            removeTx(tx.id);
+                            continue;
+                        }
+
                         if (txFound) {
                             if (tx.type === 'order') {
                                 const orderFound = await hasMatchingOpenOrder(tx);
