@@ -23,6 +23,7 @@ const txTrackingId = (tx) => (
 
 const wasTxNotExecuted = (txData) => txData?.moneyFlew === false || txData?.moneyFlew === 'false';
 const wasTxExecuted = (txData) => txData && !wasTxNotExecuted(txData);
+const PUBLIC_TX_VERIFY_DELAY_MS = 3000;
 
 export function useTxTracker() {
     const [pendingTxs, setPendingTxs] = useState([]);
@@ -160,6 +161,16 @@ export function useTxTracker() {
                     const networkTickPassed = currentTick > tx.scheduledTick;
 
                     if (networkTickPassed && !tx.checked) {
+                        if (tickInfo.source === 'public') {
+                            const verifyAfter = tx.publicVerifyAfter || (Date.now() + PUBLIC_TX_VERIFY_DELAY_MS);
+                            if (!tx.publicVerifyAfter || Date.now() < verifyAfter) {
+                                setPendingTxs((prev) =>
+                                    prev.map((t) => t.id === tx.id ? { ...t, publicVerifyAfter: verifyAfter } : t)
+                                );
+                                continue;
+                            }
+                        }
+
                         setPendingTxs((prev) =>
                             prev.map((t) => t.id === tx.id ? { ...t, checked: true } : t)
                         );
