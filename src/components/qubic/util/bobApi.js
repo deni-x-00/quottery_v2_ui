@@ -324,11 +324,11 @@ export async function getEntityBalance(bobUrl, identity) {
     }
 }
 
-export async function getTxByHash(bobUrl, txHash) {
+export async function getTxByHash(bobUrl, txHash, scheduledTick = null, sourceIdentity = null) {
     const source = await getPreferredDataSource(bobUrl);
     if (source === 'public') {
         try {
-            return await getTxByHashViaPublicRpc(txHash);
+            return await getTxByHashViaPublicRpc(txHash, scheduledTick, sourceIdentity);
         } catch (e) {
             console.warn('[getTxByHash] Public RPC failed, falling back to Bob:', e.message);
         }
@@ -573,7 +573,53 @@ function isInvalidPublicTxIdResponse(body) {
     return Number(body?.code) === 3 && String(body?.message || '').includes('invalid id format');
 }
 
-async function getTxByHashViaPublicRpc(txHash) {
+function normalizePublicTxHash(hash) {
+    return String(hash || '').trim().toLowerCase();
+}
+
+function extractPublicTxHash(tx) {
+    return tx?.hash || tx?.txHash || tx?.transactionHash || tx?.transactionId || tx?.id || null;
+}
+
+function extractPublicTickTransactions(body) {
+    if (Array.isArray(body)) return body;
+    if (Array.isArray(body?.transactions)) return body.transactions;
+    if (Array.isArray(body?.transactionsForTick)) return body.transactionsForTick;
+    if (Array.isArray(body?.data)) return body.data;
+    if (Array.isArray(body?.items)) return body.items;
+    return [];
+}
+
+async function getTxForTickViaPublicRpc(baseUrl, txHash, scheduledTick, sourceIdentity) {
+    if (!scheduledTick || !sourceIdentity) return null;
+
+    const res = await fetchWithTimeout(`${baseUrl}/getTransactionsForTick`, {
+        method: 'POST',
+        headers: {
+            accept: 'application/json',
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            tickNumber: Number(scheduledTick),
+            filters: {
+                source: sourceIdentity,
+            },
+        }),
+    }, 10000);
+    const body = await res.json();
+
+    if (!res.ok || body?.error || body?.ok === false) {
+        const message = body?.error || body?.message || `HTTP ${res.status}`;
+        console.warn(`[getTxForTickViaPublicRpc] ${baseUrl} failed:`, message);
+        return null;
+    }
+
+    const expectedHash = normalizePublicTxHash(txHash);
+    const transactions = extractPublicTickTransactions(body);
+    return transactions.find((tx) => normalizePublicTxHash(extractPublicTxHash(tx)) === expectedHash) || null;
+}
+
+async function getTxByHashViaPublicRpc(txHash, scheduledTick = null, sourceIdentity = null) {
     if (!txHash) return null;
 
     for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
@@ -588,7 +634,11 @@ async function getTxByHashViaPublicRpc(txHash) {
             }, 10000);
             const body = await res.json();
 
-            if (isInvalidPublicTxIdResponse(body)) return null;
+            if (isInvalidPublicTxIdResponse(body)) {
+                const txFromTick = await getTxForTickViaPublicRpc(baseUrl, txHash, scheduledTick, sourceIdentity);
+                if (txFromTick) return txFromTick;
+                continue;
+            }
             if (res.status === 404 || body?.found === false) continue;
             if (!res.ok || body?.error || body?.ok === false) {
                 const message = body?.error || body?.message || `HTTP ${res.status}`;
@@ -596,9 +646,20 @@ async function getTxByHashViaPublicRpc(txHash) {
                 continue;
             }
 
-            return body?.hash || body?.transactionId || body?.moneyFlew !== undefined ? body : null;
+            if (body?.hash || body?.transactionId || body?.moneyFlew !== undefined) {
+                return body;
+            }
         } catch (e) {
             console.warn(`[getTxByHashViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
+        }
+    }
+
+    for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
+        try {
+            const txFromTick = await getTxForTickViaPublicRpc(baseUrl, txHash, scheduledTick, sourceIdentity);
+            if (txFromTick) return txFromTick;
+        } catch (e) {
+            console.warn(`[getTxForTickViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
         }
     }
 

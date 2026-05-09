@@ -215,7 +215,12 @@ export function useTxTracker() {
                         let txFound = false;
                         let txNotExecuted = false;
                         if (tx.txHash) {
-                            const txData = await getTxByHash(bobUrl, tx.txHash);
+                            const txData = await getTxByHash(
+                                bobUrl,
+                                tx.txHash,
+                                tx.scheduledTick,
+                                walletPublicIdentity
+                            );
                             txFound = wasTxExecuted(txData);
                             txNotExecuted = wasTxNotExecuted(txData);
                         }
