@@ -13,23 +13,24 @@ export const TAG_MAP = {
     0:  { label: 'General',         thumbnail: null },
 
     // Crypto: 1-10
-    1:  { label: 'Crypto',          thumbnail: 'crypto.png' },
-    2:  { label: 'QUBIC',           thumbnail: 'logo/logo.svg' },
+    1:  { label: 'Crypto',          thumbnail: 'bitcoin.svg' },
+    2:  { label: 'QUBIC',           thumbnail: 'qubic.svg' },
     3:  { label: 'BTC',             thumbnail: 'bitcoin.svg' },
     4:  { label: 'ETH',             thumbnail: 'ethereum.svg' },
-    5:  { label: 'SOL',             thumbnail: null },
+    5:  { label: 'SOL',             thumbnail: 'solana.svg' },
 
     // Sports: 11-20
-    11: { label: 'Football',        thumbnail: 'football.svg' },
-    12: { label: 'Basketball',      thumbnail: 'basketball.svg' },
-    13: { label: 'Tennis',          thumbnail: 'tennis.svg' },
-    14: { label: 'Hockey',          thumbnail: 'hockey.svg' },
+    11: { label: 'Sport',           thumbnail: 'sport.svg' },
+    12: { label: 'Football',        thumbnail: 'football.svg' },
+    13: { label: 'Basketball',      thumbnail: 'basketball.svg' },
+    14: { label: 'Tennis',          thumbnail: 'tennis.svg' },
+    15: { label: 'Hockey',          thumbnail: 'hockey.svg' },
 
     // Finance: 21-30
     21: { label: 'GOLD',            thumbnail: 'gold-bar.svg' },
     22: { label: 'SILVER',          thumbnail: 'silver-bar.svg' },
-    23: { label: 'Stocks',          thumbnail: null },
-    24: { label: 'Economy',         thumbnail: null },
+    23: { label: 'Stocks',          thumbnail: 'stocks.svg' },
+    24: { label: 'Economy',         thumbnail: 'economy.svg' },
 
     // Other: 31-40
     31: { label: 'Cinema',          thumbnail: 'cinema.svg' },

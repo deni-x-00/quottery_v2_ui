@@ -36,6 +36,12 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import TokenIcon from "@mui/icons-material/Token";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 
+const getAccentTextColor = (theme) => (
+    theme.palette.mode === "dark"
+        ? theme.palette.primary.main
+        : "#157684"
+);
+
 const overviewCards = [
     {
         icon: <HubIcon />,
@@ -180,31 +186,44 @@ const roleRows = [
     },
 ];
 
-const SectionHeader = ({ eyebrow, title, body }) => (
-    <Box sx={{ mb: { xs: 2.5, md: 3 } }}>
-        <Typography
-            variant="overline"
-            color="primary"
-            sx={{ fontWeight: 800, letterSpacing: 0 }}
-        >
-            {eyebrow}
-        </Typography>
-        <Typography variant="h4" component="h2" fontWeight={800} sx={{ mb: 1 }}>
-            {title}
-        </Typography>
-        {body && (
-            <Typography color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.7 }}>
-                {body}
+const SectionHeader = ({ eyebrow, title, body }) => {
+    const theme = useTheme();
+    const accentTextColor = getAccentTextColor(theme);
+
+    return (
+        <Box sx={{ mb: { xs: 2.5, md: 3 } }}>
+            <Typography
+                variant="overline"
+                sx={{ color: accentTextColor, fontWeight: 800, letterSpacing: 0 }}
+            >
+                {eyebrow}
             </Typography>
-        )}
-    </Box>
-);
+            <Typography variant="h4" component="h2" fontWeight={800} sx={{ mb: 1 }}>
+                {title}
+            </Typography>
+            {body && (
+                <Typography color="text.secondary" sx={{ maxWidth: 760, lineHeight: 1.7 }}>
+                    {body}
+                </Typography>
+            )}
+        </Box>
+    );
+};
 
 function AboutPage() {
     const theme = useTheme();
-    const softBackground = theme.palette.mode === "dark"
+    const heroBackground = theme.palette.mode === "dark"
         ? "rgba(97, 240, 254, 0.08)"
-        : "rgba(44, 62, 80, 0.06)";
+        : theme.palette.background.paper;
+    const heroPanelBackground = theme.palette.mode === "dark"
+        ? theme.palette.background.paper
+        : theme.palette.background.default;
+    const accentTextColor = getAccentTextColor(theme);
+    const surfaceCardSx = {
+        bgcolor: "background.paper",
+        borderColor: "divider",
+        borderRadius: 2,
+    };
 
     return (
         <Box sx={{ bgcolor: "background.default", minHeight: "100vh", pt: { xs: 10, md: 12 }, pb: { xs: 6, md: 9 } }}>
@@ -212,7 +231,7 @@ function AboutPage() {
                 component="section"
                 sx={{
                     borderBottom: `1px solid ${theme.palette.divider}`,
-                    bgcolor: softBackground,
+                    bgcolor: heroBackground,
                     mb: { xs: 5, md: 7 },
                 }}
             >
@@ -225,7 +244,13 @@ function AboutPage() {
                                     label="Powered by Qubic"
                                     color="primary"
                                     variant="outlined"
-                                    sx={{ alignSelf: "flex-start", fontWeight: 700 }}
+                                    sx={{
+                                        alignSelf: "flex-start",
+                                        borderColor: accentTextColor,
+                                        color: accentTextColor,
+                                        fontWeight: 700,
+                                        "& .MuiChip-icon": { color: accentTextColor },
+                                    }}
                                 />
                                 <Typography
                                     variant="h1"
@@ -257,7 +282,7 @@ function AboutPage() {
                                     p: { xs: 2.5, md: 3 },
                                     border: `1px solid ${theme.palette.divider}`,
                                     borderRadius: 2,
-                                    bgcolor: "background.paper",
+                                    bgcolor: heroPanelBackground,
                                 }}
                             >
                                 <Stack spacing={2}>
@@ -290,10 +315,10 @@ function AboutPage() {
                     <Grid container spacing={2.5}>
                         {overviewCards.map((card) => (
                             <Grid item xs={12} md={4} key={card.title} sx={{ display: "flex" }}>
-                                <Card variant="outlined" sx={{ width: "100%", borderRadius: 2 }}>
+                                <Card variant="outlined" sx={{ ...surfaceCardSx, width: "100%" }}>
                                     <CardContent>
                                         <Stack spacing={1.5}>
-                                            <Box sx={{ color: "primary.main" }}>{card.icon}</Box>
+                                            <Box sx={{ color: accentTextColor }}>{card.icon}</Box>
                                             <Typography variant="h6" fontWeight={800}>
                                                 {card.title}
                                             </Typography>
@@ -316,14 +341,14 @@ function AboutPage() {
                         <Grid container spacing={2}>
                             {startTradingSteps.map((step, index) => (
                                 <Grid item xs={12} md={index === 4 ? 12 : 6} key={step.title}>
-                                    <Card variant="outlined" sx={{ height: "100%", borderRadius: 2 }}>
+                                    <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                         <CardContent>
                                             <Stack spacing={1.5}>
                                                 <Box display="flex" alignItems="center" gap={1.25}>
-                                                    <Box sx={{ color: "primary.main", display: "flex" }}>
+                                                    <Box sx={{ color: accentTextColor, display: "flex" }}>
                                                         {step.icon}
                                                     </Box>
-                                                    <Typography variant="caption" color="primary" fontWeight={900}>
+                                                    <Typography variant="caption" sx={{ color: accentTextColor }} fontWeight={900}>
                                                         {String(index + 1).padStart(2, "0")}
                                                     </Typography>
                                                 </Box>
@@ -490,7 +515,7 @@ function AboutPage() {
                                 <Grid container spacing={2}>
                                     {orderBookRows.map((row) => (
                                         <Grid item xs={12} sm={6} key={row.title}>
-                                            <Card variant="outlined" sx={{ height: "100%", borderRadius: 2 }}>
+                                            <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                                 <CardContent>
                                                     <Typography fontWeight={800} sx={{ mb: 0.75 }}>
                                                         {row.title}
@@ -516,10 +541,10 @@ function AboutPage() {
                         <Grid container spacing={2}>
                             {lifecycleSteps.map((step, index) => (
                                 <Grid item xs={12} sm={6} md={4} key={step.title}>
-                                    <Card variant="outlined" sx={{ height: "100%", borderRadius: 2 }}>
+                                    <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                         <CardContent>
                                             <Stack spacing={1}>
-                                                <Typography variant="caption" color="primary" fontWeight={900}>
+                                                <Typography variant="caption" sx={{ color: accentTextColor }} fontWeight={900}>
                                                     STEP {index + 1}
                                                 </Typography>
                                                 <Typography fontWeight={800}>{step.title}</Typography>
@@ -545,7 +570,7 @@ function AboutPage() {
                                 <List disablePadding>
                                     {feeRows.map((row) => (
                                         <ListItem key={row.label} disableGutters alignItems="flex-start">
-                                            <ListItemIcon sx={{ minWidth: 36, color: "primary.main", pt: 0.5 }}>
+                                            <ListItemIcon sx={{ minWidth: 36, color: accentTextColor, pt: 0.5 }}>
                                                 <CheckCircleOutlineIcon fontSize="small" />
                                             </ListItemIcon>
                                             <ListItemText
@@ -615,10 +640,10 @@ function AboutPage() {
                         <Grid container spacing={2}>
                             {roleRows.map((role) => (
                                 <Grid item xs={12} md={6} key={role.title}>
-                                    <Card variant="outlined" sx={{ height: "100%", borderRadius: 2 }}>
+                                    <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                         <CardContent>
                                             <Stack direction="row" spacing={2} alignItems="flex-start">
-                                                <Box sx={{ color: "primary.main", pt: 0.25 }}>
+                                                <Box sx={{ color: accentTextColor, pt: 0.25 }}>
                                                     {role.icon}
                                                 </Box>
                                                 <Box>
