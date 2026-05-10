@@ -22,8 +22,8 @@ export const TAG_MAP = {
 
     // Qubic Ecosystem: 41-50
     41: { label: 'General',         thumbnail: 'qubic.svg' },
-    42: { label: 'QCAP',            thumbnail: 'qubic.svg' },
-    43: { label: 'QMINE',           thumbnail: 'qubic.svg' },
+    42: { label: 'QCAP',            thumbnail: 'qcap.svg' },
+    43: { label: 'QMINE',           thumbnail: 'qmine.svg' },
 
     // Sports: 11-20
     11: { label: 'Sport',           thumbnail: 'sport.svg' },
