@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Box,
   Button,
@@ -21,19 +21,46 @@ import EventOverviewCard from "../components/EventOverviewCard";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
-import { TAG_GROUPS, getAllTags, getCanonicalTagId, getTagGroupId, getTagsForGroup } from "../components/qubic/util/tagMap";
+import { TAG_GROUPS, getAllTags, getCanonicalTagId, getTagGroupId, getTagIdBySlug, getTagSlug, getTagsForGroup } from "../components/qubic/util/tagMap";
+
+const isValidGroupId = (groupId) => (
+  groupId === "all" || TAG_GROUPS.some((group) => group.id === groupId)
+);
+
+const getValidGroupId = (groupId) => (
+  isValidGroupId(groupId) ? groupId : "all"
+);
+
+const getValidTopicId = (topicId) => {
+  if (topicId === null || topicId === undefined || topicId === "") return "";
+  const topicValue = String(topicId).trim();
+
+  if (/^\d+$/.test(topicValue)) {
+    const id = Number(topicValue);
+    if (!Number.isFinite(id) || id <= 0) return "";
+    return getAllTags().some((tag) => tag.id === id) ? String(id) : "";
+  }
+
+  const id = getTagIdBySlug(topicValue);
+  return id > 0 ? String(id) : "";
+};
 
 function EventsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
   const { isConnected } = useConfig();
   const { allEvents, loading, fetchEvents } = useQuotteryContext();
   const { trackTx } = useTxTracker();
-  const [searchTerm, setSearchTerm] = useState("");
   const [isFilterLoading, setIsFilterLoading] = useState(false);
-  const [selectedGroupId, setSelectedGroupId] = useState("all");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
   const [expandedGroupIds, setExpandedGroupIds] = useState({});
+  const selectedTopicId = getValidTopicId(searchParams.get("topic"));
+  const selectedGroupId = selectedTopicId
+      ? getTagGroupId(Number(selectedTopicId))
+      : getValidGroupId(searchParams.get("group"));
+  const searchTerm = searchParams.get("q") || "";
+  const eventsReturnPath = `${location.pathname}${location.search}`;
 
   useEffect(() => {
     if (!isConnected) return;
@@ -79,10 +106,11 @@ function EventsPage() {
     for (const tag of visibleTags) counts[tag.id] = 0;
 
     for (const event of baseEventsToDisplay) {
-      const tagId = getCanonicalTagId(event.tag);
-      const groupId = getTagGroupId(tagId);
+      const rawTagId = Number(event.tag);
+      const tagId = getCanonicalTagId(rawTagId);
+      const groupId = getTagGroupId(rawTagId);
       counts[groupId] = (counts[groupId] || 0) + 1;
-      counts[tagId] = (counts[tagId] || 0) + 1;
+      if (tagId > 0) counts[tagId] = (counts[tagId] || 0) + 1;
     }
 
     return counts;
@@ -133,10 +161,47 @@ function EventsPage() {
     return sortRecent(baseEventsToDisplay.filter((event) => getTagGroupId(event.tag) === selectedGroupId));
   }, [baseEventsToDisplay, selectedGroupId, selectedTopicId]);
 
-  const handleGroupChange = (groupId) => {
-    setSelectedGroupId(groupId);
-    setSelectedTopicId("");
-  };
+  const updateEventsQuery = React.useCallback((updates, options = {}) => {
+    const nextParams = new URLSearchParams(searchParams);
+
+    if (Object.prototype.hasOwnProperty.call(updates, "group")) {
+      const nextGroupId = getValidGroupId(updates.group);
+      if (nextGroupId === "all") {
+        nextParams.delete("group");
+      } else {
+        nextParams.set("group", nextGroupId);
+      }
+      nextParams.delete("topic");
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "topic")) {
+      const nextTopicId = getValidTopicId(updates.topic);
+      nextParams.delete("topic");
+      if (nextTopicId) {
+        nextParams.set("topic", getTagSlug(Number(nextTopicId)));
+        nextParams.set("group", getTagGroupId(Number(nextTopicId)));
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "q")) {
+      const nextSearchTerm = String(updates.q || "");
+      if (nextSearchTerm) {
+        nextParams.set("q", nextSearchTerm);
+      } else {
+        nextParams.delete("q");
+      }
+    }
+
+    setSearchParams(nextParams, { replace: Boolean(options.replace) });
+  }, [searchParams, setSearchParams]);
+
+  const handleSearchChange = React.useCallback((value) => {
+    updateEventsQuery({ q: value }, { replace: true });
+  }, [updateEventsQuery]);
+
+  const handleGroupChange = React.useCallback((groupId) => {
+    updateEventsQuery({ group: groupId });
+  }, [updateEventsQuery]);
 
   const toggleGroupExpansion = (groupId) => {
     setExpandedGroupIds((current) => ({
@@ -152,12 +217,11 @@ function EventsPage() {
     }
 
     if (item.type === "tag") {
-      setSelectedGroupId(item.groupId || getTagGroupId(item.id));
-      setSelectedTopicId(String(item.id));
+      updateEventsQuery({ topic: String(item.id) });
       return;
     }
 
-    setSelectedTopicId("");
+    updateEventsQuery({ topic: "" });
   };
 
   const renderLoading = () => (
@@ -199,7 +263,7 @@ function EventsPage() {
           ) : (
               <>
                 <Box sx={{ mb: 3 }}>
-                  <ModernSearchFilter searchTerm={searchTerm} onSearchChange={setSearchTerm} />
+                  <ModernSearchFilter searchTerm={searchTerm} onSearchChange={handleSearchChange} />
                   <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
                     {groupOptions.map((group) => {
                       const selected = selectedGroupId === group.id;
@@ -328,7 +392,7 @@ function EventsPage() {
                                       <Grid item xs={12} sm={6} lg={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                         <EventOverviewCard
                                             data={{ ...event, desc: event.desc }}
-                                            onClick={() => navigate(`/event/${event.eid}`, { state: { from: "/events" } })}
+                                            onClick={() => navigate(`/event/${event.eid}`, { state: { from: eventsReturnPath } })}
                                             status={event.status}
                                             onTxBroadcast={trackTx}
                                         />

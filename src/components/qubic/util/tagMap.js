@@ -4,6 +4,7 @@
  *
  * Reserved ranges:
  * - Crypto: 1-10
+ * - Qubic Ecosystem: 41-50
  * - Sports: 11-20
  * - Finance: 21-30
  * - Other: 31-40
@@ -18,6 +19,11 @@ export const TAG_MAP = {
     3:  { label: 'BTC',             thumbnail: 'bitcoin.svg' },
     4:  { label: 'ETH',             thumbnail: 'ethereum.svg' },
     5:  { label: 'SOL',             thumbnail: 'solana.svg' },
+
+    // Qubic Ecosystem: 41-50
+    41: { label: 'General',         thumbnail: 'qubic.svg' },
+    42: { label: 'QCAP',            thumbnail: 'qubic.svg' },
+    43: { label: 'QMINE',           thumbnail: 'qubic.svg' },
 
     // Sports: 11-20
     11: { label: 'Sport',           thumbnail: 'sport.svg' },
@@ -43,10 +49,19 @@ export const TAG_MAP = {
 
 export const TAG_GROUPS = [
     { id: 'crypto', label: 'Crypto', min: 1, max: 10 },
+    { id: 'qubic-ecosystem', label: 'Qubic Ecosystem', min: 41, max: 50 },
     { id: 'sports', label: 'Sports', min: 11, max: 20 },
     { id: 'finance', label: 'Finance', min: 21, max: 30 },
     { id: 'other', label: 'Other', min: 31, max: 40 },
 ];
+
+function normalizeTagSlug(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
 
 export function getCanonicalTagId(tagId) {
     const id = Number(tagId);
@@ -54,13 +69,28 @@ export function getCanonicalTagId(tagId) {
 }
 
 export function getTagGroupId(tagId) {
-    const id = getCanonicalTagId(tagId);
+    const id = Number(tagId);
     const group = TAG_GROUPS.find(({ min, max }) => id >= min && id <= max);
     return group?.id || 'other';
 }
 
 export function getTagInfo(tagId) {
     return TAG_MAP[getCanonicalTagId(tagId)] || TAG_MAP[0];
+}
+
+export function getTagSlug(tagId) {
+    const tag = getTagInfo(tagId);
+    return normalizeTagSlug(tag.slug || tag.label);
+}
+
+export function getTagIdBySlug(slug) {
+    const normalizedSlug = normalizeTagSlug(slug);
+    if (!normalizedSlug) return 0;
+
+    const tag = getAllTags().find((item) => (
+        item.id > 0 && getTagSlug(item.id) === normalizedSlug
+    ));
+    return tag?.id || 0;
 }
 
 export function getAllTags() {
