@@ -35,6 +35,9 @@ const PUBLIC_RPC_BASE_URLS = [
     'https://rpc.qubic.org/live/v1',
     'https://rpc.qubic.org/v1',
 ];
+const PUBLIC_EVENT_LOG_URLS = [
+    'https://rpc.qubic.org/query/v1/getEventLogs',
+];
 const SOURCE_CACHE_MS = 3000;
 let sourceCache = { bobUrl: '', at: 0, source: 'bob', tickInfo: null };
 
@@ -402,6 +405,71 @@ export async function getTxExecutionLogsFromBob(bobUrl, txHash) {
         logTo,
         logs,
     };
+}
+
+export async function getTxExecutionLogsFromPublicRpc(txHash) {
+    if (!txHash) return null;
+
+    const payload = {
+        filters: {
+            transactionHash: txHash,
+        },
+        pagination: {
+            offset: 0,
+            size: 50,
+        },
+    };
+
+    for (const url of PUBLIC_EVENT_LOG_URLS) {
+        try {
+            const res = await fetchWithTimeout(url, {
+                method: 'POST',
+                headers: {
+                    accept: 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            }, 10000);
+            const body = await res.json();
+
+            if (!res.ok || body?.error || body?.ok === false) {
+                const message = body?.error || body?.message || `HTTP ${res.status}`;
+                console.warn(`[getTxExecutionLogsFromPublicRpc] ${url} failed:`, message);
+                continue;
+            }
+
+            const logs = Array.isArray(body?.eventLogs) ? body.eventLogs : [];
+            const firstLog = logs[0];
+            const total = Number(body?.hits?.total ?? logs.length);
+            if (logs.length === 0 && total <= 0) {
+                return {
+                    tx: null,
+                    logs: [],
+                    raw: body,
+                    validForTick: body?.validForTick,
+                };
+            }
+
+            return {
+                tx: {
+                    hash: txHash,
+                    txHash,
+                    transactionHash: txHash,
+                    executed: true,
+                    found: true,
+                },
+                tick: firstLog?.tickNumber,
+                epoch: firstLog?.epoch,
+                logs,
+                raw: body,
+                validForTick: body?.validForTick,
+            };
+        } catch (e) {
+            console.warn(`[getTxExecutionLogsFromPublicRpc] ${url} failed:`, e?.message || e);
+        }
+    }
+
+    throw new Error('All public RPC event log endpoints failed');
 }
 
 function hexToBytes(hex) {

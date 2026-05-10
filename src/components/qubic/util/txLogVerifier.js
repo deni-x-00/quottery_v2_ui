@@ -2,6 +2,7 @@ import {
     GARTH_ASSET_NAME,
     GARTH_ISSUER,
     getTxExecutionLogsFromBob,
+    getTxExecutionLogsFromPublicRpc,
     QTRYGOV_ASSET_NAME,
     QTRYGOV_ISSUER,
     QUOTTERY_CONTRACT_INDEX,
@@ -66,9 +67,85 @@ function normalizeAssetName(name) {
     return String(name || '').replace(/\0/g, '').trim().toUpperCase();
 }
 
+function base64ToHex(base64) {
+    if (!base64 || typeof base64 !== 'string') return '';
+    try {
+        const binary = atob(base64);
+        let hex = '';
+        for (let i = 0; i < binary.length; i += 1) {
+            hex += binary.charCodeAt(i).toString(16).padStart(2, '0');
+        }
+        return hex;
+    } catch {
+        return '';
+    }
+}
+
+function normalizePublicRpcLog(log) {
+    if (!log || log.type !== undefined || log.logType === undefined) return log;
+
+    const type = Number(log.logType);
+    const normalized = {
+        ...log,
+        type,
+        body: {},
+    };
+
+    if (log.quTransfer) {
+        normalized.body = {
+            from: log.quTransfer.source,
+            to: log.quTransfer.destination,
+            amount: log.quTransfer.amount,
+        };
+    } else if (log.assetOwnershipChange) {
+        normalized.body = {
+            assetName: log.assetOwnershipChange.assetName,
+            issuerPublicKey: log.assetOwnershipChange.assetIssuer,
+            sourcePublicKey: log.assetOwnershipChange.source,
+            destinationPublicKey: log.assetOwnershipChange.destination,
+            numberOfShares: log.assetOwnershipChange.numberOfShares,
+        };
+    } else if (log.assetPossessionChange) {
+        normalized.body = {
+            assetName: log.assetPossessionChange.assetName,
+            issuerPublicKey: log.assetPossessionChange.assetIssuer,
+            sourcePublicKey: log.assetPossessionChange.source,
+            destinationPublicKey: log.assetPossessionChange.destination,
+            numberOfShares: log.assetPossessionChange.numberOfShares,
+        };
+    } else if (log.smartContractMessage) {
+        normalized.body = {
+            scIndex: log.smartContractMessage.contractIndex,
+            scLogType: log.smartContractMessage.contractMessageType,
+            content: base64ToHex(log.rawPayload),
+        };
+    } else if (log.assetOwnershipManagingContractChange) {
+        normalized.body = {
+            assetName: log.assetOwnershipManagingContractChange.assetName,
+            issuerPublicKey: log.assetOwnershipManagingContractChange.assetIssuer,
+            ownershipPublicKey: log.assetOwnershipManagingContractChange.owner,
+            numberOfShares: log.assetOwnershipManagingContractChange.numberOfShares,
+            sourceContractIndex: log.assetOwnershipManagingContractChange.sourceContractIndex,
+            destinationContractIndex: log.assetOwnershipManagingContractChange.destinationContractIndex,
+        };
+    } else if (log.assetPossessionManagingContractChange) {
+        normalized.body = {
+            assetName: log.assetPossessionManagingContractChange.assetName,
+            issuerPublicKey: log.assetPossessionManagingContractChange.assetIssuer,
+            ownershipPublicKey: log.assetPossessionManagingContractChange.owner,
+            possessionPublicKey: log.assetPossessionManagingContractChange.possessor,
+            numberOfShares: log.assetPossessionManagingContractChange.numberOfShares,
+            sourceContractIndex: log.assetPossessionManagingContractChange.sourceContractIndex,
+            destinationContractIndex: log.assetPossessionManagingContractChange.destinationContractIndex,
+        };
+    }
+
+    return normalized;
+}
+
 function normalizeLogs(logs) {
     if (!Array.isArray(logs)) return [];
-    return logs.filter(Boolean);
+    return logs.filter(Boolean).map(normalizePublicRpcLog);
 }
 
 function numberOrNull(value) {
@@ -507,5 +584,34 @@ export async function verifyTxWithBobLogs(bobUrl, tx, walletIdentity) {
         epoch: result.epoch,
         logFrom: result.logFrom,
         logTo: result.logTo,
+    };
+}
+
+export async function verifyTxWithPublicRpcLogs(tx, walletIdentity) {
+    if (!tx?.txHash) {
+        return inconclusive('missing-tx-hash');
+    }
+
+    const result = await getTxExecutionLogsFromPublicRpc(tx.txHash);
+    if (!result?.tx) {
+        return inconclusive('tx-not-found-in-public-rpc-logs');
+    }
+
+    const logs = normalizeLogs(result.logs);
+    if (logs.length === 0) {
+        return inconclusive('public-rpc-logs-unavailable', { txData: result.tx });
+    }
+
+    const logCheck = verifyKnownTransactionLogs(logs, tx, walletIdentity);
+
+    return {
+        ...logCheck,
+        inconclusive: logCheck.inconclusive ?? !logCheck.verified,
+        txData: result.tx,
+        logs,
+        tick: result.tick,
+        epoch: result.epoch,
+        validForTick: result.validForTick,
+        source: 'public-rpc-event-logs',
     };
 }

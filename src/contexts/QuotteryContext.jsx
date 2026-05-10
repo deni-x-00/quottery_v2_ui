@@ -360,10 +360,18 @@ export const QuotteryProvider = ({ children }) => {
 
     if (!Array.isArray(source)) return [];
 
-    return source.map((entry) => ({
-      price: Number(entry?.price ?? 0),
-      amount: Number(entry?.amount ?? 0),
-    }));
+    const aggregatedByPrice = new Map();
+
+    for (const entry of source) {
+      const price = Number(entry?.price ?? 0);
+      const amount = Number(entry?.amount ?? 0);
+      if (!Number.isFinite(price) || !Number.isFinite(amount) || amount <= 0) continue;
+
+      aggregatedByPrice.set(price, (aggregatedByPrice.get(price) || 0) + amount);
+    }
+
+    return Array.from(aggregatedByPrice, ([price, amount]) => ({ price, amount }))
+        .sort((a, b) => isBidSide ? b.price - a.price : a.price - b.price);
   };
 
   // Fetch orderbook for a specific event via Bob
