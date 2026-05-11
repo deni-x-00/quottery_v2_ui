@@ -7,9 +7,11 @@ import {
   Box,
   useTheme,
   Grid,
+  Stack,
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
+import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import { Typewriter } from "react-simple-typewriter";
 import { motion, AnimatePresence } from "framer-motion";
 import AnimatedBars from "../components/qubic/ui/AnimateBars";
@@ -17,16 +19,61 @@ import EventOverviewCard from "../components/EventOverviewCard";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
+import { fetchFullOrderbook } from "../components/qubic/util/bobApi";
 
 const RECENT_EVENT_LIMIT = 6;
+const HOTTEST_EVENT_LIMIT = 6;
+const HOTTEST_CONCURRENCY = 4;
+
+const flattenOrderbook = (book) => [
+  ...(book?.option0?.bids || []),
+  ...(book?.option0?.asks || []),
+  ...(book?.option1?.bids || []),
+  ...(book?.option1?.asks || []),
+];
+
+const getOrderbookStats = (book) => {
+  const orders = flattenOrderbook(book);
+  return orders.reduce((stats, order) => {
+    const amount = Number(order?.amount || 0);
+    const price = Number(order?.price || 0);
+    if (!Number.isFinite(amount) || amount <= 0) return stats;
+
+    return {
+      orderCount: stats.orderCount + 1,
+      shareVolume: stats.shareVolume + amount,
+      quoteVolume: stats.quoteVolume + (Number.isFinite(price) && price > 0 ? amount * price : 0),
+    };
+  }, { orderCount: 0, shareVolume: 0, quoteVolume: 0 });
+};
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
 
 function StartPage() {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { isConnected } = useConfig();
+  const { isConnected, bobUrl } = useConfig();
   const { allEvents, loading, fetchEvents } = useQuotteryContext();
   const { trackTx } = useTxTracker();
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [activeSection, setActiveSection] = useState("recent");
+  const [isLoadingHottest, setIsLoadingHottest] = useState(false);
+  const [hottestEvents, setHottestEvents] = useState([]);
+  const [hottestLoaded, setHottestLoaded] = useState(false);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -42,13 +89,68 @@ function StartPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected]);
 
+  useEffect(() => {
+    setHottestLoaded(false);
+    setHottestEvents([]);
+  }, [allEvents]);
+
   const recentEvents = useMemo(() => (
       [...(Array.isArray(allEvents) ? allEvents : [])]
           .sort((a, b) => Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0))
           .slice(0, RECENT_EVENT_LIMIT)
   ), [allEvents]);
 
-  const isLoadingOverall = loading || isLoadingEvents;
+  const loadHottestEvents = async () => {
+    if (hottestLoaded || isLoadingHottest) return;
+
+    const events = Array.isArray(allEvents) ? allEvents : [];
+    if (!bobUrl || events.length === 0) return;
+
+    setIsLoadingHottest(true);
+    try {
+      const scoredEvents = await mapWithConcurrency(events, HOTTEST_CONCURRENCY, async (event) => {
+        const eid = event?.eid ?? event?.eventId;
+        if (eid === undefined || eid === null) return null;
+
+        try {
+          const book = await fetchFullOrderbook(bobUrl, eid);
+          const hotStats = getOrderbookStats(book);
+          if (hotStats.orderCount === 0) return null;
+
+          return {
+            ...event,
+            hotStats,
+            hotScore: hotStats.quoteVolume || hotStats.shareVolume || hotStats.orderCount,
+          };
+        } catch (e) {
+          console.warn(`Failed to fetch hottest stats for event ${eid}:`, e);
+          return null;
+        }
+      });
+
+      setHottestEvents(
+          scoredEvents
+              .filter(Boolean)
+              .sort((a, b) =>
+                  Number(b.hotScore || 0) - Number(a.hotScore || 0) ||
+                  Number(b.hotStats?.orderCount || 0) - Number(a.hotStats?.orderCount || 0)
+              )
+              .slice(0, HOTTEST_EVENT_LIMIT)
+      );
+      setHottestLoaded(true);
+    } finally {
+      setIsLoadingHottest(false);
+    }
+  };
+
+  const showHottest = async () => {
+    setActiveSection("hottest");
+    await loadHottestEvents();
+  };
+
+  const visibleEvents = activeSection === "hottest" ? hottestEvents : recentEvents;
+  const sectionTitle = activeSection === "hottest" ? "Hottest Events" : "Recent Events";
+  const isLoadingOverall = loading || isLoadingEvents || (activeSection === "hottest" && isLoadingHottest);
 
   const cardVariants = {
     initial: { scale: 0.7, opacity: 0 },
@@ -141,28 +243,42 @@ function StartPage() {
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2, mb: 2.5 }}>
                   <Box />
                   <Typography variant="h4" color="text.primary" sx={{ fontWeight: 700, fontSize: { xs: "1.5rem", md: "2rem" } }}>
-                    Recent Events
+                    {sectionTitle}
                   </Typography>
-                  <Button component={RouterLink} to="/events" size="small" variant="text" sx={{ justifySelf: "end", textTransform: "none", fontWeight: 700 }}>
-                    All Events
-                  </Button>
+                  <Stack direction="row" spacing={1} sx={{ justifySelf: "end" }}>
+                    <Button
+                        size="small"
+                        variant={activeSection === "hottest" ? "contained" : "text"}
+                        startIcon={<LocalFireDepartmentIcon />}
+                        onClick={activeSection === "hottest" ? () => setActiveSection("recent") : showHottest}
+                        disabled={isLoadingHottest || isLoadingOverall}
+                        sx={{ borderRadius: 1, textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}
+                    >
+                      {activeSection === "hottest" ? "Recent" : "Hottest"}
+                    </Button>
+                    <Button component={RouterLink} to="/events" size="small" variant="text" sx={{ textTransform: "none", fontWeight: 700, whiteSpace: "nowrap" }}>
+                      All Events
+                    </Button>
+                  </Stack>
                 </Box>
 
                 {isLoadingOverall ? (
                     <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", py: 8, gap: 2 }}>
                       <AnimatedBars />
-                      <Typography variant="h6" color="text.secondary">Loading events, please wait...</Typography>
+                      <Typography variant="h6" color="text.secondary">
+                        {activeSection === "hottest" ? "Scanning order books..." : "Loading events, please wait..."}
+                      </Typography>
                     </Box>
-                ) : recentEvents.length > 0 ? (
+                ) : visibleEvents.length > 0 ? (
                     <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} justifyContent="center" alignItems="stretch">
                       <AnimatePresence>
-                        {recentEvents.map((event, index) => {
+                        {visibleEvents.map((event, index) => {
                           const stableKey = event?.eid ?? `evt-${index}`;
                           return (
                               <Grid item xs={12} sm={6} md={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                 <EventOverviewCard
                                     data={{ ...event, desc: event.desc }}
-                                    onClick={() => navigate(`/event/${event.eid}`)}
+                                    onClick={() => navigate(`/event/${event.eid}`, { state: { from: "/" } })}
                                     status={event.status}
                                     onTxBroadcast={trackTx}
                                 />
@@ -174,7 +290,7 @@ function StartPage() {
                 ) : (
                     <Box sx={{ textAlign: "center", py: 6 }}>
                       <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>
-                        No events found.
+                        {activeSection === "hottest" ? "No open order activity found." : "No events found."}
                       </Typography>
                     </Box>
                 )}

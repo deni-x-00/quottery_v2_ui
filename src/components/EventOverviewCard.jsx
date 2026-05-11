@@ -13,6 +13,7 @@ import {
 import { motion } from "framer-motion";
 import HelpIcon from "@mui/icons-material/Help";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
 import { getTagInfo } from "./qubic/util/tagMap";
 import QuickBuyModal from "./QuickBuyModal";
 
@@ -155,6 +156,14 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                                 {data.endDate}
                             </Typography>
                         </Box>
+                        {data.hotStats && (
+                            <Box display="flex" alignItems="center" gap={0.5} sx={{ flexShrink: 0 }}>
+                                <LocalFireDepartmentIcon sx={{ fontSize: "1rem", color: theme.palette.warning.main }} />
+                                <Typography variant="body2" sx={{ fontSize: "0.8rem", fontWeight: 700 }}>
+                                    {data.hotStats.orderCount} orders
+                                </Typography>
+                            </Box>
+                        )}
                     </Stack>
                 </CardContent>
             </Card>
