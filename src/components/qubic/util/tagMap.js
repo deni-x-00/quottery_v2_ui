@@ -24,6 +24,7 @@ export const TAG_MAP = {
     41: { label: 'General',         thumbnail: 'qubic.svg' },
     42: { label: 'QCAP',            thumbnail: 'qcap.svg' },
     43: { label: 'QMINE',           thumbnail: 'qmine.svg' },
+    44: { label: 'QDOGE',           thumbnail: 'qdoge.svg' },
 
     // Sports: 11-20
     11: { label: 'Sport',           thumbnail: 'sport.svg' },
