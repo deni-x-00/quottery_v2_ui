@@ -21,7 +21,7 @@ export const TAG_MAP = {
     5:  { label: 'SOL',             thumbnail: 'solana.svg' },
 
     // Qubic Ecosystem: 41-50
-    41: { label: 'General',         thumbnail: 'qubic.svg' },
+    41: { label: 'Qubic',           thumbnail: 'qubic.svg' },
     42: { label: 'QCAP',            thumbnail: 'qcap.svg' },
     43: { label: 'QMINE',           thumbnail: 'qmine.svg' },
     44: { label: 'QDOGE',           thumbnail: 'qdoge.svg' },
@@ -75,6 +75,11 @@ export function getTagGroupId(tagId) {
     const id = Number(tagId);
     const group = TAG_GROUPS.find(({ min, max }) => id >= min && id <= max);
     return group?.id || 'other';
+}
+
+export function getTagGroupInfo(tagId) {
+    const groupId = getTagGroupId(tagId);
+    return TAG_GROUPS.find((group) => group.id === groupId) || TAG_GROUPS[TAG_GROUPS.length - 1];
 }
 
 export function getTagInfo(tagId) {

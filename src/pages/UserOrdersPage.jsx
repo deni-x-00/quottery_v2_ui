@@ -236,7 +236,7 @@ const UserOrdersPage = () => {
       const res = await broadcastTransaction(bobUrl, txHex);
 
       if (res && !res.error) {
-        const side = order.isBid ? "Bid" : "Ask";
+        const side = order.isBid ? "Buy" : "Sell";
         const description = `${side} ${formatQubicAmount(order.qty)} @ ${formatQubicAmount(order.price)} for ${getOptionName(order.market_id, order.option)} of ${getEventName(order.market_id)}`;
         trackTx({
           txHash: res.txHash,

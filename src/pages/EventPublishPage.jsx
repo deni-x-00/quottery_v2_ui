@@ -37,8 +37,6 @@ import {
   KeyboardReturn as KeyboardReturnIcon,
   Insights as InsightsIcon,
   Info as InfoIcon,
-  ArrowBack as ArrowBackIcon,
-  Help as HelpIcon,
   Refresh as RefreshIcon,
 } from "@mui/icons-material";
 import { useTheme, alpha } from "@mui/material/styles";
@@ -70,9 +68,9 @@ import { getPositionAmount, isEventClosed, validateOrderPreflight } from "../com
 import gcLogo from "../assets/gc.png";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import { useTxTracker } from "../hooks/useTxTracker";
-import { getTagInfo } from "../components/qubic/util/tagMap";
 import TradeAmountSlider from "../components/TradeAmountSlider";
 import TradePriceSelector from "../components/TradePriceSelector";
+import EventHeader from "../components/EventHeader";
 const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
   try {
@@ -411,7 +409,7 @@ function EventDetailsPage() {
         trackTx({
           txHash: res.txHash,
           scheduledTick,
-          description: `${tradeSide === "buy" ? "Bid" : "Ask"} ${formatQubicAmount(tradeAmount)} "${optDesc}" @ ${formatQubicAmount(tradePrice)}`,
+          description: `${tradeSide === "buy" ? "Buy" : "Sell"} ${formatQubicAmount(tradeAmount)} "${optDesc}" @ ${formatQubicAmount(tradePrice)}`,
           inputType,
           type: "order",
           eventId: event.eid,
@@ -558,35 +556,7 @@ function EventDetailsPage() {
               position: "relative",
             }}
         >
-          {/* Title bar */}
-          <Box display="flex" alignItems="center" mb={3}>
-            <IconButton aria-label="go back" onClick={() => navigate("/")} sx={{ mr: 2 }}>
-              <ArrowBackIcon />
-            </IconButton>
-            <Box
-                sx={{
-                  width: { xs: 32, sm: 38 }, height: { xs: 32, sm: 38 },
-                  backgroundColor: theme.palette.action.hover,
-                  borderRadius: 1, display: "flex", alignItems: "center",
-                  justifyContent: "center", flexShrink: 0, overflow: "hidden", mr: 1.5,
-                }}
-            >
-              {(() => {
-                const tagInfo = getTagInfo(event?.tag);
-                const thumbSrc = tagInfo.thumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
-                return thumbSrc ? (
-                    <img src={thumbSrc} alt={event?.desc || "event"}
-                         style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                ) : (
-                    <HelpIcon sx={{ fontSize: { xs: "1.2rem", sm: "1.5rem" }, color: theme.palette.text.secondary }} />
-                );
-              })()}
-            </Box>
-            <Typography color="text.primary" fontWeight={400}
-                        sx={{ fontSize: { xs: "1.1rem", sm: "1.6rem" } }}>
-              {event.desc}
-            </Typography>
-          </Box>
+          <EventHeader event={event} onBack={() => navigate("/")} resolveThumbnail={resolveThumbnail} />
 
           {/* Main layout: left (details) | right (trading box) */}
           <Grid container spacing={2} alignItems="flex-start">
@@ -651,7 +621,7 @@ function EventDetailsPage() {
                     {!obLoading && !obError && (
                         <Grid container spacing={2}>
                           <Grid item xs={12} md={6}>
-                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Bids</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Buy Orders</Typography>
                             <TableContainer component={Paper} elevation={0} variant="outlined"
                                             sx={{ borderRadius: 1, maxHeight: 400, overflowY: "auto", scrollbarWidth: "none", "::-webkit-scrollbar": { width: 0 } }}>
                               <Table size="small" stickyHeader>
@@ -663,13 +633,13 @@ function EventDetailsPage() {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {renderOrderRows(buildOrderSideEntries(orderbook, obTab, "bids"), "No bids", true)}
+                                  {renderOrderRows(buildOrderSideEntries(orderbook, obTab, "bids"), "No buy orders", true)}
                                 </TableBody>
                               </Table>
                             </TableContainer>
                           </Grid>
                           <Grid item xs={12} md={6}>
-                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Asks</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Sell Orders</Typography>
                             <TableContainer component={Paper} elevation={0} variant="outlined"
                                             sx={{ borderRadius: 1, maxHeight: 400, overflowY: "auto", scrollbarWidth: "none", "::-webkit-scrollbar": { width: 0 } }}>
                               <Table size="small" stickyHeader>
@@ -681,7 +651,7 @@ function EventDetailsPage() {
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
-                                  {renderOrderRows(buildOrderSideEntries(orderbook, obTab, "asks"), "No asks", false)}
+                                  {renderOrderRows(buildOrderSideEntries(orderbook, obTab, "asks"), "No sell orders", false)}
                                 </TableBody>
                               </Table>
                             </TableContainer>
@@ -803,8 +773,8 @@ function EventDetailsPage() {
                   <Tabs value={tradeSide} onChange={(_, v) => v && setTradeSide(v)}
                         variant="fullWidth" textColor="primary" indicatorColor="primary"
                         sx={{ minHeight: 30, "& .MuiTab-root": { minHeight: 30, textTransform: "none", fontWeight: 600, fontSize: 13, py: 0.25 }, "& .MuiTabs-indicator": { height: 2, borderRadius: 1 } }}>
-                    <Tab label="Bid" value="buy" />
-                    <Tab label="Ask" value="sell" />
+                    <Tab label="Buy" value="buy" />
+                    <Tab label="Sell" value="sell" />
                   </Tabs>
 
                   {/* Option selector */}
@@ -863,14 +833,14 @@ function EventDetailsPage() {
                   <Button variant="contained" fullWidth size="medium"
                           onClick={handleTradeClick}
                           disabled={tradeSubmitDisabled}>
-                    {tradeSide === "buy" ? "Place Bid" : "Place Ask"}
+                    {tradeSide === "buy" ? "Place Buy Order" : "Place Sell Order"}
                   </Button>
 
                   {/* Matching info hint */}
                   <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center", lineHeight: 1.3 }}>
                     {tradeSide === "buy"
-                        ? `Mint: matches if a bid on the opposite option has price >= ${formatQubicAmount(WHOLE_SHARE_PRICE - tradePrice)}`
-                        : `Trade: matches if a bid on same option has price >= your ask price`
+                        ? `Mint: matches if a buy order on the opposite option has price >= ${formatQubicAmount(WHOLE_SHARE_PRICE - tradePrice)}`
+                        : `Trade: matches if a buy order on same option has price >= your sell price`
                     }
                   </Typography>
                 </Stack>

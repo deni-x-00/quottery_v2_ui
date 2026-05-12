@@ -13,10 +13,15 @@ import {
 import { motion } from "framer-motion";
 import HelpIcon from "@mui/icons-material/Help";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import { getTagInfo } from "./qubic/util/tagMap";
+import { getCanonicalTagId, getTagInfo } from "./qubic/util/tagMap";
+import { isEventClosed } from "./qubic/util/tradeValidation";
 import QuickBuyModal from "./QuickBuyModal";
 
 const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
+const yesColor = "#2e7d32";
+const yesColorDark = "#81c784";
+const noColor = "#d32f2f";
+const noColorDark = "#ef9a9a";
 
 function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
     const theme = useTheme();
@@ -27,7 +32,9 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
 
     const dynamicColors = {
         shadowNormal: isDarkMode ? "0 4px 8px rgba(0,0,0,0.6)" : "0 4px 8px rgba(0,0,0,0.1)",
-        shadowHover: isDarkMode ? "0 8px 24px rgba(0,0,0,0.8)" : "0 8px 24px rgba(0,0,0,0.2)",
+        shadowHover: isDarkMode ? "0 12px 30px rgba(0,0,0,0.9)" : "0 14px 34px rgba(25,118,210,0.22)",
+        cardBorderHover: isDarkMode ? "rgba(97,240,254,0.65)" : "rgba(25,118,210,0.55)",
+        cardBackgroundHover: isDarkMode ? "rgba(97,240,254,0.08)" : "rgba(25,118,210,0.08)",
     };
 
     const resolveThumbnail = (name) => {
@@ -36,7 +43,9 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
     };
 
     const tagInfo = getTagInfo(data?.tag);
+    const tagId = getCanonicalTagId(data?.tag);
     const thumbSrc = tagInfo.thumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
+    const hasEnded = isEventClosed(data);
 
     const handleOptionClick = (e, optionIndex) => {
         e.stopPropagation();
@@ -60,17 +69,18 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                     display: "flex",
                     flexDirection: "column",
                     width: "100%",
+                    position: "relative",
                     borderRadius: 2,
-                    border: `1px solid ${theme.palette.divider}`,
-                    backgroundColor: theme.palette.background.paper,
+                    border: `1px solid ${isHovered ? dynamicColors.cardBorderHover : theme.palette.divider}`,
+                    backgroundColor: isHovered ? dynamicColors.cardBackgroundHover : theme.palette.background.paper,
                     boxShadow: isHovered ? dynamicColors.shadowHover : dynamicColors.shadowNormal,
-                    transition: "box-shadow 0.3s ease, transform 0.2s ease",
+                    transition: "background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.3s ease, transform 0.2s ease",
                     overflow: "hidden",
-                    "&:hover": { transform: "translateY(-2px)" },
+                    "&:hover": { transform: "translateY(-3px)" },
                 }}
             >
                 {/* Tag badge */}
-                {tagInfo.label !== "General" && (
+                {tagId !== 0 && (
                     <Box sx={{ position: "absolute", top: 12, right: 12, zIndex: 1 }}>
                         <Chip
                             label={tagInfo.label}
@@ -121,9 +131,17 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                                 sx={{
                                     flex: 1, py: 0.75, borderRadius: 1.5, textTransform: "none", fontWeight: 700,
                                     fontSize: { xs: "0.85rem", sm: "0.9rem" },
-                                    bgcolor: isDarkMode ? "rgba(33,150,243,0.2)" : "rgba(33,150,243,0.1)",
-                                    color: isDarkMode ? theme.palette.primary.light : theme.palette.primary.dark,
-                                    "&:hover": { bgcolor: isDarkMode ? "rgba(33,150,243,0.35)" : "rgba(33,150,243,0.2)" },
+                                    bgcolor: isDarkMode ? "rgba(129,199,132,0.18)" : "rgba(46,125,50,0.1)",
+                                    color: isDarkMode ? yesColorDark : "#1b5e20",
+                                    border: `1px solid ${isDarkMode ? "rgba(129,199,132,0.34)" : "rgba(46,125,50,0.24)"}`,
+                                    transition: "background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, transform 0.18s ease",
+                                    "&:hover": {
+                                        bgcolor: yesColor,
+                                        borderColor: yesColor,
+                                        color: "#fff",
+                                        boxShadow: isDarkMode ? "0 6px 16px rgba(46,125,50,0.32)" : "0 6px 16px rgba(46,125,50,0.22)",
+                                        transform: "translateY(-1px)",
+                                    },
                                 }}
                             >
                                 {data.option0Desc}
@@ -134,9 +152,17 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                                 sx={{
                                     flex: 1, py: 0.75, borderRadius: 1.5, textTransform: "none", fontWeight: 700,
                                     fontSize: { xs: "0.85rem", sm: "0.9rem" },
-                                    bgcolor: isDarkMode ? "rgba(244,67,54,0.2)" : "rgba(244,67,54,0.1)",
-                                    color: isDarkMode ? theme.palette.error.light : theme.palette.error.dark,
-                                    "&:hover": { bgcolor: isDarkMode ? "rgba(244,67,54,0.35)" : "rgba(244,67,54,0.2)" },
+                                    bgcolor: isDarkMode ? "rgba(239,154,154,0.16)" : "rgba(211,47,47,0.1)",
+                                    color: isDarkMode ? noColorDark : "#7f1d1d",
+                                    border: `1px solid ${isDarkMode ? "rgba(239,154,154,0.28)" : "rgba(211,47,47,0.22)"}`,
+                                    transition: "background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, transform 0.18s ease",
+                                    "&:hover": {
+                                        bgcolor: noColor,
+                                        borderColor: noColor,
+                                        color: "#fff",
+                                        boxShadow: isDarkMode ? "0 6px 16px rgba(211,47,47,0.3)" : "0 6px 16px rgba(211,47,47,0.22)",
+                                        transform: "translateY(-1px)",
+                                    },
                                 }}
                             >
                                 {data.option1Desc}
@@ -152,7 +178,7 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                         <Box display="flex" alignItems="center" gap={1}>
                             <AccessTimeIcon sx={{ fontSize: "1.2rem", [theme.breakpoints.down("sm")]: { fontSize: "1rem" } }} />
                             <Typography variant="body2" sx={{ fontSize: "0.9rem", [theme.breakpoints.down("sm")]: { fontSize: "0.8rem" } }}>
-                                {data.endDate}
+                                {hasEnded ? "Ended" : data.endDate}
                             </Typography>
                         </Box>
                     </Stack>

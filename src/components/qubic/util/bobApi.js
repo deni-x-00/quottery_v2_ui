@@ -1262,8 +1262,8 @@ export async function getUserOrdersFromBob(bobUrl, identity, tickRange = 20) {
 
         // Search for bid and ask logs for this user
         const logTypes = [
-            { type: 100013, side: 'buy', label: 'Bid' },   // QUOTTERY_ADD_BID
-            { type: 100014, side: 'sell', label: 'Ask' },   // QUOTTERY_ADD_ASK
+            { type: 100013, side: 'buy', label: 'Buy' },   // QUOTTERY_ADD_BID
+            { type: 100014, side: 'sell', label: 'Sell' },  // QUOTTERY_ADD_ASK
         ];
 
         const orders = [];

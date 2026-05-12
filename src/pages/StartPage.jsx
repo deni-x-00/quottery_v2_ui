@@ -162,7 +162,7 @@ function StartPage() {
                               <Grid item xs={12} sm={6} md={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                 <EventOverviewCard
                                     data={{ ...event, desc: event.desc }}
-                                    onClick={() => navigate(`/event/${event.eid}`)}
+                                    onClick={() => navigate(`/event/${event.eid}`, { state: { from: "/" } })}
                                     status={event.status}
                                     onTxBroadcast={trackTx}
                                 />

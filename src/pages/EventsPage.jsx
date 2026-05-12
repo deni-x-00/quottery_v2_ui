@@ -22,6 +22,21 @@ import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { TAG_GROUPS, getAllTags, getCanonicalTagId, getTagGroupId, getTagIdBySlug, getTagSlug, getTagsForGroup } from "../components/qubic/util/tagMap";
+import { isEventClosed, parseQubicUtcDate } from "../components/qubic/util/tradeValidation";
+
+const SORT_MODES = {
+  NEWEST: "newest",
+  ENDING_SOON: "ending-soon",
+};
+
+const SORT_LABELS = {
+  [SORT_MODES.NEWEST]: "Newest",
+  [SORT_MODES.ENDING_SOON]: "Ending soon",
+};
+
+const getValidSortMode = (sortMode) => (
+    sortMode === SORT_MODES.NEWEST ? SORT_MODES.NEWEST : SORT_MODES.ENDING_SOON
+);
 
 const isValidGroupId = (groupId) => (
   groupId === "all" || TAG_GROUPS.some((group) => group.id === groupId)
@@ -59,6 +74,7 @@ function EventsPage() {
   const selectedGroupId = selectedTopicId
       ? getTagGroupId(Number(selectedTopicId))
       : getValidGroupId(searchParams.get("group"));
+  const selectedSortMode = getValidSortMode(searchParams.get("sort"));
   const searchTerm = searchParams.get("q") || "";
   const eventsReturnPath = `${location.pathname}${location.search}`;
 
@@ -149,17 +165,36 @@ function EventsPage() {
   }, [expandedGroupIds, groupOptions, selectedGroupId]);
 
   const eventsToDisplay = React.useMemo(() => {
-    const sortRecent = (events) => (
-        [...events].sort((a, b) => Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0))
-    );
+    const sortEvents = (events) => {
+      if (selectedSortMode === SORT_MODES.ENDING_SOON) {
+        const now = new Date();
+        return [...events].sort((a, b) => {
+          const aEnded = isEventClosed(a, now);
+          const bEnded = isEventClosed(b, now);
+          if (aEnded !== bEnded) return aEnded ? 1 : -1;
+
+          const aEndTime = parseQubicUtcDate(a?.endDate)?.getTime();
+          const bEndTime = parseQubicUtcDate(b?.endDate)?.getTime();
+          const aSafeEndTime = Number.isFinite(aEndTime) ? aEndTime : Number.MAX_SAFE_INTEGER;
+          const bSafeEndTime = Number.isFinite(bEndTime) ? bEndTime : Number.MAX_SAFE_INTEGER;
+          if (aSafeEndTime !== bSafeEndTime) {
+            return aEnded ? bSafeEndTime - aSafeEndTime : aSafeEndTime - bSafeEndTime;
+          }
+
+          return Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0);
+        });
+      }
+
+      return [...events].sort((a, b) => Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0));
+    };
 
     if (selectedTopicId) {
       const topicId = Number(selectedTopicId);
-      return sortRecent(baseEventsToDisplay.filter((event) => getCanonicalTagId(event.tag) === topicId));
+      return sortEvents(baseEventsToDisplay.filter((event) => getCanonicalTagId(event.tag) === topicId));
     }
-    if (selectedGroupId === "all") return sortRecent(baseEventsToDisplay);
-    return sortRecent(baseEventsToDisplay.filter((event) => getTagGroupId(event.tag) === selectedGroupId));
-  }, [baseEventsToDisplay, selectedGroupId, selectedTopicId]);
+    if (selectedGroupId === "all") return sortEvents(baseEventsToDisplay);
+    return sortEvents(baseEventsToDisplay.filter((event) => getTagGroupId(event.tag) === selectedGroupId));
+  }, [baseEventsToDisplay, selectedGroupId, selectedSortMode, selectedTopicId]);
 
   const updateEventsQuery = React.useCallback((updates, options = {}) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -192,6 +227,15 @@ function EventsPage() {
       }
     }
 
+    if (Object.prototype.hasOwnProperty.call(updates, "sort")) {
+      const nextSortMode = getValidSortMode(updates.sort);
+      if (nextSortMode === SORT_MODES.ENDING_SOON) {
+        nextParams.delete("sort");
+      } else {
+        nextParams.set("sort", nextSortMode);
+      }
+    }
+
     setSearchParams(nextParams, { replace: Boolean(options.replace) });
   }, [searchParams, setSearchParams]);
 
@@ -202,6 +246,15 @@ function EventsPage() {
   const handleGroupChange = React.useCallback((groupId) => {
     updateEventsQuery({ group: groupId });
   }, [updateEventsQuery]);
+
+  const handleSortToggle = React.useCallback(() => {
+    updateEventsQuery({
+      sort: selectedSortMode === SORT_MODES.ENDING_SOON ? SORT_MODES.NEWEST : SORT_MODES.ENDING_SOON,
+    });
+  }, [selectedSortMode, updateEventsQuery]);
+  const nextSortMode = selectedSortMode === SORT_MODES.ENDING_SOON
+      ? SORT_MODES.NEWEST
+      : SORT_MODES.ENDING_SOON;
 
   const toggleGroupExpansion = (groupId) => {
     setExpandedGroupIds((current) => ({
@@ -264,30 +317,47 @@ function EventsPage() {
               <>
                 <Box sx={{ mb: 3 }}>
                   <ModernSearchFilter searchTerm={searchTerm} onSearchChange={handleSearchChange} />
-                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 2 }}>
-                    {groupOptions.map((group) => {
-                      const selected = selectedGroupId === group.id;
-                      return (
-                          <Button
-                              key={group.id}
-                              onClick={() => handleGroupChange(group.id)}
-                              variant={selected ? "contained" : "text"}
-                              size="small"
-                              sx={{
-                                borderRadius: 1,
-                                minHeight: 34,
-                                px: 1.5,
-                                textTransform: "none",
-                                fontWeight: 700,
-                                color: selected ? theme.palette.primary.contrastText : theme.palette.text.secondary,
-                              }}
-                          >
-                            {group.label}
-                            <Box component="span" sx={{ ml: 0.75, opacity: 0.7 }}>{eventCounts[group.id] || 0}</Box>
-                          </Button>
-                      );
-                    })}
-                  </Stack>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mt: 2, flexWrap: "wrap" }}>
+                    <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+                      {groupOptions.map((group) => {
+                        const selected = selectedGroupId === group.id;
+                        return (
+                            <Button
+                                key={group.id}
+                                onClick={() => handleGroupChange(group.id)}
+                                variant={selected ? "contained" : "text"}
+                                size="small"
+                                sx={{
+                                  borderRadius: 1,
+                                  minHeight: 34,
+                                  px: 1.5,
+                                  textTransform: "none",
+                                  fontWeight: 700,
+                                  color: selected ? theme.palette.primary.contrastText : theme.palette.text.secondary,
+                                }}
+                            >
+                              {group.label}
+                              <Box component="span" sx={{ ml: 0.75, opacity: 0.7 }}>{eventCounts[group.id] || 0}</Box>
+                            </Button>
+                        );
+                      })}
+                    </Stack>
+                    <Button
+                        onClick={handleSortToggle}
+                        variant="outlined"
+                        size="small"
+                        sx={{
+                          borderRadius: 1,
+                          minHeight: 34,
+                          px: 1.5,
+                          textTransform: "none",
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                    >
+                      Sort by {SORT_LABELS[nextSortMode]}
+                    </Button>
+                  </Box>
                 </Box>
 
                 {isLoadingOverall ? renderLoading() : (

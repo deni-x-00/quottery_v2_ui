@@ -144,7 +144,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                     onTxBroadcast({
                         txHash: res.txHash,
                         scheduledTick,
-                        description: `Bid ${formatQubicAmount(shares)} "${optDesc}" @ ${formatQubicAmount(price)}`,
+                        description: `Buy ${formatQubicAmount(shares)} "${optDesc}" @ ${formatQubicAmount(price)}`,
                         inputType: QTRY_ADD_BID_ORDER,
                         type: 'order',
                         eventId: eid,
@@ -155,7 +155,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                     });
                 } else {
                     showSnackbar(
-                        `Bid transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${shares} shares of "${optDesc}" @ ${formatQubicAmount(price)}`,
+                        `Buy transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${shares} shares of "${optDesc}" @ ${formatQubicAmount(price)}`,
                         'info'
                     );
                 }
@@ -264,11 +264,11 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                         onClick={handleSubmit}
                         disabled={submitting || isEventClosed(event) || shares <= 0 || price <= 0 || price >= WHOLE_SHARE_PRICE || Number(balance || 0) < cost}
                     >
-                        {submitting ? 'Signing...' : 'Place Bid'}
+                        {submitting ? 'Signing...' : 'Place Buy Order'}
                     </Button>
 
                     <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ lineHeight: 1.3 }}>
-                        Mint: matches if opposite option has bid >= {formatQubicAmount(WHOLE_SHARE_PRICE - price)}
+                        Mint: matches if opposite option has buy price >= {formatQubicAmount(WHOLE_SHARE_PRICE - price)}
                     </Typography>
                 </Stack>
             </DialogContent>

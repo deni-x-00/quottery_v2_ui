@@ -101,7 +101,7 @@ const startTradingSteps = [
 const orderBookRows = [
     {
         title: "Traditional trade",
-        body: "A seller's ask meets a buyer's bid on the same option.",
+        body: "A sell order meets a buy order on the same option.",
     },
     {
         title: "Mint",
@@ -124,7 +124,7 @@ const lifecycleSteps = [
     },
     {
         title: "Trading",
-        body: "Anyone can place bid or ask orders. Tokens and shares are locked while orders are open and can be released by cancelling.",
+        body: "Anyone can place buy or sell orders. Tokens and shares are locked while orders are open and can be released by cancelling.",
     },
     {
         title: "Result publication",
