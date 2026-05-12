@@ -6,6 +6,8 @@ import {
   Container,
   Grid,
   IconButton,
+  Menu,
+  MenuItem,
   Stack,
   Tooltip,
   Typography,
@@ -23,19 +25,24 @@ import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { TAG_GROUPS, getAllTags, getCanonicalTagId, getTagGroupId, getTagIdBySlug, getTagSlug, getTagsForGroup } from "../components/qubic/util/tagMap";
 import { isEventClosed, parseQubicUtcDate } from "../components/qubic/util/tradeValidation";
+import { fetchCachedEventVolumes, getEventId } from "../utils/eventVolumes";
 
 const SORT_MODES = {
+  VOLUME: "volume",
   NEWEST: "newest",
   ENDING_SOON: "ending-soon",
 };
 
 const SORT_LABELS = {
+  [SORT_MODES.VOLUME]: "Volume",
   [SORT_MODES.NEWEST]: "Newest",
   [SORT_MODES.ENDING_SOON]: "Ending soon",
 };
 
 const getValidSortMode = (sortMode) => (
-    sortMode === SORT_MODES.NEWEST ? SORT_MODES.NEWEST : SORT_MODES.ENDING_SOON
+    [SORT_MODES.NEWEST, SORT_MODES.ENDING_SOON].includes(sortMode)
+        ? sortMode
+        : SORT_MODES.VOLUME
 );
 
 const isValidGroupId = (groupId) => (
@@ -65,11 +72,13 @@ function EventsPage() {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const theme = useTheme();
-  const { isConnected } = useConfig();
+  const { bobUrl, isConnected } = useConfig();
   const { allEvents, loading, fetchEvents } = useQuotteryContext();
   const { trackTx } = useTxTracker();
   const [isFilterLoading, setIsFilterLoading] = useState(false);
   const [expandedGroupIds, setExpandedGroupIds] = useState({});
+  const [sortMenuAnchorEl, setSortMenuAnchorEl] = useState(null);
+  const [eventVolumes, setEventVolumes] = useState({});
   const selectedTopicId = getValidTopicId(searchParams.get("topic"));
   const selectedGroupId = selectedTopicId
       ? getTagGroupId(Number(selectedTopicId))
@@ -100,6 +109,27 @@ function EventsPage() {
       setIsFilterLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isConnected || !Array.isArray(allEvents) || allEvents.length === 0) {
+      setEventVolumes({});
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const loadVolumes = async () => {
+      try {
+        setEventVolumes(await fetchCachedEventVolumes(bobUrl, allEvents, controller.signal));
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.warn("[EventsPage] Failed to load cached event volumes:", error.message);
+        }
+      }
+    };
+
+    loadVolumes();
+    return () => controller.abort();
+  }, [allEvents, bobUrl, isConnected]);
 
   const baseEventsToDisplay = React.useMemo(() => {
     const safeEvents = Array.isArray(allEvents) ? allEvents : [];
@@ -165,27 +195,40 @@ function EventsPage() {
   }, [expandedGroupIds, groupOptions, selectedGroupId]);
 
   const eventsToDisplay = React.useMemo(() => {
+    const compareEndingSoon = (a, b) => {
+      const now = new Date();
+      const aEnded = isEventClosed(a, now);
+      const bEnded = isEventClosed(b, now);
+      if (aEnded !== bEnded) return aEnded ? 1 : -1;
+
+      const aEndTime = parseQubicUtcDate(a?.endDate)?.getTime();
+      const bEndTime = parseQubicUtcDate(b?.endDate)?.getTime();
+      const aSafeEndTime = Number.isFinite(aEndTime) ? aEndTime : Number.MAX_SAFE_INTEGER;
+      const bSafeEndTime = Number.isFinite(bEndTime) ? bEndTime : Number.MAX_SAFE_INTEGER;
+      if (aSafeEndTime !== bSafeEndTime) {
+        return aEnded ? bSafeEndTime - aSafeEndTime : aSafeEndTime - bSafeEndTime;
+      }
+
+      return Number(getEventId(b) ?? 0) - Number(getEventId(a) ?? 0);
+    };
+
     const sortEvents = (events) => {
-      if (selectedSortMode === SORT_MODES.ENDING_SOON) {
-        const now = new Date();
+      if (selectedSortMode === SORT_MODES.VOLUME) {
         return [...events].sort((a, b) => {
-          const aEnded = isEventClosed(a, now);
-          const bEnded = isEventClosed(b, now);
-          if (aEnded !== bEnded) return aEnded ? 1 : -1;
-
-          const aEndTime = parseQubicUtcDate(a?.endDate)?.getTime();
-          const bEndTime = parseQubicUtcDate(b?.endDate)?.getTime();
-          const aSafeEndTime = Number.isFinite(aEndTime) ? aEndTime : Number.MAX_SAFE_INTEGER;
-          const bSafeEndTime = Number.isFinite(bEndTime) ? bEndTime : Number.MAX_SAFE_INTEGER;
-          if (aSafeEndTime !== bSafeEndTime) {
-            return aEnded ? bSafeEndTime - aSafeEndTime : aSafeEndTime - bSafeEndTime;
-          }
-
-          return Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0);
+          const aId = getEventId(a);
+          const bId = getEventId(b);
+          const aVolume = Number(eventVolumes[aId] || 0);
+          const bVolume = Number(eventVolumes[bId] || 0);
+          if (aVolume !== bVolume) return bVolume - aVolume;
+          return compareEndingSoon(a, b);
         });
       }
 
-      return [...events].sort((a, b) => Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0));
+      if (selectedSortMode === SORT_MODES.ENDING_SOON) {
+        return [...events].sort(compareEndingSoon);
+      }
+
+      return [...events].sort((a, b) => Number(getEventId(b) ?? 0) - Number(getEventId(a) ?? 0));
     };
 
     if (selectedTopicId) {
@@ -194,7 +237,7 @@ function EventsPage() {
     }
     if (selectedGroupId === "all") return sortEvents(baseEventsToDisplay);
     return sortEvents(baseEventsToDisplay.filter((event) => getTagGroupId(event.tag) === selectedGroupId));
-  }, [baseEventsToDisplay, selectedGroupId, selectedSortMode, selectedTopicId]);
+  }, [baseEventsToDisplay, eventVolumes, selectedGroupId, selectedSortMode, selectedTopicId]);
 
   const updateEventsQuery = React.useCallback((updates, options = {}) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -229,7 +272,7 @@ function EventsPage() {
 
     if (Object.prototype.hasOwnProperty.call(updates, "sort")) {
       const nextSortMode = getValidSortMode(updates.sort);
-      if (nextSortMode === SORT_MODES.ENDING_SOON) {
+      if (nextSortMode === SORT_MODES.VOLUME) {
         nextParams.delete("sort");
       } else {
         nextParams.set("sort", nextSortMode);
@@ -247,14 +290,18 @@ function EventsPage() {
     updateEventsQuery({ group: groupId });
   }, [updateEventsQuery]);
 
-  const handleSortToggle = React.useCallback(() => {
-    updateEventsQuery({
-      sort: selectedSortMode === SORT_MODES.ENDING_SOON ? SORT_MODES.NEWEST : SORT_MODES.ENDING_SOON,
-    });
-  }, [selectedSortMode, updateEventsQuery]);
-  const nextSortMode = selectedSortMode === SORT_MODES.ENDING_SOON
-      ? SORT_MODES.NEWEST
-      : SORT_MODES.ENDING_SOON;
+  const handleSortMenuOpen = React.useCallback((event) => {
+    setSortMenuAnchorEl(event.currentTarget);
+  }, []);
+
+  const handleSortMenuClose = React.useCallback(() => {
+    setSortMenuAnchorEl(null);
+  }, []);
+
+  const handleSortChange = React.useCallback((sortMode) => {
+    updateEventsQuery({ sort: sortMode });
+    setSortMenuAnchorEl(null);
+  }, [updateEventsQuery]);
 
   const toggleGroupExpansion = (groupId) => {
     setExpandedGroupIds((current) => ({
@@ -343,7 +390,7 @@ function EventsPage() {
                       })}
                     </Stack>
                     <Button
-                        onClick={handleSortToggle}
+                        onClick={handleSortMenuOpen}
                         variant="outlined"
                         size="small"
                         sx={{
@@ -355,8 +402,23 @@ function EventsPage() {
                           flexShrink: 0,
                         }}
                     >
-                      Sort by {SORT_LABELS[nextSortMode]}
+                      Sort: {SORT_LABELS[selectedSortMode]}
                     </Button>
+                    <Menu
+                        anchorEl={sortMenuAnchorEl}
+                        open={Boolean(sortMenuAnchorEl)}
+                        onClose={handleSortMenuClose}
+                    >
+                      {[SORT_MODES.VOLUME, SORT_MODES.ENDING_SOON, SORT_MODES.NEWEST].map((sortMode) => (
+                          <MenuItem
+                              key={sortMode}
+                              selected={selectedSortMode === sortMode}
+                              onClick={() => handleSortChange(sortMode)}
+                          >
+                            {SORT_LABELS[sortMode]}
+                          </MenuItem>
+                      ))}
+                    </Menu>
                   </Box>
                 </Box>
 
@@ -461,7 +523,7 @@ function EventsPage() {
                                   return (
                                       <Grid item xs={12} sm={6} lg={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                         <EventOverviewCard
-                                            data={{ ...event, desc: event.desc }}
+                                            data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0 }}
                                             onClick={() => navigate(`/event/${event.eid}`, { state: { from: eventsReturnPath } })}
                                             status={event.status}
                                             onTxBroadcast={trackTx}

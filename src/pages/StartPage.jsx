@@ -17,16 +17,18 @@ import EventOverviewCard from "../components/EventOverviewCard";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
+import { fetchCachedEventVolumes, getEventId } from "../utils/eventVolumes";
 
 const RECENT_EVENT_LIMIT = 6;
 
 function StartPage() {
   const navigate = useNavigate();
   const theme = useTheme();
-  const { isConnected } = useConfig();
+  const { bobUrl, isConnected } = useConfig();
   const { allEvents, loading, fetchEvents } = useQuotteryContext();
   const { trackTx } = useTxTracker();
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [eventVolumes, setEventVolumes] = useState({});
 
   useEffect(() => {
     if (!isConnected) return;
@@ -47,6 +49,27 @@ function StartPage() {
           .sort((a, b) => Number(b?.eid ?? b?.eventId ?? 0) - Number(a?.eid ?? a?.eventId ?? 0))
           .slice(0, RECENT_EVENT_LIMIT)
   ), [allEvents]);
+
+  useEffect(() => {
+    if (!isConnected || recentEvents.length === 0) {
+      setEventVolumes({});
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const loadVolumes = async () => {
+      try {
+        setEventVolumes(await fetchCachedEventVolumes(bobUrl, recentEvents, controller.signal));
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          console.warn("[StartPage] Failed to load cached event volumes:", error.message);
+        }
+      }
+    };
+
+    loadVolumes();
+    return () => controller.abort();
+  }, [bobUrl, isConnected, recentEvents]);
 
   const isLoadingOverall = loading || isLoadingEvents;
 
@@ -161,7 +184,7 @@ function StartPage() {
                           return (
                               <Grid item xs={12} sm={6} md={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                 <EventOverviewCard
-                                    data={{ ...event, desc: event.desc }}
+                                    data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0 }}
                                     onClick={() => navigate(`/event/${event.eid}`, { state: { from: "/" } })}
                                     status={event.status}
                                     onTxBroadcast={trackTx}

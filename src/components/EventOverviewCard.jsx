@@ -13,8 +13,10 @@ import {
 import { motion } from "framer-motion";
 import HelpIcon from "@mui/icons-material/Help";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import BarChartIcon from "@mui/icons-material/BarChart";
 import { getCanonicalTagId, getTagInfo } from "./qubic/util/tagMap";
 import { isEventClosed } from "./qubic/util/tradeValidation";
+import { formatCompactAmount } from "../utils/eventVolumes";
 import QuickBuyModal from "./QuickBuyModal";
 
 const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
@@ -46,6 +48,7 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
     const tagId = getCanonicalTagId(data?.tag);
     const thumbSrc = tagInfo.thumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
     const hasEnded = isEventClosed(data);
+    const hasVolume = data?.volume !== undefined && data?.volume !== null;
 
     const handleOptionClick = (e, optionIndex) => {
         e.stopPropagation();
@@ -175,12 +178,37 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                     {/* End date */}
                     <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}
                            sx={{ color: theme.palette.text.secondary }}>
-                        <Box display="flex" alignItems="center" gap={1}>
+                        <Box display="flex" alignItems="center" gap={1} sx={{ minWidth: 0 }}>
                             <AccessTimeIcon sx={{ fontSize: "1.2rem", [theme.breakpoints.down("sm")]: { fontSize: "1rem" } }} />
-                            <Typography variant="body2" sx={{ fontSize: "0.9rem", [theme.breakpoints.down("sm")]: { fontSize: "0.8rem" } }}>
+                            <Typography
+                                variant="body2"
+                                noWrap
+                                sx={{
+                                    fontSize: "0.9rem",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    [theme.breakpoints.down("sm")]: { fontSize: "0.8rem" },
+                                }}
+                            >
                                 {hasEnded ? "Ended" : data.endDate}
                             </Typography>
                         </Box>
+                        {hasVolume && (
+                            <Box display="flex" alignItems="center" gap={0.5} sx={{ flexShrink: 0 }}>
+                                <BarChartIcon sx={{ fontSize: "1.05rem", [theme.breakpoints.down("sm")]: { fontSize: "0.95rem" } }} />
+                                <Typography
+                                    variant="body2"
+                                    sx={{
+                                        fontSize: "0.85rem",
+                                        fontWeight: 650,
+                                        whiteSpace: "nowrap",
+                                        [theme.breakpoints.down("sm")]: { fontSize: "0.76rem" },
+                                    }}
+                                >
+                                    {formatCompactAmount(data.volume)}
+                                </Typography>
+                            </Box>
+                        )}
                     </Stack>
                 </CardContent>
             </Card>
