@@ -21,3 +21,4 @@ jobs:
             git pull origin main
             yarn install --frozen-lockfile
             npm run build
+            sudo -n /usr/bin/systemctl restart quottery-bob-proxy.service
