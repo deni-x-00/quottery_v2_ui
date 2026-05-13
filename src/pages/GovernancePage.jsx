@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
     Box, Typography, Container, Paper, Grid, IconButton, Tooltip, Stack, Divider, Button, Alert,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import GavelIcon from "@mui/icons-material/Gavel";
@@ -30,6 +31,7 @@ const GOV_TOTAL_VOTES = 676;
 const GOV_ACCEPTANCE_THRESHOLD = 451;
 
 function GovernancePage() {
+    const theme = useTheme();
     const { bobUrl } = useConfig();
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
     const {
@@ -71,10 +73,38 @@ function GovernancePage() {
 
     useEffect(() => { loadData(); }, [loadData]);
 
+    const cardBorderColor = theme.palette.mode === "dark"
+        ? "rgba(255,255,255,0.18)"
+        : "rgba(255,255,255,0.82)";
+    const cellBorderColor = alpha(theme.palette.text.primary, 0.12);
+    const panelSx = {
+        p: 3,
+        borderRadius: 2,
+        border: `1px solid ${cardBorderColor}`,
+        bgcolor: theme.palette.background.paper,
+        boxShadow: theme.palette.mode === "dark"
+            ? "0 10px 28px rgba(0,0,0,0.55)"
+            : "0 14px 34px rgba(25,118,210,0.12)",
+    };
+    const paramCellSx = {
+        minHeight: 72,
+        p: 1.5,
+        borderRadius: 1,
+        border: `1px solid ${cellBorderColor}`,
+        bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.055 : 0.035),
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        textAlign: "center",
+    };
+
     const renderGovParam = (label, value, unit = '') => (
-        <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ py: 0.25 }}>
-            <Typography variant="body2" color="text.secondary">{label}</Typography>
-            <Typography variant="body2" fontWeight={600}>
+        <Box sx={paramCellSx}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                {label}
+            </Typography>
+            <Typography variant="body2" fontWeight={700} sx={{ mt: 0.35 }}>
                 {typeof value === 'number' ? formatQubicAmount(value) : value}{unit}
             </Typography>
         </Box>
@@ -88,9 +118,11 @@ function GovernancePage() {
     };
 
     const renderGovPercentParam = (label, value) => (
-        <Box display="flex" justifyContent="space-between" alignItems="center" sx={{ py: 0.25 }}>
-            <Typography variant="body2" color="text.secondary">{label}</Typography>
-            <Typography variant="body2" fontWeight={600}>
+        <Box sx={paramCellSx}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                {label}
+            </Typography>
+            <Typography variant="body2" fontWeight={700} sx={{ mt: 0.35 }}>
                 {formatGovPercent(value)}
             </Typography>
         </Box>
@@ -101,7 +133,13 @@ function GovernancePage() {
         const remaining = Math.max(0, GOV_ACCEPTANCE_THRESHOLD - votes);
 
         return (
-            <Box textAlign="right">
+            <Box textAlign="center" sx={{
+                px: 1.5,
+                py: 1,
+                borderRadius: 1,
+                border: `1px solid ${cellBorderColor}`,
+                bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.055 : 0.035),
+            }}>
                 <Typography variant="body2" color="text.secondary">
                     Votes: {formatQubicAmount(votes)} / {formatQubicAmount(GOV_TOTAL_VOTES)}
                 </Typography>
@@ -203,47 +241,59 @@ function GovernancePage() {
 
             {/* Current Gov Params */}
             {basicInfo && (
-                <Paper elevation={1} sx={{ p: 3, mb: 4 }}>
+                <Paper elevation={0} sx={{ ...panelSx, mb: 4 }}>
                     <Typography variant="h6" gutterBottom>Current Parameters</Typography>
-                    <Grid container spacing={2}>
-                        <Grid item xs={12} sm={6}>
+                    <Grid container spacing={1.25}>
+                        <Grid item xs={12} sm={6} md={4}>
                             {renderGovPercentParam("Shareholder Fee", basicInfo.shareholderFee)}
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={4}>
                             {renderGovPercentParam("Burn Fee", basicInfo.burnFee)}
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={4}>
                             {renderGovPercentParam("Operation Fee", basicInfo.operationFee)}
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid item xs={12} sm={6} md={4}>
                             {renderGovParam("Fee Per Day", basicInfo.feePerDay)}
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={4}>
                             {renderGovParam("Dispute Deposit", basicInfo.depositAmountForDispute, " QU")}
+                        </Grid>
+                        <Grid item xs={12} sm={6} md={4}>
                             {renderGovParam("Anti-Spam", basicInfo.antiSpamAmount, " QU")}
                         </Grid>
                     </Grid>
                     <Box sx={{ mt: 1.5 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-                            Game Operator
-                        </Typography>
-                        <Box display="flex" alignItems="center" gap={0.75}>
-                            <Typography
-                                variant="body2"
-                                sx={{
-                                    fontFamily: "monospace",
-                                    fontSize: "0.9rem",
-                                    fontWeight: 600,
-                                    wordBreak: "break-all",
-                                }}
-                            >
-                                {basicInfo.gameOperator || "-"}
+                        <Box sx={{ ...paramCellSx, minHeight: 92, width: "100%" }}>
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                                Game Operator
                             </Typography>
-                            {!!basicInfo.gameOperator && (
-                                <Tooltip title="Copy Game Operator">
-                                    <IconButton
-                                        size="small"
-                                        onClick={() => copyText(basicInfo.gameOperator)}
-                                        aria-label="Copy Game Operator"
-                                    >
-                                        <ContentCopyIcon fontSize="small" />
-                                    </IconButton>
-                                </Tooltip>
-                            )}
+                            <Box display="flex" alignItems="center" justifyContent="center" gap={0.75} sx={{ mt: 0.5, maxWidth: "100%" }}>
+                                <Typography
+                                    variant="body2"
+                                    sx={{
+                                        fontFamily: "monospace",
+                                        fontSize: "0.9rem",
+                                        fontWeight: 700,
+                                        wordBreak: "break-all",
+                                        textAlign: "center",
+                                    }}
+                                >
+                                    {basicInfo.gameOperator || "-"}
+                                </Typography>
+                                {!!basicInfo.gameOperator && (
+                                    <Tooltip title="Copy Game Operator">
+                                        <IconButton
+                                            size="small"
+                                            onClick={() => copyText(basicInfo.gameOperator)}
+                                            aria-label="Copy Game Operator"
+                                            sx={{ flexShrink: 0 }}
+                                        >
+                                            <ContentCopyIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
+                                )}
+                            </Box>
                         </Box>
                     </Box>
                 </Paper>
@@ -258,7 +308,7 @@ function GovernancePage() {
             )}
 
             {!loading && !error && proposals.length === 0 && (
-                <Paper elevation={1} sx={{ p: 4, textAlign: 'center' }}>
+                <Paper elevation={0} sx={{ ...panelSx, p: 4, textAlign: 'center' }}>
                     <Typography color="text.secondary">No active proposals found.</Typography>
                 </Paper>
             )}
@@ -287,21 +337,27 @@ function GovernancePage() {
                     </Box>
                     <Stack spacing={2}>
                         {proposals.map((proposal) => (
-                            <Paper key={proposal.rank} elevation={1} sx={{ p: 3 }}>
+                            <Paper key={proposal.rank} elevation={0} sx={panelSx}>
                                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                                     <Typography variant="h6">Proposal #{proposal.rank}</Typography>
                                     {renderProposalVoteStatus(proposal.totalVotes)}
                                 </Box>
 
                                 <Divider sx={{ my: 1 }} />
-                                <Grid container spacing={2}>
-                                    <Grid item xs={12} sm={6}>
+                                <Grid container spacing={1.25}>
+                                    <Grid item xs={12} sm={6} md={4}>
                                         {renderGovPercentParam("Shareholder Fee", proposal.govParams.shareholderFee)}
+                                    </Grid>
+                                    <Grid item xs={12} sm={6} md={4}>
                                         {renderGovPercentParam("Burn Fee", proposal.govParams.burnFee)}
+                                    </Grid>
+                                    <Grid item xs={12} sm={6} md={4}>
                                         {renderGovPercentParam("Operation Fee", proposal.govParams.operationFee)}
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
                                         {renderGovParam("Fee Per Day", proposal.govParams.feePerDay)}
+                                    </Grid>
+                                    <Grid item xs={12} sm={6}>
                                         {renderGovParam("Dispute Deposit", proposal.govParams.depositAmountForDispute, " QU")}
                                     </Grid>
                                 </Grid>

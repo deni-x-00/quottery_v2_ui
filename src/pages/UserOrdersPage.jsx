@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Box,
+  Button,
   Typography,
   Paper,
   Table,
@@ -13,6 +15,7 @@ import {
   Chip,
   Tooltip,
 } from "@mui/material";
+import { alpha, useTheme } from "@mui/material/styles";
 import CloseIcon from "@mui/icons-material/Close";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
@@ -35,6 +38,8 @@ import {
 } from "../components/qubic/util/quotteryTx";
 
 const UserOrdersPage = () => {
+  const navigate = useNavigate();
+  const theme = useTheme();
   const {
     walletPublicIdentity,
     walletPublicKeyBytes,
@@ -267,6 +272,115 @@ const UserOrdersPage = () => {
   const hasPositions = positions && positions.length > 0;
   const showOrdersInitialLoading = ordersLoading && !hasOrders;
   const showPositionsInitialLoading = positionsLoading && !hasPositions;
+  const cardBorderColor = theme.palette.mode === "dark"
+      ? "rgba(255,255,255,0.18)"
+      : "rgba(255,255,255,0.82)";
+  const cellBorderColor = alpha(theme.palette.text.primary, 0.12);
+  const panelSx = {
+    p: 2,
+    overflowX: "auto",
+    borderRadius: 2,
+    border: `1px solid ${cardBorderColor}`,
+    bgcolor: theme.palette.background.paper,
+    boxShadow: theme.palette.mode === "dark"
+        ? "0 10px 28px rgba(0,0,0,0.55)"
+        : "0 14px 34px rgba(25,118,210,0.12)",
+  };
+  const headerCellSx = {
+    textAlign: "center",
+    fontWeight: 700,
+    color: theme.palette.text.secondary,
+    borderBottom: `1px solid ${cellBorderColor}`,
+    whiteSpace: "nowrap",
+  };
+  const eventHeaderCellSx = {
+    ...headerCellSx,
+    textAlign: "left",
+    width: "44%",
+    minWidth: 280,
+  };
+  const compactHeaderCellSx = {
+    ...headerCellSx,
+    width: "11.2%",
+    minWidth: 96,
+  };
+  const valueCellSx = {
+    textAlign: "center",
+    verticalAlign: "middle",
+    bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.055 : 0.035),
+    borderTop: `1px solid ${cellBorderColor}`,
+    borderBottom: `1px solid ${cellBorderColor}`,
+    py: 1,
+    px: 1.25,
+    "&:first-of-type": {
+      borderLeft: `1px solid ${cellBorderColor}`,
+      borderTopLeftRadius: 8,
+      borderBottomLeftRadius: 8,
+    },
+    "&:last-of-type": {
+      borderRight: `1px solid ${cellBorderColor}`,
+      borderTopRightRadius: 8,
+      borderBottomRightRadius: 8,
+    },
+  };
+  const eventValueCellSx = {
+    ...valueCellSx,
+    textAlign: "left",
+    width: "44%",
+    minWidth: 280,
+  };
+  const compactValueCellSx = {
+    ...valueCellSx,
+    width: "11.2%",
+    minWidth: 96,
+  };
+  const eventButtonSx = {
+    minWidth: 0,
+    width: "100%",
+    maxWidth: "none",
+    px: 0.75,
+    py: 0.25,
+    textTransform: "none",
+    fontWeight: 700,
+    lineHeight: 1.3,
+    fontSize: "0.88rem",
+    justifyContent: "flex-start",
+    textAlign: "left",
+    color: theme.palette.primary.main,
+    "& .MuiButton-startIcon": { mr: 0 },
+    "&:hover": {
+      bgcolor: alpha(theme.palette.primary.main, 0.08),
+      textDecoration: "underline",
+    },
+  };
+
+  const goToEvent = useCallback((eventId) => {
+    if (eventId === undefined || eventId === null) return;
+    navigate(`/event/${eventId}`, { state: { from: "/orders" } });
+  }, [navigate]);
+
+  const renderEventLink = (eventId, label) => {
+    if (eventId === undefined || eventId === null) return label || "-";
+
+    return (
+        <Button
+            size="small"
+            variant="text"
+            onClick={() => goToEvent(eventId)}
+            sx={eventButtonSx}
+        >
+          <Box component="span" sx={{
+            overflow: "visible",
+            textOverflow: "clip",
+            display: "block",
+            whiteSpace: "normal",
+            overflowWrap: "anywhere",
+          }}>
+            {label || `Event #${eventId}`}
+          </Box>
+        </Button>
+    );
+  };
 
   return (
       <Box sx={{ maxWidth: 1200, mx: "auto", mt: 10, px: 2, mb: 8 }}>
@@ -297,7 +411,7 @@ const UserOrdersPage = () => {
         </Box>
 
         {/* Orders table */}
-        <Paper elevation={2} sx={{ p: 2, overflowX: "auto", mb: 4 }}>
+        <Paper elevation={0} sx={{ ...panelSx, mb: 4 }}>
           {showOrdersInitialLoading && (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress />
@@ -329,39 +443,35 @@ const UserOrdersPage = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Event</TableCell>
-                    <TableCell>Option</TableCell>
-                    <TableCell>Side</TableCell>
-                    <TableCell align="right">Price</TableCell>
-                    <TableCell align="right">Amount</TableCell>
-                    <TableCell>Status</TableCell>
-                    <TableCell align="center">Action</TableCell>
+                    <TableCell sx={eventHeaderCellSx}>Event</TableCell>
+                    <TableCell sx={compactHeaderCellSx}>Option</TableCell>
+                    <TableCell sx={compactHeaderCellSx}>Side</TableCell>
+                    <TableCell sx={compactHeaderCellSx}>Price</TableCell>
+                    <TableCell sx={compactHeaderCellSx}>Amount</TableCell>
+                    <TableCell sx={compactHeaderCellSx}>Action</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {orders.map((order, idx) => (
-                      <TableRow key={order.order_id || idx}>
-                        <TableCell>
-                          {order.event_desc || order.market_id || "-"}
+                      <TableRow key={order.order_id || idx} sx={{ "& td": { borderBottom: 0 }, height: 58 }}>
+                        <TableCell sx={eventValueCellSx}>
+                          {renderEventLink(order.market_id, order.event_desc || `Event #${order.market_id}`)}
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={compactValueCellSx}>
                           {order.option != null
                               ? getOptionName(order.market_id, order.option)
                               : "-"}
                         </TableCell>
-                        <TableCell sx={{ textTransform: "capitalize" }}>
+                        <TableCell sx={{ ...compactValueCellSx, textTransform: "capitalize" }}>
                           {order.side || "-"}
                         </TableCell>
-                        <TableCell align="right">
+                        <TableCell sx={compactValueCellSx}>
                           {order.price != null ? formatQubicAmount(order.price) : "-"}
                         </TableCell>
-                        <TableCell align="right">
+                        <TableCell sx={compactValueCellSx}>
                           {order.qty != null ? formatQubicAmount(order.qty) : "-"}
                         </TableCell>
-                        <TableCell sx={{ textTransform: "capitalize" }}>
-                          {order.status || "open"}
-                        </TableCell>
-                        <TableCell align="center">
+                        <TableCell sx={compactValueCellSx}>
                           {order.status !== "cancelled" && (
                               <IconButton
                                   size="small"
@@ -385,7 +495,7 @@ const UserOrdersPage = () => {
           My Positions
         </Typography>
 
-        <Paper elevation={2} sx={{ p: 2, overflowX: "auto" }}>
+        <Paper elevation={0} sx={panelSx}>
           {showPositionsInitialLoading && (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress />
@@ -419,19 +529,21 @@ const UserOrdersPage = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Event</TableCell>
-                    <TableCell>Option</TableCell>
-                    <TableCell align="right">Shares</TableCell>
+                    <TableCell sx={eventHeaderCellSx}>Event</TableCell>
+                    <TableCell sx={headerCellSx}>Option</TableCell>
+                    <TableCell sx={headerCellSx}>Shares</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {positions.map((pos, idx) => (
-                      <TableRow key={`${pos.eventId}-${pos.option}-${idx}`}>
-                        <TableCell>{getEventName(pos.eventId)}</TableCell>
-                        <TableCell>
+                      <TableRow key={`${pos.eventId}-${pos.option}-${idx}`} sx={{ "& td": { borderBottom: 0 }, height: 58 }}>
+                        <TableCell sx={eventValueCellSx}>
+                          {renderEventLink(pos.eventId, getEventName(pos.eventId))}
+                        </TableCell>
+                        <TableCell sx={valueCellSx}>
                           {getOptionName(pos.eventId, pos.option)}
                         </TableCell>
-                        <TableCell align="right">{pos.amount}</TableCell>
+                        <TableCell sx={valueCellSx}>{formatQubicAmount(pos.amount)}</TableCell>
                       </TableRow>
                   ))}
                 </TableBody>
