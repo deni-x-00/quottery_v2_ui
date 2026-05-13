@@ -15,10 +15,20 @@ const EVENT_VOLUME_REFRESH_CONCURRENCY = Number(process.env.EVENT_VOLUME_REFRESH
 const PUBLIC_RPC_REQUESTS_PER_MINUTE = Number(process.env.PUBLIC_RPC_REQUESTS_PER_MINUTE || 30);
 const PUBLIC_EVENT_VOLUME_REFRESH_LIMIT = Number(process.env.PUBLIC_EVENT_VOLUME_REFRESH_LIMIT || 6);
 const SOURCE_CACHE_MS = Number(process.env.SOURCE_CACHE_MS || 3000);
+const STATUS_CACHE_MS = Number(process.env.STATUS_CACHE_MS || 3000);
+const BOB_STATUS_TIMEOUT_MS = Number(process.env.BOB_STATUS_TIMEOUT_MS || 2500);
 const PUBLIC_TICK_TOLERANCE = Number(process.env.PUBLIC_TICK_TOLERANCE || 15);
 const SC_INDEX = 2;
 const FUNC_GET_ORDERS = 3;
 const PUBLIC_RPC_BASE_URL = 'https://rpc.qubic.org/live/v1';
+const STATUS_RESPONSE_KEYS = [
+  'currentProcessingEpoch',
+  'currentFetchingTick',
+  'currentFetchingLogTick',
+  'currentVerifyLoggingTick',
+  'currentIndexingTick',
+  'initialTick',
+];
 const BUILD_DIR = path.join(__dirname, '..', 'build');
 const INDEX_HTML = path.join(BUILD_DIR, 'index.html');
 
@@ -43,6 +53,7 @@ const bobTargets = bobTargetUrls.map((targetUrl, index) => {
 });
 
 let sourceCache = { at: 0, source: 'bob', bobTargetIndex: 0, tickInfo: null };
+let statusCache = { at: 0, body: null, pending: null };
 let publicRpcQueue = Promise.resolve();
 let nextPublicRpcAt = 0;
 const volumeCache = {
@@ -193,7 +204,7 @@ function withPublicRpcLimit(task) {
   return run;
 }
 
-function getJsonFromUrl(urlString) {
+function getJsonFromUrl(urlString, timeoutMs = Number(process.env.PUBLIC_RPC_TIMEOUT_MS || process.env.BOB_PROXY_TIMEOUT_MS || 30000)) {
   const targetUrl = new URL(urlString);
   const targetTransport = targetUrl.protocol === 'https:' ? https : http;
 
@@ -207,7 +218,7 @@ function getJsonFromUrl(urlString) {
       headers: {
         accept: 'application/json',
       },
-      timeout: Number(process.env.PUBLIC_RPC_TIMEOUT_MS || process.env.BOB_PROXY_TIMEOUT_MS || 30000),
+      timeout: timeoutMs,
     }, (response) => {
       const chunks = [];
 
@@ -387,7 +398,7 @@ function extractBobProcessedTick(data) {
 
 async function getBobProcessedTick(target) {
   try {
-    const data = await getJsonFromUrl(new URL('/status', target.url).toString());
+    const data = await getJsonFromUrl(new URL('/status', target.url).toString(), BOB_STATUS_TIMEOUT_MS);
     return {
       target,
       tick: extractBobProcessedTick(data),
@@ -404,7 +415,7 @@ async function getBobProcessedTick(target) {
 
 async function getBobStatus(target) {
   try {
-    const data = await getJsonFromUrl(new URL('/status', target.url).toString());
+    const data = await getJsonFromUrl(new URL('/status', target.url).toString(), BOB_STATUS_TIMEOUT_MS);
     return {
       target,
       data,
@@ -429,6 +440,15 @@ async function getPublicTick() {
   } catch {
     return 0;
   }
+}
+
+function pickStatusResponse(data) {
+  return STATUS_RESPONSE_KEYS.reduce((acc, key) => {
+    if (data && data[key] !== undefined) {
+      acc[key] = data[key];
+    }
+    return acc;
+  }, {});
 }
 
 async function getPreferredDataSource() {
@@ -680,6 +700,41 @@ async function handleEventVolumes(req, res, requestUrl) {
 }
 
 async function handleBobStatus(req, res) {
+  const now = Date.now();
+  if (statusCache.body && now - statusCache.at < STATUS_CACHE_MS) {
+    sendJson(res, 200, statusCache.body);
+    return;
+  }
+
+  if (statusCache.pending) {
+    try {
+      const body = await statusCache.pending;
+      sendJson(res, 200, body);
+    } catch (error) {
+      sendJson(res, 502, { error: 'All Bob status endpoints unavailable' });
+    }
+    return;
+  }
+
+  statusCache.pending = resolveBobStatusResponse()
+    .then((body) => {
+      statusCache = { at: Date.now(), body, pending: null };
+      return body;
+    })
+    .catch((error) => {
+      statusCache = { at: 0, body: null, pending: null };
+      throw error;
+    });
+
+  try {
+    const body = await statusCache.pending;
+    sendJson(res, 200, body);
+  } catch (error) {
+    sendJson(res, 502, { error: 'All Bob status endpoints unavailable' });
+  }
+}
+
+async function resolveBobStatusResponse() {
   const statuses = await Promise.all(bobTargets.map((target) => getBobStatus(target)));
   const successfulStatuses = statuses
     .filter((status) => status.data)
@@ -687,26 +742,10 @@ async function handleBobStatus(req, res) {
   const bestStatus = successfulStatuses[0];
 
   if (!bestStatus) {
-    sendJson(res, 502, {
-      error: 'All Bob status endpoints unavailable',
-      bobTargets: statuses.map((status) => ({
-        target: status.target.label,
-        tick: status.tick,
-        error: status.error,
-      })),
-    });
-    return;
+    throw new Error('All Bob status endpoints unavailable');
   }
 
-  sendJson(res, 200, {
-    ...bestStatus.data,
-    proxySelectedBob: bestStatus.target.label,
-    proxyBobTargets: statuses.map((status) => ({
-      target: status.target.label,
-      tick: status.tick,
-      error: status.error,
-    })),
-  });
+  return pickStatusResponse(bestStatus.data);
 }
 
 function proxyRequestToBobTarget(target, req, body, upstreamPath, search, headers) {

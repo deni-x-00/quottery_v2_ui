@@ -39,7 +39,9 @@ const PUBLIC_EVENT_LOG_URLS = [
     'https://rpc.qubic.org/query/v1/getEventLogs',
 ];
 const SOURCE_CACHE_MS = 3000;
+const NETWORK_TICK_CACHE_MS = 1000;
 let sourceCache = { bobUrl: '', at: 0, source: 'bob', tickInfo: null };
+let networkTickCache = { bobUrl: '', at: 0, value: null, promise: null };
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = PUBLIC_TICK_TIMEOUT_MS) {
     const controller = new AbortController();
@@ -256,6 +258,36 @@ export async function getPublicTick() {
 }
 
 export async function getNetworkTick(bobUrl) {
+    const now = Date.now();
+    if (
+        networkTickCache.bobUrl === bobUrl &&
+        networkTickCache.value &&
+        now - networkTickCache.at < NETWORK_TICK_CACHE_MS
+    ) {
+        return networkTickCache.value;
+    }
+
+    if (networkTickCache.bobUrl === bobUrl && networkTickCache.promise) {
+        return networkTickCache.promise;
+    }
+
+    const promise = fetchNetworkTick(bobUrl)
+        .then((value) => {
+            networkTickCache = { bobUrl, at: Date.now(), value, promise: null };
+            return value;
+        })
+        .catch((error) => {
+            if (networkTickCache.promise === promise) {
+                networkTickCache = { bobUrl: '', at: 0, value: null, promise: null };
+            }
+            throw error;
+        });
+
+    networkTickCache = { bobUrl, at: now, value: networkTickCache.value, promise };
+    return promise;
+}
+
+async function fetchNetworkTick(bobUrl) {
     const [bobTick, publicInfo] = await Promise.all([
         getBobProcessedTick(bobUrl),
         getPublicTick(),
