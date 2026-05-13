@@ -48,11 +48,32 @@ export async function fetchCachedEventVolumes(bobUrl, events, signal) {
 
   if (eventIds.length === 0) return {};
 
-  const res = await fetch(getEventVolumesUrl(bobUrl, eventIds), { signal });
+  return fetchEventVolumesByIds(bobUrl, eventIds, signal);
+}
+
+export async function fetchEventVolumesByIds(bobUrl, eventIds, signal) {
+  const ids = (Array.isArray(eventIds) ? eventIds : [])
+      .filter((eventId) => eventId !== undefined && eventId !== null)
+      .filter((eventId, index, array) => array.indexOf(eventId) === index);
+
+  if (ids.length === 0) {
+    return { volumes: {}, deferredEventIds: [], missingEventIds: [], failedEventIds: [] };
+  }
+
+  const res = await fetch(getEventVolumesUrl(bobUrl, ids), { signal });
   const body = await res.json();
   if (!res.ok || body?.error) {
     throw new Error(body?.error || `HTTP ${res.status}`);
   }
 
-  return body?.volumes || {};
+  return {
+    volumes: body?.volumes || {},
+    partial: Boolean(body?.partial),
+    deferredEventIds: Array.isArray(body?.deferredEventIds) ? body.deferredEventIds : [],
+    missingEventIds: Array.isArray(body?.missingEventIds) ? body.missingEventIds : [],
+    failedEventIds: Array.isArray(body?.failedEventIds) ? body.failedEventIds : [],
+    source: body?.source,
+    cached: body?.cached,
+    lastUpdatedAt: body?.lastUpdatedAt || 0,
+  };
 }

@@ -17,7 +17,7 @@ import EventOverviewCard from "../components/EventOverviewCard";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
-import { fetchCachedEventVolumes, getEventId } from "../utils/eventVolumes";
+import { fetchCachedEventVolumes, fetchEventVolumesByIds, getEventId } from "../utils/eventVolumes";
 
 const RECENT_EVENT_LIMIT = 6;
 
@@ -57,9 +57,24 @@ function StartPage() {
     }
 
     const controller = new AbortController();
+    const mergeVolumes = (volumes) => {
+      setEventVolumes((prev) => ({ ...prev, ...(volumes || {}) }));
+    };
+
     const loadVolumes = async () => {
       try {
-        setEventVolumes(await fetchCachedEventVolumes(bobUrl, recentEvents, controller.signal));
+        const firstResult = await fetchCachedEventVolumes(bobUrl, recentEvents, controller.signal);
+        mergeVolumes(firstResult.volumes);
+
+        let deferredEventIds = firstResult.deferredEventIds || [];
+        while (deferredEventIds.length > 0 && !controller.signal.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          if (controller.signal.aborted) return;
+
+          const nextResult = await fetchEventVolumesByIds(bobUrl, deferredEventIds, controller.signal);
+          mergeVolumes(nextResult.volumes);
+          deferredEventIds = nextResult.deferredEventIds || [];
+        }
       } catch (error) {
         if (error.name !== "AbortError") {
           console.warn("[StartPage] Failed to load cached event volumes:", error.message);

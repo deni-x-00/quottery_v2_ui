@@ -12,18 +12,39 @@ const MAX_BODY_BYTES = Number(process.env.MAX_BODY_BYTES || 10 * 1024 * 1024);
 const EVENT_VOLUME_CACHE_MS = Number(process.env.EVENT_VOLUME_CACHE_MS || 10 * 60 * 1000);
 const EVENT_VOLUME_ERROR_RETRY_MS = Number(process.env.EVENT_VOLUME_ERROR_RETRY_MS || 30 * 1000);
 const EVENT_VOLUME_REFRESH_CONCURRENCY = Number(process.env.EVENT_VOLUME_REFRESH_CONCURRENCY || 1);
+const PUBLIC_RPC_REQUESTS_PER_MINUTE = Number(process.env.PUBLIC_RPC_REQUESTS_PER_MINUTE || 30);
+const PUBLIC_EVENT_VOLUME_REFRESH_LIMIT = Number(process.env.PUBLIC_EVENT_VOLUME_REFRESH_LIMIT || 6);
+const SOURCE_CACHE_MS = Number(process.env.SOURCE_CACHE_MS || 3000);
+const PUBLIC_TICK_TOLERANCE = Number(process.env.PUBLIC_TICK_TOLERANCE || 15);
 const SC_INDEX = 2;
 const FUNC_GET_ORDERS = 3;
+const PUBLIC_RPC_BASE_URL = 'https://rpc.qubic.org/live/v1';
 const BUILD_DIR = path.join(__dirname, '..', 'build');
 const INDEX_HTML = path.join(BUILD_DIR, 'index.html');
 
-if (!BOB_TARGET_URL) {
-  console.error('BOB_TARGET_URL is required. Example: BOB_TARGET_URL=http://bob-node-host');
+const bobTargetUrls = String(BOB_TARGET_URL || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+if (bobTargetUrls.length === 0) {
+  console.error('BOB_TARGET_URL is required. Example: BOB_TARGET_URL=http://bob-node-host or http://bob1,http://bob2');
   process.exit(1);
 }
 
-const bobTarget = new URL(BOB_TARGET_URL);
-const transport = bobTarget.protocol === 'https:' ? https : http;
+const bobTargets = bobTargetUrls.map((targetUrl, index) => {
+  const url = new URL(targetUrl);
+  return {
+    index,
+    url,
+    label: url.toString().replace(/\/$/, ''),
+    transport: url.protocol === 'https:' ? https : http,
+  };
+});
+
+let sourceCache = { at: 0, source: 'bob', bobTargetIndex: 0, tickInfo: null };
+let publicRpcQueue = Promise.resolve();
+let nextPublicRpcAt = 0;
 const volumeCache = {
   lastUpdatedAt: 0,
   volumes: {},
@@ -136,8 +157,136 @@ function normalizeEventIds(idsParam) {
     .sort((a, b) => a - b);
 }
 
-function bobPostJson(pathname, payload, maxRetries = 10) {
-  const upstreamUrl = new URL(pathname, bobTarget);
+function hasCachedEventVolume(eventId) {
+  return (volumeCache.updatedAtByEventId[eventId] || 0) > 0;
+}
+
+function getBobTargetOrder(preferredIndex = null) {
+  if (preferredIndex === null || preferredIndex === undefined) return bobTargets;
+
+  const preferred = bobTargets.find((target) => target.index === preferredIndex);
+  if (!preferred) return bobTargets;
+
+  return [
+    preferred,
+    ...bobTargets.filter((target) => target.index !== preferredIndex),
+  ];
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withPublicRpcLimit(task) {
+  const minIntervalMs = Math.ceil(60000 / Math.max(1, PUBLIC_RPC_REQUESTS_PER_MINUTE));
+  const run = publicRpcQueue.then(async () => {
+    const waitMs = Math.max(0, nextPublicRpcAt - Date.now());
+    if (waitMs > 0) {
+      await delay(waitMs);
+    }
+
+    nextPublicRpcAt = Date.now() + minIntervalMs;
+    return task();
+  });
+
+  publicRpcQueue = run.catch(() => {});
+  return run;
+}
+
+function getJsonFromUrl(urlString) {
+  const targetUrl = new URL(urlString);
+  const targetTransport = targetUrl.protocol === 'https:' ? https : http;
+
+  return new Promise((resolve, reject) => {
+    const req = targetTransport.request({
+      protocol: targetUrl.protocol,
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+      method: 'GET',
+      path: `${targetUrl.pathname}${targetUrl.search}`,
+      headers: {
+        accept: 'application/json',
+      },
+      timeout: Number(process.env.PUBLIC_RPC_TIMEOUT_MS || process.env.BOB_PROXY_TIMEOUT_MS || 30000),
+    }, (response) => {
+      const chunks = [];
+
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        let parsed;
+        try {
+          parsed = text ? JSON.parse(text) : {};
+        } catch {
+          reject(new Error(`Non-JSON response (${response.statusCode}): ${text.slice(0, 160)}`));
+          return;
+        }
+
+        if (response.statusCode < 200 || response.statusCode >= 300 || parsed?.error) {
+          reject(new Error(parsed?.error || parsed?.message || `HTTP ${response.statusCode}`));
+          return;
+        }
+
+        resolve(parsed);
+      });
+    });
+
+    req.on('timeout', () => req.destroy(new Error('GET request timeout')));
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function postJsonToUrl(urlString, payload) {
+  const targetUrl = new URL(urlString);
+  const targetTransport = targetUrl.protocol === 'https:' ? https : http;
+  const body = Buffer.from(JSON.stringify(payload));
+
+  return new Promise((resolve, reject) => {
+    const req = targetTransport.request({
+      protocol: targetUrl.protocol,
+      hostname: targetUrl.hostname,
+      port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+      method: 'POST',
+      path: `${targetUrl.pathname}${targetUrl.search}`,
+      headers: {
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'content-length': body.length,
+      },
+      timeout: Number(process.env.PUBLIC_RPC_TIMEOUT_MS || process.env.BOB_PROXY_TIMEOUT_MS || 30000),
+    }, (response) => {
+      const chunks = [];
+
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => {
+        const text = Buffer.concat(chunks).toString('utf8');
+        let parsed;
+        try {
+          parsed = text ? JSON.parse(text) : {};
+        } catch {
+          reject(new Error(`Non-JSON public RPC response (${response.statusCode}): ${text.slice(0, 160)}`));
+          return;
+        }
+
+        if (response.statusCode < 200 || response.statusCode >= 300 || parsed?.error) {
+          reject(new Error(parsed?.error || parsed?.message || `HTTP ${response.statusCode}`));
+          return;
+        }
+
+        resolve(parsed);
+      });
+    });
+
+    req.on('timeout', () => req.destroy(new Error('Public RPC timeout')));
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function bobPostJsonToTarget(target, pathname, payload, maxRetries = 10) {
+  const upstreamUrl = new URL(pathname, target.url);
   const body = Buffer.from(JSON.stringify(payload));
 
   return new Promise((resolve, reject) => {
@@ -156,7 +305,7 @@ function bobPostJson(pathname, payload, maxRetries = 10) {
         timeout: Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000),
       };
 
-      const upstreamReq = transport.request(options, (upstreamRes) => {
+      const upstreamReq = target.transport.request(options, (upstreamRes) => {
         const chunks = [];
 
         upstreamRes.on('data', (chunk) => chunks.push(chunk));
@@ -198,17 +347,168 @@ function bobPostJson(pathname, payload, maxRetries = 10) {
   });
 }
 
-async function querySmartContract(funcNumber, inputHex = '') {
-  const nonce = Math.floor(Math.random() * 0xffffffff) + 1;
-  const resp = await bobPostJson('/querySmartContract', {
-    nonce,
-    scIndex: SC_INDEX,
-    funcNumber,
-    data: inputHex,
-  });
+async function bobPostJson(pathname, payload, maxRetries = 10, preferredTargetIndex = null) {
+  const errors = [];
 
-  if (!resp?.data) return Buffer.alloc(0);
-  return Buffer.from(resp.data, 'hex');
+  for (const target of getBobTargetOrder(preferredTargetIndex)) {
+    try {
+      return await bobPostJsonToTarget(target, pathname, payload, maxRetries);
+    } catch (error) {
+      errors.push(`${target.label}: ${error.message}`);
+      console.warn(`[bob-proxy] Bob POST ${pathname} failed via ${target.label}:`, error.message);
+    }
+  }
+
+  throw new Error(errors.length > 0 ? errors.join('; ') : 'All Bob targets failed');
+}
+
+async function querySmartContractViaPublicRpc(funcNumber, inputHex = '') {
+  const inputSize = Math.floor((inputHex || '').length / 2);
+  const payload = {
+    contractIndex: SC_INDEX,
+    inputType: funcNumber,
+    inputSize,
+    requestData: inputHex ? Buffer.from(inputHex, 'hex').toString('base64') : '',
+  };
+
+  return withPublicRpcLimit(async () => {
+    const body = await postJsonToUrl(`${PUBLIC_RPC_BASE_URL}/querySmartContract`, payload);
+    if (!body?.responseData) {
+      throw new Error('Public RPC response does not include responseData');
+    }
+    return Buffer.from(body.responseData, 'base64');
+  });
+}
+
+function extractBobProcessedTick(data) {
+  const tick = Number(data?.lastProcessedTick ?? data?.currentFetchingTick ?? 0);
+  return Number.isFinite(tick) && tick > 0 ? tick : 0;
+}
+
+async function getBobProcessedTick(target) {
+  try {
+    const data = await getJsonFromUrl(new URL('/status', target.url).toString());
+    return {
+      target,
+      tick: extractBobProcessedTick(data),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      target,
+      tick: 0,
+      error: error.message,
+    };
+  }
+}
+
+async function getBobStatus(target) {
+  try {
+    const data = await getJsonFromUrl(new URL('/status', target.url).toString());
+    return {
+      target,
+      data,
+      tick: extractBobProcessedTick(data),
+      error: null,
+    };
+  } catch (error) {
+    return {
+      target,
+      data: null,
+      tick: 0,
+      error: error.message,
+    };
+  }
+}
+
+async function getPublicTick() {
+  try {
+    const data = await getJsonFromUrl(`${PUBLIC_RPC_BASE_URL}/tick-info`);
+    const tick = Number(data?.tickInfo?.tick || data?.tick || 0);
+    return Number.isFinite(tick) && tick > 0 ? tick : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function getPreferredDataSource() {
+  const now = Date.now();
+  if (sourceCache.tickInfo && now - sourceCache.at < SOURCE_CACHE_MS) {
+    return sourceCache;
+  }
+
+  const [bobStatuses, publicTick] = await Promise.all([
+    Promise.all(bobTargets.map((target) => getBobProcessedTick(target))),
+    getPublicTick(),
+  ]);
+  const eligibleBobStatuses = bobStatuses
+    .map((status) => ({
+      ...status,
+      lag: status.tick && publicTick ? publicTick - status.tick : 0,
+    }))
+    .filter((status) => status.tick > 0)
+    .filter((status) => !publicTick || status.lag <= PUBLIC_TICK_TOLERANCE)
+    .sort((a, b) => b.tick - a.tick);
+
+  const bestBob = eligibleBobStatuses[0] || null;
+  const bestObservedBob = [...bobStatuses].sort((a, b) => b.tick - a.tick)[0] || null;
+
+  sourceCache = {
+    at: now,
+    source: bestBob ? 'bob' : 'public',
+    bobTargetIndex: bestBob?.target.index ?? bestObservedBob?.target.index ?? 0,
+    tickInfo: {
+      bobTick: bestBob?.tick || bestObservedBob?.tick || 0,
+      bobTarget: bestBob?.target.label || bestObservedBob?.target.label || null,
+      bobStatuses: bobStatuses.map((status) => ({
+        target: status.target.label,
+        tick: status.tick,
+        error: status.error,
+      })),
+      publicTick,
+      lag: bestBob?.lag ?? (
+        bestObservedBob?.tick && publicTick ? publicTick - bestObservedBob.tick : 0
+      ),
+    },
+  };
+  return sourceCache;
+}
+
+async function querySmartContract(funcNumber, inputHex = '') {
+  const sourceInfo = await getPreferredDataSource();
+  if (sourceInfo.source === 'public') {
+    return querySmartContractViaPublicRpc(funcNumber, inputHex);
+  }
+
+  const nonce = Math.floor(Math.random() * 0xffffffff) + 1;
+  try {
+    const resp = await bobPostJson(
+      '/querySmartContract',
+      {
+        nonce,
+        scIndex: SC_INDEX,
+        funcNumber,
+        data: inputHex,
+      },
+      10,
+      sourceInfo.bobTargetIndex
+    );
+
+    if (!resp?.data) return Buffer.alloc(0);
+    return Buffer.from(resp.data, 'hex');
+  } catch (error) {
+    sourceCache = {
+      at: Date.now(),
+      source: 'public',
+      bobTargetIndex: sourceInfo.bobTargetIndex,
+      tickInfo: {
+        ...(sourceCache.tickInfo || {}),
+        bobError: error.message,
+      },
+    };
+    console.warn('[event-volumes] All Bob querySmartContract attempts failed; switching event volume source to public RPC:', error.message);
+    return querySmartContractViaPublicRpc(funcNumber, inputHex);
+  }
 }
 
 async function fetchOrders(eventId, option, isBid) {
@@ -256,12 +556,17 @@ async function refreshEventVolume(eventId) {
         volumeCache.updatedAtByEventId[eventId] = Date.now();
         delete volumeCache.failedAtByEventId[eventId];
         volumeCache.lastUpdatedAt = Math.max(volumeCache.lastUpdatedAt, volumeCache.updatedAtByEventId[eventId]);
-        return volume;
+        return { eventId, ok: true, volume };
       })
       .catch((error) => {
         console.warn(`[event-volumes] Failed to fetch volume for event ${eventId}:`, error.message);
         volumeCache.failedAtByEventId[eventId] = Date.now();
-        return volumeCache.volumes[eventId] || 0;
+        return {
+          eventId,
+          ok: false,
+          error: error.message,
+          volume: hasCachedEventVolume(eventId) ? volumeCache.volumes[eventId] : null,
+        };
       })
       .finally(() => {
         delete volumeCache.pendingByEventId[eventId];
@@ -273,15 +578,17 @@ async function refreshEventVolume(eventId) {
 
 async function refreshEventVolumes(eventIds) {
   const queue = [...eventIds];
+  const results = [];
   const workerCount = Math.max(1, Math.min(EVENT_VOLUME_REFRESH_CONCURRENCY, queue.length));
   const workers = Array.from({ length: workerCount }, async () => {
     while (queue.length > 0) {
       const eventId = queue.shift();
-      await refreshEventVolume(eventId);
+      results.push(await refreshEventVolume(eventId));
     }
   });
 
   await Promise.all(workers);
+  return results;
 }
 
 function pickEventVolumes(eventIds) {
@@ -308,6 +615,10 @@ async function handleEventVolumes(req, res, requestUrl) {
     const updatedAt = volumeCache.updatedAtByEventId[eventId] || 0;
     if (updatedAt > 0) return now - updatedAt >= EVENT_VOLUME_CACHE_MS;
 
+    // Never treat failed fresh attempts as usable cache before this event has
+    // had at least one successful volume fetch.
+    if (!hasCachedEventVolume(eventId)) return true;
+
     const failedAt = volumeCache.failedAtByEventId[eventId] || 0;
     return !failedAt || now - failedAt >= EVENT_VOLUME_ERROR_RETRY_MS;
   });
@@ -323,22 +634,142 @@ async function handleEventVolumes(req, res, requestUrl) {
   }
 
   try {
-    await refreshEventVolumes(staleEventIds);
+    const sourceInfo = await getPreferredDataSource();
+    const source = sourceInfo.source;
+    const refreshEventIds = source === 'public'
+      ? staleEventIds.slice(0, Math.max(1, PUBLIC_EVENT_VOLUME_REFRESH_LIMIT))
+      : staleEventIds;
+    const deferredEventIds = staleEventIds.slice(refreshEventIds.length);
+    const results = await refreshEventVolumes(refreshEventIds);
+    const failedEvents = results
+      .filter((result) => result && result.ok === false)
+      .map((result) => ({ eventId: result.eventId, error: result.error }));
+    const failedEventIds = failedEvents.map((result) => result.eventId);
+    const missingEventIds = eventIds.filter((eventId) => !hasCachedEventVolume(eventId));
+
+    if (missingEventIds.length === eventIds.length && deferredEventIds.length === 0) {
+      sendJson(res, 502, {
+        error: 'Failed to refresh event volumes',
+        volumes: {},
+        cached: false,
+        source,
+        lastUpdatedAt: volumeCache.lastUpdatedAt,
+        ttlMs: EVENT_VOLUME_CACHE_MS,
+        failedEvents,
+        failedEventIds,
+        missingEventIds,
+      });
+      return;
+    }
+
     sendJson(res, 200, {
       volumes: pickEventVolumes(eventIds),
       cached: false,
+      source,
       lastUpdatedAt: volumeCache.lastUpdatedAt,
       ttlMs: EVENT_VOLUME_CACHE_MS,
+      partial: missingEventIds.length > 0 || failedEventIds.length > 0 || deferredEventIds.length > 0,
+      failedEvents,
+      failedEventIds,
+      missingEventIds,
+      deferredEventIds,
     });
   } catch (error) {
     sendJson(res, 502, { error: 'Failed to refresh event volumes', details: error.message });
   }
 }
 
+async function handleBobStatus(req, res) {
+  const statuses = await Promise.all(bobTargets.map((target) => getBobStatus(target)));
+  const successfulStatuses = statuses
+    .filter((status) => status.data)
+    .sort((a, b) => b.tick - a.tick);
+  const bestStatus = successfulStatuses[0];
+
+  if (!bestStatus) {
+    sendJson(res, 502, {
+      error: 'All Bob status endpoints unavailable',
+      bobTargets: statuses.map((status) => ({
+        target: status.target.label,
+        tick: status.tick,
+        error: status.error,
+      })),
+    });
+    return;
+  }
+
+  sendJson(res, 200, {
+    ...bestStatus.data,
+    proxySelectedBob: bestStatus.target.label,
+    proxyBobTargets: statuses.map((status) => ({
+      target: status.target.label,
+      tick: status.tick,
+      error: status.error,
+    })),
+  });
+}
+
+function proxyRequestToBobTarget(target, req, body, upstreamPath, search, headers) {
+  const upstreamUrl = new URL(`${upstreamPath}${search}`, target.url);
+  const requestHeaders = { ...headers };
+  if (body.length > 0) {
+    requestHeaders['content-length'] = body.length;
+  } else {
+    delete requestHeaders['content-length'];
+  }
+
+  return new Promise((resolve, reject) => {
+    const upstreamReq = target.transport.request({
+      protocol: upstreamUrl.protocol,
+      hostname: upstreamUrl.hostname,
+      port: upstreamUrl.port || (upstreamUrl.protocol === 'https:' ? 443 : 80),
+      method: req.method,
+      path: `${upstreamUrl.pathname}${upstreamUrl.search}`,
+      headers: requestHeaders,
+      timeout: Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000),
+    }, (upstreamRes) => {
+      const chunks = [];
+      upstreamRes.on('data', (chunk) => chunks.push(chunk));
+      upstreamRes.on('end', () => {
+        resolve({
+          statusCode: upstreamRes.statusCode || 502,
+          headers: upstreamRes.headers,
+          body: Buffer.concat(chunks),
+        });
+      });
+    });
+
+    upstreamReq.on('timeout', () => upstreamReq.destroy(new Error('Bob upstream timeout')));
+    upstreamReq.on('error', reject);
+
+    if (body.length > 0) {
+      upstreamReq.write(body);
+    }
+
+    upstreamReq.end();
+  });
+}
+
+function shouldTryNextBob(response) {
+  if ([502, 503, 504].includes(Number(response?.statusCode))) return true;
+
+  try {
+    const body = JSON.parse(Buffer.from(response?.body || '').toString('utf8') || '{}');
+    const message = String(body?.error || body?.message || '').toLowerCase();
+    return message.includes('no connection') || message.includes('unavailable') || message.includes('timeout');
+  } catch {
+    return false;
+  }
+}
+
 async function proxyToBob(req, res) {
   const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const upstreamPath = requestUrl.pathname.slice(BOB_PROXY_PREFIX.length) || '/';
-  const upstreamUrl = new URL(`${upstreamPath}${requestUrl.search}`, bobTarget);
+
+  if (req.method === 'GET' && upstreamPath === '/status') {
+    await handleBobStatus(req, res);
+    return;
+  }
 
   let body;
   try {
@@ -355,43 +786,41 @@ async function proxyToBob(req, res) {
     headers['content-type'] = req.headers['content-type'];
   }
 
-  if (body.length > 0) {
-    headers['content-length'] = body.length;
-  }
+  const errors = [];
+  const preferredIndex = sourceCache.source === 'bob' ? sourceCache.bobTargetIndex : null;
+  const targetOrder = getBobTargetOrder(preferredIndex);
+  const lastTargetIndex = targetOrder[targetOrder.length - 1]?.index;
 
-  const options = {
-    protocol: upstreamUrl.protocol,
-    hostname: upstreamUrl.hostname,
-    port: upstreamUrl.port || (upstreamUrl.protocol === 'https:' ? 443 : 80),
-    method: req.method,
-    path: `${upstreamUrl.pathname}${upstreamUrl.search}`,
-    headers,
-    timeout: Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000),
-  };
+  for (const target of targetOrder) {
+    try {
+      const response = await proxyRequestToBobTarget(
+        target,
+        req,
+        body,
+        upstreamPath,
+        requestUrl.search,
+        headers
+      );
 
-  const upstreamReq = transport.request(options, (upstreamRes) => {
-    setCorsHeaders(res);
-    res.writeHead(upstreamRes.statusCode || 502, upstreamRes.headers);
-    upstreamRes.pipe(res);
-  });
+      if (shouldTryNextBob(response) && target.index !== lastTargetIndex) {
+        errors.push(`${target.label}: HTTP ${response.statusCode}`);
+        continue;
+      }
 
-  upstreamReq.on('timeout', () => {
-    upstreamReq.destroy(new Error('Bob upstream timeout'));
-  });
-
-  upstreamReq.on('error', (error) => {
-    if (!res.headersSent) {
-      sendJson(res, 502, { error: 'Bob upstream unavailable', details: error.message });
-    } else {
-      res.destroy(error);
+      setCorsHeaders(res);
+      res.setHeader('X-Proxy-Bob-Target', target.label);
+      res.writeHead(response.statusCode, response.headers);
+      res.end(response.body);
+      return;
+    } catch (error) {
+      errors.push(`${target.label}: ${error.message}`);
     }
-  });
-
-  if (body.length > 0) {
-    upstreamReq.write(body);
   }
 
-  upstreamReq.end();
+  sendJson(res, 502, {
+    error: 'All Bob upstreams unavailable',
+    details: errors.join('; '),
+  });
 }
 
 const server = http.createServer(async (req, res) => {
