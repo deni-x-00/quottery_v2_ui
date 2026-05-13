@@ -26,6 +26,7 @@ const DEFAULT_TICK_SETTINGS = {
   fixedTicks: 20,
   approvalSeconds: 15,
 };
+const WHOLE_SHARE_PRICE = 100000;
 
 function readTickSettings() {
   if (typeof window === 'undefined') return DEFAULT_TICK_SETTINGS;
@@ -347,27 +348,39 @@ export const QuotteryProvider = ({ children }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet]);
 
-  // Build order book side entries for display
+  // Build unified order book side entries for display.
+  // Opposite-option orders are flipped so BUY YES @ 75k also appears as SELL NO @ 25k.
   const buildOrderSideEntries = (book, tabIndex, side) => {
     if (!book) return [];
 
     const optionKey = tabIndex === 0 ? 'option0' : 'option1';
+    const oppositeOptionKey = tabIndex === 0 ? 'option1' : 'option0';
     const optionData = book[optionKey];
+    const oppositeOptionData = book[oppositeOptionKey];
     if (!optionData) return [];
 
     const isBidSide = side === 'bids';
-    const source = isBidSide ? optionData.bids : optionData.asks;
-
-    if (!Array.isArray(source)) return [];
+    const directSource = isBidSide ? optionData.bids : optionData.asks;
+    const flippedSource = isBidSide ? oppositeOptionData?.asks : oppositeOptionData?.bids;
 
     const aggregatedByPrice = new Map();
 
-    for (const entry of source) {
-      const price = Number(entry?.price ?? 0);
+    const addEntry = (entry, flipPrice = false) => {
+      const rawPrice = Number(entry?.price ?? 0);
       const amount = Number(entry?.amount ?? 0);
-      if (!Number.isFinite(price) || !Number.isFinite(amount) || amount <= 0) continue;
+      if (!Number.isFinite(rawPrice) || !Number.isFinite(amount) || amount <= 0) return;
 
+      const price = flipPrice ? WHOLE_SHARE_PRICE - rawPrice : rawPrice;
+      if (!Number.isFinite(price) || price < 0) return;
       aggregatedByPrice.set(price, (aggregatedByPrice.get(price) || 0) + amount);
+    };
+
+    if (Array.isArray(directSource)) {
+      for (const entry of directSource) addEntry(entry);
+    }
+
+    if (Array.isArray(flippedSource)) {
+      for (const entry of flippedSource) addEntry(entry, true);
     }
 
     return Array.from(aggregatedByPrice, ([price, amount]) => ({ price, amount }))
