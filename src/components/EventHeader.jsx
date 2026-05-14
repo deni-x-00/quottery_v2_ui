@@ -3,6 +3,7 @@ import { Box, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpIcon from "@mui/icons-material/Help";
 import { getTagGroupInfo, getTagInfo } from "./qubic/util/tagMap";
+import { isEventClosed } from "./qubic/util/tradeValidation";
 import EventCountdown from "./EventCountdown";
 
 function EventHeader({ event, onBack, resolveThumbnail }) {
@@ -11,6 +12,7 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
     const groupInfo = getTagGroupInfo(event?.tag);
     const thumbSrc = tagInfo.thumbnail && resolveThumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
     const topicLabel = tagInfo.label === "General" ? "General" : tagInfo.label;
+    const hasEnded = Boolean(event && isEventClosed(event));
 
     return (
         <Box
@@ -86,7 +88,7 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
             </Stack>
 
             <Box sx={{ gridColumn: { xs: "2 / 3", sm: "auto" }, justifySelf: { xs: "start", sm: "end" }, mt: { xs: 0.5, sm: 0 } }}>
-                <EventCountdown endDate={event?.endDate} compact />
+                <EventCountdown endDate={event?.endDate} compact forceEnded={hasEnded} />
             </Box>
         </Box>
     );

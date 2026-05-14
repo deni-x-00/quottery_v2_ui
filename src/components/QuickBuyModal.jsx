@@ -13,6 +13,7 @@ import {
     useTheme,
     useMediaQuery,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import { useQubicConnect } from './qubic/connect/QubicConnectContext';
 import { useQuotteryContext } from '../contexts/QuotteryContext';
@@ -46,6 +47,30 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
     const [price, setPrice] = useState(50000);
     const [priceInput, setPriceInput] = useState('50000');
     const [submitting, setSubmitting] = useState(false);
+    const optionColor = (option) => (option === 0 ? theme.palette.success : theme.palette.error);
+    const optionToggleSx = (option) => {
+        const palette = optionColor(option);
+        return {
+            flex: 1,
+            textTransform: 'none',
+            fontWeight: 700,
+            color: palette.main,
+            bgcolor: alpha(palette.main, theme.palette.mode === 'dark' ? 0.14 : 0.08),
+            borderColor: `${alpha(palette.main, 0.35)} !important`,
+            '&:hover': {
+                bgcolor: alpha(palette.main, theme.palette.mode === 'dark' ? 0.22 : 0.14),
+                borderColor: `${alpha(palette.main, 0.55)} !important`,
+            },
+            '&.Mui-selected': {
+                bgcolor: `${palette.main} !important`,
+                color: `${palette.contrastText} !important`,
+                borderColor: `${palette.main} !important`,
+            },
+            '&.Mui-selected:hover': {
+                bgcolor: `${palette.dark || palette.main} !important`,
+            },
+        };
+    };
 
     useEffect(() => {
         if (open) {
@@ -206,15 +231,11 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                         onChange={(_, v) => { if (typeof v === 'number') setSelectedOption(v); }}
                         size="small" fullWidth
                         sx={{
-                            '& .MuiToggleButton-root': { flex: 1, textTransform: 'none', fontWeight: 600 },
-                            '& .MuiToggleButton-root.Mui-selected': {
-                                bgcolor: `${theme.palette.primary.main} !important`,
-                                color: `${theme.palette.primary.contrastText} !important`,
-                            },
+                            '& .MuiToggleButton-root': { borderColor: theme.palette.divider },
                         }}
                     >
-                        <ToggleButton value={0}>{event.option0Desc || 'Option 0'}</ToggleButton>
-                        <ToggleButton value={1}>{event.option1Desc || 'Option 1'}</ToggleButton>
+                        <ToggleButton value={0} sx={optionToggleSx(0)}>{event.option0Desc || 'Option 0'}</ToggleButton>
+                        <ToggleButton value={1} sx={optionToggleSx(1)}>{event.option1Desc || 'Option 1'}</ToggleButton>
                     </ToggleButtonGroup>
 
                     <TradeAmountSlider

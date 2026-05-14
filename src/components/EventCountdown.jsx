@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Stack, Typography, useTheme } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { parseQubicUtcDate } from "./qubic/util/tradeValidation";
 
 const SECOND_MS = 1000;
@@ -7,7 +8,6 @@ const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const MONTH_MS = 30 * DAY_MS;
-const countdownRed = "#ff3b3f";
 
 function getCountdownParts(endTime, nowTime) {
     const remainingMs = Math.max(0, endTime - nowTime);
@@ -26,12 +26,12 @@ function getCountdownParts(endTime, nowTime) {
     return { months, days, hours, minutes, seconds, isEnded: remainingMs <= 0 };
 }
 
-function CountdownUnit({ value, label, compact = false }) {
+function CountdownUnit({ value, label, compact = false, color }) {
     return (
         <Box sx={{ minWidth: compact ? { xs: 36, sm: 46 } : { xs: 44, sm: 56 }, textAlign: "center" }}>
             <Typography
                 sx={{
-                    color: countdownRed,
+                    color,
                     fontSize: compact ? { xs: "1.05rem", sm: "1.45rem" } : { xs: "1.45rem", sm: "1.9rem" },
                     fontWeight: 800,
                     lineHeight: 1,
@@ -55,7 +55,7 @@ function CountdownUnit({ value, label, compact = false }) {
     );
 }
 
-function EventCountdown({ endDate, compact = false }) {
+function EventCountdown({ endDate, compact = false, forceEnded = false }) {
     const theme = useTheme();
     const [nowTime, setNowTime] = useState(() => Date.now());
     const endTime = useMemo(() => {
@@ -77,6 +77,8 @@ function EventCountdown({ endDate, compact = false }) {
     if (!endTime) return null;
 
     const parts = getCountdownParts(endTime, nowTime);
+    const isEnded = forceEnded || parts.isEnded;
+    const countdownColor = isEnded ? theme.palette.error.main : theme.palette.primary.main;
     const units = [
         ...(parts.months > 0 ? [{ value: parts.months, label: "MONTHS" }] : []),
         ...(parts.months > 0 || parts.days > 0 ? [{ value: parts.days, label: "DAYS" }] : []),
@@ -93,12 +95,10 @@ function EventCountdown({ endDate, compact = false }) {
                 px: compact ? 0 : { xs: 1.5, sm: 2 },
                 py: compact ? 0 : { xs: 1.5, sm: 1.75 },
                 borderRadius: compact ? 0 : 1.5,
-                border: compact ? 0 : `1px solid ${theme.palette.divider}`,
+                border: compact ? 0 : `1px solid ${alpha(countdownColor, 0.3)}`,
                 bgcolor: compact
                     ? "transparent"
-                    : theme.palette.mode === "dark"
-                        ? "rgba(255,255,255,0.035)"
-                        : "rgba(239,68,68,0.045)",
+                    : alpha(countdownColor, theme.palette.mode === "dark" ? 0.08 : 0.06),
             }}
         >
             {!compact && (
@@ -112,14 +112,14 @@ function EventCountdown({ endDate, compact = false }) {
                         mb: 1,
                     }}
                 >
-                    {parts.isEnded ? "EVENT ENDED" : "TIME LEFT"}
+                    {isEnded ? "EVENT ENDED" : "TIME LEFT"}
                 </Typography>
             )}
             <Stack direction="row" spacing={compact ? { xs: 1, sm: 1.35 } : { xs: 1.5, sm: 2.25 }} justifyContent="center" useFlexGap flexWrap="wrap">
-                {parts.isEnded ? (
+                {isEnded ? (
                     <Typography
                         sx={{
-                            color: countdownRed,
+                            color: countdownColor,
                             fontSize: compact ? { xs: "1.05rem", sm: "1.45rem" } : { xs: "1.45rem", sm: "1.9rem" },
                             fontWeight: 800,
                             lineHeight: 1,
@@ -128,7 +128,7 @@ function EventCountdown({ endDate, compact = false }) {
                         ENDED
                     </Typography>
                 ) : units.map((unit) => (
-                    <CountdownUnit key={unit.label} value={unit.value} label={unit.label} compact={compact} />
+                    <CountdownUnit key={unit.label} value={unit.value} label={unit.label} compact={compact} color={countdownColor} />
                 ))}
             </Stack>
         </Box>

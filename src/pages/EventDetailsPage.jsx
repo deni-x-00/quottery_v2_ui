@@ -158,6 +158,53 @@ function EventDetailsPage() {
     // Order book UI state
     const [orderBookExpanded, setOrderBookExpanded] = useState(true);
     const [obTab, setObTab] = useState(0);
+    const optionColor = (option) => (option === 0 ? theme.palette.success : theme.palette.error);
+    const optionToggleSx = (option) => {
+        const palette = optionColor(option);
+        return {
+            flex: 1,
+            textTransform: "none",
+            fontWeight: 700,
+            color: palette.main,
+            bgcolor: alpha(palette.main, theme.palette.mode === "dark" ? 0.14 : 0.08),
+            borderColor: `${alpha(palette.main, 0.35)} !important`,
+            "&:hover": {
+                bgcolor: alpha(palette.main, theme.palette.mode === "dark" ? 0.22 : 0.14),
+                borderColor: `${alpha(palette.main, 0.55)} !important`,
+            },
+            "&.Mui-selected": {
+                bgcolor: `${palette.main} !important`,
+                color: `${palette.contrastText} !important`,
+                borderColor: `${palette.main} !important`,
+            },
+            "&.Mui-selected:hover": {
+                bgcolor: `${palette.dark || palette.main} !important`,
+            },
+        };
+    };
+    const optionTabSx = (option) => {
+        const palette = optionColor(option);
+        return {
+            color: palette.main,
+            borderRadius: 1,
+            "&.Mui-selected": {
+                color: palette.main,
+                bgcolor: alpha(palette.main, theme.palette.mode === "dark" ? 0.16 : 0.1),
+            },
+        };
+    };
+    const tradeSideColor = (side) => (side === "buy" ? theme.palette.success : theme.palette.error);
+    const tradeSideTabSx = (side) => {
+        const palette = tradeSideColor(side);
+        return {
+            color: palette.main,
+            borderRadius: 1,
+            "&.Mui-selected": {
+                color: palette.main,
+                bgcolor: alpha(palette.main, theme.palette.mode === "dark" ? 0.16 : 0.1),
+            },
+        };
+    };
 
     const refreshData = useCallback(() => {
         if (!event || event.eid === undefined || event.eid < 0) return;
@@ -550,6 +597,9 @@ function EventDetailsPage() {
         );
     }
 
+    const eventEnded = isEventClosed(event);
+    const timerColor = eventEnded ? theme.palette.error.main : theme.palette.primary.main;
+
     return (
         <Container
             maxWidth={false}
@@ -576,14 +626,14 @@ function EventDetailsPage() {
                         {/* Close date and status */}
                         <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
                             <Box display="flex" alignItems="center" gap={1}>
-                                <HourglassBottomIcon sx={{ fontSize: "1.2rem", color: theme.palette.text.secondary }} />
+                                <HourglassBottomIcon sx={{ fontSize: "1.2rem", color: timerColor }} />
                                 <Typography variant="body2"
-                                            sx={{ fontSize: { xs: "0.9rem", sm: "1rem" }, color: theme.palette.text.secondary, whiteSpace: "nowrap" }}>
+                                            sx={{ fontSize: { xs: "0.9rem", sm: "1rem" }, color: timerColor, whiteSpace: "nowrap", fontWeight: 600 }}>
                                     {event.endDate}
                                 </Typography>
                             </Box>
                             <Box display="flex" alignItems="center" gap={1}>
-                                <Typography variant="body2" sx={{ color: theme.palette.text.secondary }}>
+                                <Typography variant="body2" sx={{ color: timerColor, fontWeight: 600 }}>
                                     Result: {event.resultByGO === -1 ? 'Pending' : event.resultByGO === 0 ? event.option0Desc : event.option1Desc}
                                 </Typography>
                             </Box>
@@ -623,8 +673,8 @@ function EventDetailsPage() {
                                 <AccordionDetails>
                                     <Tabs value={obTab} onChange={(_, v) => setObTab(v)}
                                           sx={{ mb: 1, "& .MuiTab-root": { textTransform: "none", fontWeight: 600 }, "& .MuiTabs-indicator": { height: 3, borderRadius: 1.5 } }}>
-                                        <Tab label={event?.option0Desc || "Option 0"} value={0} />
-                                        <Tab label={event?.option1Desc || "Option 1"} value={1} />
+                                        <Tab label={event?.option0Desc || "Option 0"} value={0} sx={optionTabSx(0)} />
+                                        <Tab label={event?.option1Desc || "Option 1"} value={1} sx={optionTabSx(1)} />
                                     </Tabs>
 
                                     {obLoading && <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>Loading order book...</Typography>}
@@ -721,15 +771,15 @@ function EventDetailsPage() {
                                 <AccordionDetails>
                                     <Grid container spacing={2}>
                                         {[
-                                            { icon: <EventAvailableIcon color="primary" />, label: "Open", value: event.openDate },
-                                            { icon: <TimelineIcon color="success" />, label: "End", value: event.endDate },
+                                            { icon: EventAvailableIcon, label: "Open", value: event.openDate, color: theme.palette.primary.main },
+                                            { icon: TimelineIcon, label: "End", value: event.endDate, color: timerColor },
                                         ].map((item, idx) => (
                                             <Grid item xs={12} md={6} key={idx}>
                                                 <Box display="flex" alignItems="center" gap={2}>
-                                                    {item.icon}
+                                                    <item.icon sx={{ color: item.color }} />
                                                     <Box>
                                                         <Typography variant="body2" color="text.secondary">{item.label}</Typography>
-                                                        <Typography variant="body2">{item.value}</Typography>
+                                                        <Typography variant="body2" sx={{ color: item.color, fontWeight: 600 }}>{item.value}</Typography>
                                                     </Box>
                                                 </Box>
                                             </Grid>
@@ -783,10 +833,18 @@ function EventDetailsPage() {
                             <Stack spacing={2}>
                                 {/* Buy / Sell tabs */}
                                 <Tabs value={tradeSide} onChange={(_, v) => v && setTradeSide(v)}
-                                      variant="fullWidth" textColor="primary" indicatorColor="primary"
-                                      sx={{ minHeight: 30, "& .MuiTab-root": { minHeight: 30, textTransform: "none", fontWeight: 600, fontSize: 13, py: 0.25 }, "& .MuiTabs-indicator": { height: 2, borderRadius: 1 } }}>
-                                    <Tab label="Buy" value="buy" />
-                                    <Tab label="Sell" value="sell" />
+                                      variant="fullWidth"
+                                      sx={{
+                                          minHeight: 30,
+                                          "& .MuiTab-root": { minHeight: 30, textTransform: "none", fontWeight: 700, fontSize: 13, py: 0.25 },
+                                          "& .MuiTabs-indicator": {
+                                              height: 2,
+                                              borderRadius: 1,
+                                              bgcolor: tradeSideColor(tradeSide).main,
+                                          },
+                                      }}>
+                                    <Tab label="Buy" value="buy" sx={tradeSideTabSx("buy")} />
+                                    <Tab label="Sell" value="sell" sx={tradeSideTabSx("sell")} />
                                 </Tabs>
 
                                 {/* Option selector */}
@@ -794,15 +852,10 @@ function EventDetailsPage() {
                                                    onChange={(_, v) => setSelectedOption(typeof v === "number" ? v : selectedOption)}
                                                    size="small" fullWidth
                                                    sx={{
-                                                       "& .MuiToggleButton-root": { flex: 1, textTransform: "none", fontWeight: 600, borderColor: theme.palette.divider },
-                                                       "& .MuiToggleButton-root.Mui-selected": {
-                                                           bgcolor: `${theme.palette.primary.main} !important`,
-                                                           color: `${theme.palette.primary.contrastText} !important`,
-                                                           borderColor: `${theme.palette.primary.main} !important`,
-                                                       },
+                                                       "& .MuiToggleButton-root": { borderColor: theme.palette.divider },
                                                    }}>
-                                    <ToggleButton value={0}>{event?.option0Desc || "Option 0"}</ToggleButton>
-                                    <ToggleButton value={1}>{event?.option1Desc || "Option 1"}</ToggleButton>
+                                    <ToggleButton value={0} sx={optionToggleSx(0)}>{event?.option0Desc || "Option 0"}</ToggleButton>
+                                    <ToggleButton value={1} sx={optionToggleSx(1)}>{event?.option1Desc || "Option 1"}</ToggleButton>
                                 </ToggleButtonGroup>
 
                                 <TradeAmountSlider
