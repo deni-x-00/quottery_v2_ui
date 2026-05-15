@@ -79,6 +79,7 @@ function EventsPage() {
   const [expandedGroupIds, setExpandedGroupIds] = useState({});
   const [sortMenuAnchorEl, setSortMenuAnchorEl] = useState(null);
   const [eventVolumes, setEventVolumes] = useState({});
+  const [eventProbabilities, setEventProbabilities] = useState({});
   const selectedTopicId = getValidTopicId(searchParams.get("topic"));
   const selectedGroupId = selectedTopicId
       ? getTagGroupId(Number(selectedTopicId))
@@ -113,6 +114,7 @@ function EventsPage() {
   useEffect(() => {
     if (!isConnected || !Array.isArray(allEvents) || allEvents.length === 0) {
       setEventVolumes({});
+      setEventProbabilities({});
       return undefined;
     }
 
@@ -120,11 +122,15 @@ function EventsPage() {
     const mergeVolumes = (volumes) => {
       setEventVolumes((prev) => ({ ...prev, ...(volumes || {}) }));
     };
+    const mergeProbabilities = (probabilities) => {
+      setEventProbabilities((prev) => ({ ...prev, ...(probabilities || {}) }));
+    };
 
     const loadVolumes = async () => {
       try {
         const firstResult = await fetchCachedEventVolumes(bobUrl, allEvents, controller.signal);
         mergeVolumes(firstResult.volumes);
+        mergeProbabilities(firstResult.probabilities);
 
         let deferredEventIds = firstResult.deferredEventIds || [];
         while (deferredEventIds.length > 0 && !controller.signal.aborted) {
@@ -133,6 +139,7 @@ function EventsPage() {
 
           const nextResult = await fetchEventVolumesByIds(bobUrl, deferredEventIds, controller.signal);
           mergeVolumes(nextResult.volumes);
+          mergeProbabilities(nextResult.probabilities);
           deferredEventIds = nextResult.deferredEventIds || [];
         }
       } catch (error) {
@@ -538,7 +545,7 @@ function EventsPage() {
                                   return (
                                       <Grid item xs={12} sm={6} lg={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                         <EventOverviewCard
-                                            data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0 }}
+                                            data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0, probability: eventProbabilities[getEventId(event)] }}
                                             onClick={() => navigate(`/event/${event.eid}`, { state: { from: eventsReturnPath } })}
                                             status={event.status}
                                             onTxBroadcast={trackTx}

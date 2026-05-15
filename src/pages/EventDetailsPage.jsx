@@ -71,6 +71,7 @@ import { useTxTracker } from "../hooks/useTxTracker";
 import TradeAmountSlider from "../components/TradeAmountSlider";
 import TradePriceSelector from "../components/TradePriceSelector";
 import EventHeader from "../components/EventHeader";
+import { calculateOptionProbability } from "../utils/eventProbability";
 const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
     try {
@@ -158,6 +159,13 @@ function EventDetailsPage() {
     // Order book UI state
     const [orderBookExpanded, setOrderBookExpanded] = useState(true);
     const [obTab, setObTab] = useState(0);
+    const option0Probability = calculateOptionProbability(orderbook, 0);
+    const roundedOption0Percent = Number.isFinite(Number(option0Probability?.percent))
+        ? Math.max(0, Math.min(100, Math.round(Number(option0Probability.percent))))
+        : null;
+    const selectedChanceText = roundedOption0Percent === null
+        ? null
+        : `${obTab === 0 ? roundedOption0Percent : 100 - roundedOption0Percent}%`;
     const optionColor = (option) => (option === 0 ? theme.palette.success : theme.palette.error);
     const optionToggleSx = (option) => {
         const palette = optionColor(option);
@@ -633,7 +641,7 @@ function EventDetailsPage() {
                                 </Typography>
                             </Box>
                             <Box display="flex" alignItems="center" gap={1}>
-                                <Typography variant="body2" sx={{ color: timerColor, fontWeight: 600 }}>
+                                <Typography variant="body2" sx={{ color: theme.palette.primary.main, fontWeight: 600 }}>
                                     Result: {event.resultByGO === -1 ? 'Pending' : event.resultByGO === 0 ? event.option0Desc : event.option1Desc}
                                 </Typography>
                             </Box>
@@ -671,6 +679,20 @@ function EventDetailsPage() {
                                     </Box>
                                 </AccordionSummary>
                                 <AccordionDetails>
+                                    {selectedChanceText && (
+                                        <Box sx={{ mb: 1.5 }}>
+                                            <Typography
+                                                sx={{
+                                                    color: theme.palette.primary.main,
+                                                    fontSize: { xs: "1.2rem", sm: "1.45rem" },
+                                                    fontWeight: 800,
+                                                    lineHeight: 1,
+                                                }}
+                                            >
+                                                {selectedChanceText} chance
+                                            </Typography>
+                                        </Box>
+                                    )}
                                     <Tabs value={obTab} onChange={(_, v) => setObTab(v)}
                                           sx={{ mb: 1, "& .MuiTab-root": { textTransform: "none", fontWeight: 600 }, "& .MuiTabs-indicator": { height: 3, borderRadius: 1.5 } }}>
                                         <Tab label={event?.option0Desc || "Option 0"} value={0} sx={optionTabSx(0)} />

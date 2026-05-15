@@ -20,6 +20,7 @@ const BOB_STATUS_TIMEOUT_MS = Number(process.env.BOB_STATUS_TIMEOUT_MS || 2500);
 const PUBLIC_TICK_TOLERANCE = Number(process.env.PUBLIC_TICK_TOLERANCE || 15);
 const SC_INDEX = 2;
 const FUNC_GET_ORDERS = 3;
+const WHOLE_SHARE_PRICE = 100000;
 const PUBLIC_RPC_BASE_URL = 'https://rpc.qubic.org/live/v1';
 const STATUS_RESPONSE_KEYS = [
   'currentProcessingEpoch',
@@ -59,6 +60,7 @@ let nextPublicRpcAt = 0;
 const volumeCache = {
   lastUpdatedAt: 0,
   volumes: {},
+  probabilities: {},
   updatedAtByEventId: {},
   failedAtByEventId: {},
   pendingByEventId: {},
@@ -556,27 +558,92 @@ async function fetchOrders(eventId, option, isBid) {
 }
 
 async function fetchEventOpenVolume(eventId) {
-  const sides = await Promise.all([
+  const [bids0, asks0, bids1, asks1] = await Promise.all([
     fetchOrders(eventId, 0, true),
     fetchOrders(eventId, 0, false),
     fetchOrders(eventId, 1, true),
     fetchOrders(eventId, 1, false),
   ]);
-
-  return sides
+  const sides = [bids0, asks0, bids1, asks1];
+  const volume = sides
     .flat()
     .reduce((sum, order) => sum + (Number(order.amount || 0) * Number(order.price || 0)), 0);
+
+  return {
+    volume,
+    probability: calculateOptionProbability({
+      option0: { bids: bids0, asks: asks0 },
+      option1: { bids: bids1, asks: asks1 },
+    }, 0),
+  };
+}
+
+function normalizeOrderPrice(entry, flipPrice = false) {
+  const rawPrice = Number(entry?.price ?? 0);
+  const amount = Number(entry?.amount ?? 0);
+  if (!Number.isFinite(rawPrice) || !Number.isFinite(amount) || amount <= 0) return null;
+
+  const price = flipPrice ? WHOLE_SHARE_PRICE - rawPrice : rawPrice;
+  if (!Number.isFinite(price) || price <= 0 || price >= WHOLE_SHARE_PRICE) return null;
+  return price;
+}
+
+function getUnifiedPrices(book, option, side) {
+  const optionKey = option === 0 ? 'option0' : 'option1';
+  const oppositeOptionKey = option === 0 ? 'option1' : 'option0';
+  const isBidSide = side === 'bids';
+  const directSource = isBidSide ? book?.[optionKey]?.bids : book?.[optionKey]?.asks;
+  const flippedSource = isBidSide ? book?.[oppositeOptionKey]?.asks : book?.[oppositeOptionKey]?.bids;
+  const prices = [];
+
+  if (Array.isArray(directSource)) {
+    for (const entry of directSource) {
+      const price = normalizeOrderPrice(entry);
+      if (price !== null) prices.push(price);
+    }
+  }
+
+  if (Array.isArray(flippedSource)) {
+    for (const entry of flippedSource) {
+      const price = normalizeOrderPrice(entry, true);
+      if (price !== null) prices.push(price);
+    }
+  }
+
+  return prices;
+}
+
+function calculateOptionProbability(book, option = 0) {
+  const bids = getUnifiedPrices(book, option, 'bids');
+  const asks = getUnifiedPrices(book, option, 'asks');
+  const bestBid = bids.length > 0 ? Math.max(...bids) : null;
+  const bestAsk = asks.length > 0 ? Math.min(...asks) : null;
+
+  let price = null;
+  if (bestBid !== null && bestAsk !== null) {
+    price = Math.round((bestBid + bestAsk) / 2);
+  } else {
+    price = bestBid ?? bestAsk;
+  }
+
+  if (price === null) return null;
+  return {
+    option,
+    price,
+    percent: (price / WHOLE_SHARE_PRICE) * 100,
+  };
 }
 
 async function refreshEventVolume(eventId) {
   if (!volumeCache.pendingByEventId[eventId]) {
     volumeCache.pendingByEventId[eventId] = fetchEventOpenVolume(eventId)
-      .then((volume) => {
+      .then(({ volume, probability }) => {
         volumeCache.volumes[eventId] = volume;
+        volumeCache.probabilities[eventId] = probability;
         volumeCache.updatedAtByEventId[eventId] = Date.now();
         delete volumeCache.failedAtByEventId[eventId];
         volumeCache.lastUpdatedAt = Math.max(volumeCache.lastUpdatedAt, volumeCache.updatedAtByEventId[eventId]);
-        return { eventId, ok: true, volume };
+        return { eventId, ok: true, volume, probability };
       })
       .catch((error) => {
         console.warn(`[event-volumes] Failed to fetch volume for event ${eventId}:`, error.message);
@@ -618,6 +685,13 @@ function pickEventVolumes(eventIds) {
   }, {});
 }
 
+function pickEventProbabilities(eventIds) {
+  return eventIds.reduce((acc, eventId) => {
+    acc[eventId] = volumeCache.probabilities[eventId] || null;
+    return acc;
+  }, {});
+}
+
 async function handleEventVolumes(req, res, requestUrl) {
   if (req.method !== 'GET') {
     sendJson(res, 405, { error: 'Method not allowed' });
@@ -626,7 +700,7 @@ async function handleEventVolumes(req, res, requestUrl) {
 
   const eventIds = normalizeEventIds(requestUrl.searchParams.get('ids'));
   if (eventIds.length === 0) {
-    sendJson(res, 200, { volumes: {}, cached: true, lastUpdatedAt: volumeCache.lastUpdatedAt });
+    sendJson(res, 200, { volumes: {}, probabilities: {}, cached: true, lastUpdatedAt: volumeCache.lastUpdatedAt });
     return;
   }
 
@@ -646,6 +720,7 @@ async function handleEventVolumes(req, res, requestUrl) {
   if (staleEventIds.length === 0) {
     sendJson(res, 200, {
       volumes: pickEventVolumes(eventIds),
+      probabilities: pickEventProbabilities(eventIds),
       cached: true,
       lastUpdatedAt: volumeCache.lastUpdatedAt,
       ttlMs: EVENT_VOLUME_CACHE_MS,
@@ -671,6 +746,7 @@ async function handleEventVolumes(req, res, requestUrl) {
       sendJson(res, 502, {
         error: 'Failed to refresh event volumes',
         volumes: {},
+        probabilities: {},
         cached: false,
         source,
         lastUpdatedAt: volumeCache.lastUpdatedAt,
@@ -684,6 +760,7 @@ async function handleEventVolumes(req, res, requestUrl) {
 
     sendJson(res, 200, {
       volumes: pickEventVolumes(eventIds),
+      probabilities: pickEventProbabilities(eventIds),
       cached: false,
       source,
       lastUpdatedAt: volumeCache.lastUpdatedAt,

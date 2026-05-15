@@ -57,7 +57,7 @@ export async function fetchEventVolumesByIds(bobUrl, eventIds, signal) {
       .filter((eventId, index, array) => array.indexOf(eventId) === index);
 
   if (ids.length === 0) {
-    return { volumes: {}, deferredEventIds: [], missingEventIds: [], failedEventIds: [] };
+    return { volumes: {}, probabilities: {}, deferredEventIds: [], missingEventIds: [], failedEventIds: [] };
   }
 
   const res = await fetch(getEventVolumesUrl(bobUrl, ids), { signal });
@@ -68,6 +68,7 @@ export async function fetchEventVolumesByIds(bobUrl, eventIds, signal) {
 
   return {
     volumes: body?.volumes || {},
+    probabilities: body?.probabilities || {},
     partial: Boolean(body?.partial),
     deferredEventIds: Array.isArray(body?.deferredEventIds) ? body.deferredEventIds : [],
     missingEventIds: Array.isArray(body?.missingEventIds) ? body.missingEventIds : [],

@@ -29,6 +29,7 @@ function StartPage() {
   const { trackTx } = useTxTracker();
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [eventVolumes, setEventVolumes] = useState({});
+  const [eventProbabilities, setEventProbabilities] = useState({});
 
   useEffect(() => {
     if (!isConnected) return;
@@ -53,6 +54,7 @@ function StartPage() {
   useEffect(() => {
     if (!isConnected || recentEvents.length === 0) {
       setEventVolumes({});
+      setEventProbabilities({});
       return undefined;
     }
 
@@ -60,11 +62,15 @@ function StartPage() {
     const mergeVolumes = (volumes) => {
       setEventVolumes((prev) => ({ ...prev, ...(volumes || {}) }));
     };
+    const mergeProbabilities = (probabilities) => {
+      setEventProbabilities((prev) => ({ ...prev, ...(probabilities || {}) }));
+    };
 
     const loadVolumes = async () => {
       try {
         const firstResult = await fetchCachedEventVolumes(bobUrl, recentEvents, controller.signal);
         mergeVolumes(firstResult.volumes);
+        mergeProbabilities(firstResult.probabilities);
 
         let deferredEventIds = firstResult.deferredEventIds || [];
         while (deferredEventIds.length > 0 && !controller.signal.aborted) {
@@ -73,6 +79,7 @@ function StartPage() {
 
           const nextResult = await fetchEventVolumesByIds(bobUrl, deferredEventIds, controller.signal);
           mergeVolumes(nextResult.volumes);
+          mergeProbabilities(nextResult.probabilities);
           deferredEventIds = nextResult.deferredEventIds || [];
         }
       } catch (error) {
@@ -199,7 +206,7 @@ function StartPage() {
                           return (
                               <Grid item xs={12} sm={6} md={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                 <EventOverviewCard
-                                    data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0 }}
+                                    data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0, probability: eventProbabilities[getEventId(event)] }}
                                     onClick={() => navigate(`/event/${event.eid}`, { state: { from: "/" } })}
                                     status={event.status}
                                     onTxBroadcast={trackTx}
