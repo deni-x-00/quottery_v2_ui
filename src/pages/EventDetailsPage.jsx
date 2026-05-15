@@ -163,9 +163,9 @@ function EventDetailsPage() {
     const roundedOption0Percent = Number.isFinite(Number(option0Probability?.percent))
         ? Math.max(0, Math.min(100, Math.round(Number(option0Probability.percent))))
         : null;
-    const selectedChanceText = roundedOption0Percent === null
+    const optionChanceTexts = roundedOption0Percent === null
         ? null
-        : `${obTab === 0 ? roundedOption0Percent : 100 - roundedOption0Percent}%`;
+        : [`${roundedOption0Percent}%`, `${100 - roundedOption0Percent}%`];
     const optionColor = (option) => (option === 0 ? theme.palette.success : theme.palette.error);
     const optionToggleSx = (option) => {
         const palette = optionColor(option);
@@ -679,19 +679,46 @@ function EventDetailsPage() {
                                     </Box>
                                 </AccordionSummary>
                                 <AccordionDetails>
-                                    {selectedChanceText && (
-                                        <Box sx={{ mb: 1.5 }}>
-                                            <Typography
-                                                sx={{
-                                                    color: theme.palette.primary.main,
-                                                    fontSize: { xs: "1.2rem", sm: "1.45rem" },
-                                                    fontWeight: 800,
-                                                    lineHeight: 1,
-                                                }}
-                                            >
-                                                {selectedChanceText} chance
-                                            </Typography>
-                                        </Box>
+                                    {optionChanceTexts && (
+                                        <Stack direction="row" spacing={1.5} sx={{ mb: 1.5 }}>
+                                            {[0, 1].map((option) => (
+                                                <Box
+                                                    key={option}
+                                                    sx={{
+                                                        flex: 1,
+                                                        minWidth: 0,
+                                                        borderRadius: 1,
+                                                        border: `1px solid ${alpha(optionColor(option).main, 0.28)}`,
+                                                        bgcolor: alpha(optionColor(option).main, theme.palette.mode === "dark" ? 0.1 : 0.06),
+                                                        px: 1,
+                                                        py: 0.75,
+                                                    }}
+                                                >
+                                                    <Typography
+                                                        sx={{
+                                                            color: optionColor(option).main,
+                                                            fontSize: { xs: "1.1rem", sm: "1.35rem" },
+                                                            fontWeight: 800,
+                                                            lineHeight: 1,
+                                                        }}
+                                                    >
+                                                        {optionChanceTexts[option]}
+                                                    </Typography>
+                                                    <Typography
+                                                        noWrap
+                                                        sx={{
+                                                            color: optionColor(option).main,
+                                                            fontSize: "0.78rem",
+                                                            fontWeight: 700,
+                                                            mt: 0.4,
+                                                            opacity: 0.9,
+                                                        }}
+                                                    >
+                                                        {option === 0 ? event?.option0Desc || "Option 0" : event?.option1Desc || "Option 1"}
+                                                    </Typography>
+                                                </Box>
+                                            ))}
+                                        </Stack>
                                     )}
                                     <Tabs value={obTab} onChange={(_, v) => setObTab(v)}
                                           sx={{ mb: 1, "& .MuiTab-root": { textTransform: "none", fontWeight: 600 }, "& .MuiTabs-indicator": { height: 3, borderRadius: 1.5 } }}>

@@ -17,7 +17,6 @@ import BarChartIcon from "@mui/icons-material/BarChart";
 import { getCanonicalTagId, getTagInfo } from "./qubic/util/tagMap";
 import { isEventClosed } from "./qubic/util/tradeValidation";
 import { formatCompactAmount } from "../utils/eventVolumes";
-import { formatChancePercent } from "../utils/eventProbability";
 import QuickBuyModal from "./QuickBuyModal";
 
 const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
@@ -50,7 +49,12 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
     const thumbSrc = tagInfo.thumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
     const hasEnded = isEventClosed(data);
     const hasVolume = data?.volume !== undefined && data?.volume !== null;
-    const chanceText = formatChancePercent(data?.probability);
+    const chancePercent = Number(data?.probability?.percent);
+    const roundedChancePercent = Number.isFinite(chancePercent)
+        ? Math.max(0, Math.min(100, Math.round(chancePercent)))
+        : null;
+    const option0Chance = roundedChancePercent === null ? null : `${roundedChancePercent}%`;
+    const option1Chance = roundedChancePercent === null ? null : `${100 - roundedChancePercent}%`;
 
     const handleOptionClick = (e, optionIndex) => {
         e.stopPropagation();
@@ -99,25 +103,6 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                         />
                     </Box>
                 )}
-                {chanceText && (
-                    <Box
-                        sx={{
-                            position: "absolute",
-                            top: tagId !== 0 ? 42 : 12,
-                            right: 12,
-                            zIndex: 1,
-                            width: 58,
-                            textAlign: "center",
-                            color: theme.palette.primary.main,
-                            pointerEvents: "none",
-                        }}
-                    >
-                        <Typography sx={{ fontWeight: 800, fontSize: { xs: "0.95rem", sm: "1.05rem" }, lineHeight: 1 }}>
-                            {chanceText}
-                        </Typography>
-                    </Box>
-                )}
-
                 <CardContent sx={{ p: 3, position: "relative" }}>
                     {/* Thumbnail + Title */}
                     <Stack direction="row" alignItems="center" spacing={2} mb={0}>
@@ -139,7 +124,7 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                             fontSize: { xs: "clamp(0.8rem, 0.6vw, 1rem)", sm: "clamp(0.8rem, 0.6vw, 1.8rem)" },
                             display: isHovered ? "block" : "-webkit-box",
                             WebkitLineClamp: isHovered ? "unset" : 2, WebkitBoxOrient: "vertical",
-                            overflow: "hidden", lineHeight: 1.1, pr: chanceText ? { xs: "70px", sm: "78px" } : { xs: "60px", sm: "50px" },
+                            overflow: "hidden", lineHeight: 1.1, pr: { xs: "60px", sm: "50px" },
                         }}>
                             {data.desc}
                         </Typography>
@@ -168,6 +153,11 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                                 }}
                             >
                                 {data.option0Desc}
+                                {option0Chance && (
+                                    <Box component="span" sx={{ ml: 1, fontSize: "0.88em", fontWeight: 800, lineHeight: "inherit", opacity: 0.9 }}>
+                                        {option0Chance}
+                                    </Box>
+                                )}
                             </Button>
                             <Button
                                 variant="contained" disableElevation fullWidth
@@ -189,6 +179,11 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                                 }}
                             >
                                 {data.option1Desc}
+                                {option1Chance && (
+                                    <Box component="span" sx={{ ml: 1, fontSize: "0.88em", fontWeight: 800, lineHeight: "inherit", opacity: 0.9 }}>
+                                        {option1Chance}
+                                    </Box>
+                                )}
                             </Button>
                         </Stack>
                     )}
