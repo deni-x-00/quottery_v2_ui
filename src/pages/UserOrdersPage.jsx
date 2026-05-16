@@ -161,7 +161,7 @@ const UserOrdersPage = () => {
       const result = await fetchOpenOrders(walletPublicIdentity);
       const openOrders = (result?.orders ?? []).map((o) => ({
         ...o,
-        event_desc: getEventName(o.market_id),
+        event_desc: o.event_desc || `Event #${o.market_id}`,
       }));
       setOrders(openOrders);
     } catch (err) {
@@ -171,7 +171,7 @@ const UserOrdersPage = () => {
     } finally {
       setOrdersLoading(false);
     }
-  }, [walletPublicIdentity, fetchOpenOrders, getEventName]);
+  }, [walletPublicIdentity, fetchOpenOrders]);
 
   useEffect(() => {
     loadPositions();

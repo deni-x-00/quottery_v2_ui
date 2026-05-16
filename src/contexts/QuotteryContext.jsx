@@ -2,6 +2,7 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
 } from 'react';
@@ -27,6 +28,23 @@ const DEFAULT_TICK_SETTINGS = {
   approvalSeconds: 15,
 };
 const WHOLE_SHARE_PRICE = 100000;
+const OPEN_ORDERS_CONCURRENCY = 6;
+
+async function runWithConcurrency(items, limit, task) {
+  const results = [];
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await task(items[currentIndex], currentIndex);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
+}
 
 function readTickSettings() {
   if (typeof window === 'undefined') return DEFAULT_TICK_SETTINGS;
@@ -60,6 +78,11 @@ export const QuotteryProvider = ({ children }) => {
   const [inputPage, setInputPage] = useState('');
   const [txTickSettings, setTxTickSettingsState] = useState(readTickSettings);
   const { bobUrl } = useConfig();
+  const allEventsRef = useRef(allEvents);
+
+  useEffect(() => {
+    allEventsRef.current = allEvents;
+  }, [allEvents]);
 
   // Shared order book state
   const [orderbook, setOrderbook] = useState(null);
@@ -258,33 +281,37 @@ export const QuotteryProvider = ({ children }) => {
     }
 
     try {
-      let events = allEvents || [];
+      let events = allEventsRef.current || [];
       if (events.length === 0) {
         events = await fetchAllActiveEvents(bobUrl);
+        allEventsRef.current = events || [];
         setAllEvents(events || []);
       }
 
       const identityPrefix = walletIdentity.slice(0, 56);
-      const userOrders = [];
+      const queries = [];
 
-      for (const evt of events) {
+      for (const evt of events || []) {
         const eid = evt.eid ?? evt.eventId;
         if (eid === undefined || eid === null) continue;
 
-        // Query all 4 order book sides
-        const sides = [
-          { option: 0, isBid: true, side: 'buy' },
-          { option: 0, isBid: false, side: 'sell' },
-          { option: 1, isBid: true, side: 'buy' },
-          { option: 1, isBid: false, side: 'sell' },
-        ];
+        queries.push(
+            { evt, eid, option: 0, isBid: true, side: 'buy' },
+            { evt, eid, option: 0, isBid: false, side: 'sell' },
+            { evt, eid, option: 1, isBid: true, side: 'buy' },
+            { evt, eid, option: 1, isBid: false, side: 'sell' },
+        );
+      }
 
-        for (const { option, isBid, side } of sides) {
+      const results = await runWithConcurrency(
+          queries,
+          OPEN_ORDERS_CONCURRENCY,
+          async ({ evt, eid, option, isBid, side }) => {
           try {
             const orders = await getOrders(bobUrl, eid, option, isBid);
-            for (const order of orders) {
-              if (order.entity === identityPrefix) {
-                userOrders.push({
+            return orders
+                .filter((order) => order.entity === identityPrefix)
+                .map((order) => ({
                   order_id: `${eid}-${option}-${isBid ? 'bid' : 'ask'}-${order.price}`,
                   market_id: eid,
                   event_desc: evt.desc || `Event #${eid}`,
@@ -295,15 +322,16 @@ export const QuotteryProvider = ({ children }) => {
                   filled: 0,
                   status: 'open',
                   isBid,
-                });
-              }
-            }
+                }));
           } catch (e) {
             // Skip failed queries for individual sides
             console.warn(`Failed to fetch orders for event ${eid}, option ${option}, ${side}:`, e);
+            return [];
           }
-        }
-      }
+          }
+      );
+
+      const userOrders = results.flat();
 
       return {
         identity: walletIdentity,
@@ -313,7 +341,7 @@ export const QuotteryProvider = ({ children }) => {
       console.error('Error fetching open orders:', error);
       return { identity: walletIdentity, orders: [], error };
     }
-  }, [allEvents, bobUrl, walletPublicIdentity]);
+  }, [bobUrl, walletPublicIdentity]);
 
   useEffect(() => {
     let cancelled = false;

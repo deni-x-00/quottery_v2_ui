@@ -6,6 +6,7 @@ import {
   IconButton,
   Stack,
   Chip,
+  CircularProgress,
   useTheme,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -24,6 +25,12 @@ const AccountSelector = ({
 }) => {
   const theme = useTheme();
   const [copiedValue, setCopiedValue] = useState('');
+  const selectedOption = options[selected];
+
+  const formatIdentity = (value = '') => {
+    if (value.length <= 20) return value;
+    return `${value.slice(0, 10)}...${value.slice(-10)}`;
+  };
 
   const handleCopy = (value, e) => {
     e.stopPropagation();
@@ -34,11 +41,40 @@ const AccountSelector = ({
 
   return (
     <Box width='100%'>
-      <Typography variant='body2' sx={{ mb: 1, color: 'text.secondary' }}>
-        {label}
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mb: 1 }}>
+        <Typography variant='body2' sx={{ color: 'text.secondary', fontWeight: 600 }}>
+          {label}
+        </Typography>
+        <Chip
+          size='small'
+          label={`${options.length} account${options.length === 1 ? '' : 's'}`}
+          variant='outlined'
+          sx={{ height: 22, '& .MuiChip-label': { px: 0.75 } }}
+        />
+      </Box>
 
-      <Stack spacing={1} role='listbox' aria-label={label}>
+      <Stack
+        spacing={0.75}
+        role='listbox'
+        aria-label={label}
+        sx={{
+          maxHeight: { xs: '44vh', sm: 360 },
+          overflowY: 'auto',
+          pr: 0.25,
+        }}
+      >
+        {isLoading && options.length === 0 && (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
+
+        {!isLoading && options.length === 0 && !error && (
+          <Typography variant='body2' color='text.secondary'>
+            No accounts available.
+          </Typography>
+        )}
+
         {options.map((option, index) => {
           const isSelected = selected === index;
           const isCopied = copiedValue === option.value;
@@ -49,29 +85,73 @@ const AccountSelector = ({
               disabled={isLoading}
               sx={{
                 width: '100%',
-                borderRadius: 1.5,
+                minHeight: 76,
+                borderRadius: 1,
                 border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
-                backgroundColor: isSelected ? theme.palette.action.selected : theme.palette.background.paper,
+                backgroundColor: isSelected ? theme.palette.action.selected : theme.palette.background.default,
                 px: 1.5,
                 py: 1.25,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
+                gap: 1.25,
                 textAlign: 'left',
+                transition: theme.transitions.create(['border-color', 'background-color', 'box-shadow']),
+                boxShadow: isSelected ? `inset 3px 0 0 ${theme.palette.primary.main}` : 'none',
+                '&:hover': {
+                  borderColor: theme.palette.primary.main,
+                  backgroundColor: theme.palette.action.hover,
+                },
               }}
               role='option'
               aria-selected={isSelected}
             >
-              <Box sx={{ minWidth: 0, pr: 1 }}>
-                <Typography variant='body2' sx={{ fontWeight: 600 }} noWrap>
-                  {option.label || `Account ${index + 1}`}
-                </Typography>
+              <Box
+                sx={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 1,
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                  border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
+                  color: isSelected ? 'primary.main' : 'text.secondary',
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                {index + 1}
+              </Box>
+
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                  <Typography variant='body2' sx={{ fontWeight: 700 }} noWrap>
+                    {option.label || `Account ${index + 1}`}
+                  </Typography>
+                  {isSelected && (
+                    <Chip
+                      size='small'
+                      label='Selected'
+                      color='primary'
+                      variant='outlined'
+                      sx={{ height: 20, flexShrink: 0, '& .MuiChip-label': { px: 0.75 } }}
+                    />
+                  )}
+                </Box>
                 <Typography
                   variant='caption'
                   color='text.secondary'
-                  sx={{ display: 'block', wordBreak: 'break-all', lineHeight: 1.3 }}
+                  title={option.value}
+                  sx={{
+                    display: 'block',
+                    fontFamily: 'monospace',
+                    lineHeight: 1.35,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
                 >
-                  {option.value}
+                  {formatIdentity(option.value)}
                 </Typography>
               </Box>
 
@@ -94,9 +174,23 @@ const AccountSelector = ({
         })}
       </Stack>
 
-      {!!options[selected]?.value && (
-        <Box sx={{ mt: 1 }}>
-          <Chip size='small' label='Selected account ready' color='primary' variant='outlined' />
+      {!!selectedOption?.value && (
+        <Box
+          sx={{
+            mt: 1,
+            px: 1.25,
+            py: 0.75,
+            borderRadius: 1,
+            border: `1px solid ${theme.palette.divider}`,
+            backgroundColor: theme.palette.background.paper,
+          }}
+        >
+          <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.2 }}>
+            Selected identity
+          </Typography>
+          <Typography variant='caption' sx={{ display: 'block', fontFamily: 'monospace', lineHeight: 1.35 }} noWrap>
+            {formatIdentity(selectedOption.value)}
+          </Typography>
         </Box>
       )}
 

@@ -16,12 +16,16 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
+  Stack,
+  Chip,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PhonelinkIcon from '@mui/icons-material/Phonelink';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useQubicConnect } from './QubicConnectContext';
 import { HeaderButtons } from './Buttons';
 import { MetaMaskContext } from './MetamaskContext';
@@ -31,6 +35,7 @@ import { copyText, generateQRCode } from '../../../utils';
 import WalletConnectLogo from '../../../assets/wallet-connect.svg';
 import AccountSelector from './AccountSelector';
 import { useQuotteryContext } from '../../../contexts/QuotteryContext';
+import { formatQubicAmount } from '../util';
 
 export const MetamaskActions = Object.freeze({
   SetInstalled: 'SetInstalled',
@@ -63,6 +68,11 @@ const buildQubicWalletDeepLink = (uri) => {
   return `qubic-wallet://pairwc/${uri}`;
 };
 
+const formatIdentity = (value = '') => {
+  if (value.length <= 22) return value;
+  return `${value.slice(0, 10)}...${value.slice(-10)}`;
+};
+
 const ConnectModal = ({ open, onClose, darkMode }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -73,15 +83,19 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
     connect,
     disconnect,
     connected,
+    wallet,
     mmSnapConnect,
   } = useQubicConnect();
   const [accounts, setAccounts] = useState([]);
   const [selectedAccount, setSelectedAccount] = useState(0);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountsError, setAccountsError] = useState('');
   const [qrCode, setQrCode] = useState('');
   const [qrError, setQrError] = useState('');
   const [connectionURI, setConnectionURI] = useState('');
   const {
     connect: walletConnectConnect,
+    disconnect: walletConnectDisconnect,
     isConnected,
     requestAccounts,
   } = useWalletConnect();
@@ -125,6 +139,58 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
     await approve();
   };
 
+  const loadWalletConnectAccounts = async ({ nextMode } = {}) => {
+    setAccountsLoading(true);
+    setAccountsError('');
+    if (nextMode) {
+      setSelectedMode(nextMode);
+    }
+
+    try {
+      const nextAccounts = normalizeWalletConnectAccounts(await requestAccounts());
+      if (nextAccounts.length === 0) {
+        setAccounts([]);
+        setSelectedAccount(0);
+        setAccountsError('No accounts returned by wallet.');
+        return;
+      }
+
+      const currentIndex = nextAccounts.findIndex((account) => account.publicId === wallet?.publicKey);
+      setAccounts(nextAccounts);
+      setSelectedAccount(currentIndex >= 0 ? currentIndex : 0);
+    } catch (error) {
+      setAccountsError(error?.message || 'Failed to load wallet accounts.');
+    } finally {
+      setAccountsLoading(false);
+    }
+  };
+
+  const selectWalletConnectAccount = () => {
+    const account = accounts[parseInt(selectedAccount.toString())];
+    if (!account?.publicId) {
+      setAccountsError('Select an account first.');
+      return;
+    }
+
+    connect({
+      connectType: 'walletconnect',
+      publicKey: account.publicId,
+      alias: account.alias,
+    });
+    setSelectedMode('none');
+    onClose();
+  };
+
+  const cancelAccountSelection = async () => {
+    setSelectedMode('none');
+    setAccountsError('');
+
+    if (!connected) {
+      setAccounts([]);
+      await walletConnectDisconnect();
+    }
+  };
+
   const openQubicWallet = () => {
     const deepLink = buildQubicWalletDeepLink(connectionURI);
     if (!deepLink) return;
@@ -133,17 +199,19 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
 
   useEffect(() => {
     if (open && isConnected && !connected && selectedMode === 'walletconnect') {
-      const fetchAccounts = async () => {
-        const accounts = normalizeWalletConnectAccounts(await requestAccounts());
-        setAccounts(accounts);
-        setSelectedAccount(0);
-        setSelectedMode('account-select');
-      };
-      fetchAccounts();
+      loadWalletConnectAccounts({ nextMode: 'account-select' });
     }
+    // loadWalletConnectAccounts depends on wallet state and would restart the modal flow while selecting.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, isConnected, connected, selectedMode, requestAccounts]);
 
   const handleClose = () => {
+    if (selectedMode === 'account-select' && !connected) {
+      setAccounts([]);
+      setAccountsError('');
+      walletConnectDisconnect();
+    }
+
     setSelectedMode('none');
     onClose();
   };
@@ -154,7 +222,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
           onClose={handleClose}
           fullScreen={isMobile}
           fullWidth
-          maxWidth='xs'
+          maxWidth={selectedMode === 'account-select' ? 'sm' : 'xs'}
           BackdropProps={{ sx: { backdropFilter: 'blur(8px)' } }}
           PaperProps={{
             sx: { elevation: 'none !important', p: isMobile ? 0 : 1, py: isMobile ? 1 : 0, backgroundColor: theme.palette.background.card },
@@ -197,10 +265,23 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                                 </Tooltip>
                             )}
                           </Box>
+                          {wallet?.connectType === 'walletconnect' && isConnected && (
+                              <Button
+                                  variant='outlined'
+                                  color='primary'
+                                  size='small'
+                                  startIcon={<SwapHorizIcon />}
+                                  onClick={() => loadWalletConnectAccounts({ nextMode: 'account-select' })}
+                                  disabled={accountsLoading}
+                                  sx={{ mt: 1.5 }}
+                              >
+                                Switch Account
+                              </Button>
+                          )}
                           <Box mt={1} />
                           <Typography variant='overline' color='text.secondary'>Balance (GARTH)</Typography>
                           <Typography variant='body2'>
-                            {balance !== null && balance !== undefined ? balance : '-'}
+                            {balance !== null && balance !== undefined ? formatQubicAmount(balance) : '-'}
                           </Typography>
                           {eventPositions && eventPositions.length > 0 && (
                               <>
@@ -320,35 +401,96 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
 
           {selectedMode === 'account-select' && (
               <Grow in={selectedMode === 'account-select'} timeout={300}>
-                <Box>
-                  <Typography variant='body1' mb={2} color='text.secondary'>
-                    Select an account
-                  </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.5,
+                        p: 1.5,
+                        borderRadius: 1,
+                        border: `1px solid ${theme.palette.divider}`,
+                        backgroundColor: theme.palette.background.paper,
+                      }}
+                  >
+                    <Box
+                        sx={{
+                          width: 40,
+                          height: 40,
+                          borderRadius: 1,
+                          display: 'grid',
+                          placeItems: 'center',
+                          color: 'primary.main',
+                          border: `1px solid ${theme.palette.primary.main}`,
+                          flexShrink: 0,
+                        }}
+                    >
+                      <AccountBalanceWalletIcon fontSize='small' />
+                    </Box>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Stack direction='row' spacing={1} alignItems='center' sx={{ minWidth: 0 }}>
+                        <Typography variant='h6' color='text.primary' sx={{ fontWeight: 700 }} noWrap>
+                          Wallet accounts
+                        </Typography>
+                        {isConnected && (
+                            <Chip
+                                size='small'
+                                label='WalletConnect'
+                                color='primary'
+                                variant='outlined'
+                                sx={{ height: 22, flexShrink: 0 }}
+                            />
+                        )}
+                      </Stack>
+                      <Typography
+                          variant='caption'
+                          color='text.secondary'
+                          title={wallet?.publicKey || ''}
+                          sx={{
+                            display: 'block',
+                            fontFamily: wallet?.publicKey ? 'monospace' : 'inherit',
+                            maxWidth: '100%',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                      >
+                        {wallet?.publicKey ? formatIdentity(wallet.publicKey) : 'No account selected'}
+                      </Typography>
+                    </Box>
+                    <Tooltip title='Refresh accounts'>
+                      <span>
+                        <IconButton
+                            size='small'
+                            onClick={() => loadWalletConnectAccounts()}
+                            disabled={accountsLoading}
+                            aria-label='Refresh accounts'
+                        >
+                          <RefreshIcon fontSize='small' />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  </Box>
                   <AccountSelector
-                      label='Account'
+                      label='Available accounts'
                       options={accounts.map((account, idx) => ({
                         label: account.alias || `Account ${idx + 1}`,
                         value: account.publicId,
                       }))}
                       selected={selectedAccount}
                       setSelected={setSelectedAccount}
+                      isLoading={accountsLoading}
+                      error={accountsError}
                   />
-                  <Box display='flex' gap={2} mt={3} justifyContent='center'>
+                  <Box display='flex' gap={1.5} justifyContent='flex-end' flexWrap='wrap'>
                     <Button variant='outlined' color='secondary' size='large'
-                            onClick={() => { disconnect(); setSelectedMode('none'); }}
+                            onClick={cancelAccountSelection}
                             sx={{ fontWeight: 600 }}>
-                      Lock Wallet
+                      Cancel
                     </Button>
                     <Button variant='contained' color='primary' size='large'
-                            onClick={() => {
-                              connect({
-                                connectType: 'walletconnect',
-                                publicKey: accounts[parseInt(selectedAccount.toString())]?.publicId,
-                                alias: accounts[parseInt(selectedAccount.toString())]?.alias,
-                              });
-                              setSelectedMode('none');
-                              onClose();
-                            }}
+                            onClick={selectWalletConnectAccount}
+                            disabled={accountsLoading || accounts.length === 0}
                             sx={{ fontWeight: 600 }}>
                       Select Account
                     </Button>

@@ -106,7 +106,7 @@ function QubicConnectProviderInner({ children }) {
   };
 
   useEffect(() => {
-    if (wallet || !walletConnectConnected) {
+    if (showConnectModal || wallet || !walletConnectConnected) {
       return;
     }
 
@@ -135,7 +135,7 @@ function QubicConnectProviderInner({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [wallet, walletConnectConnected, requestWalletConnectAccounts]);
+  }, [showConnectModal, wallet, walletConnectConnected, requestWalletConnectAccounts]);
 
   useEffect(() => {
     if (
