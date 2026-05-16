@@ -73,6 +73,10 @@ const formatIdentity = (value = '') => {
   return `${value.slice(0, 10)}...${value.slice(-10)}`;
 };
 
+const ACCOUNT_REQUEST_TIMEOUT_MS = 8000;
+const ACCOUNT_REQUEST_TIMEOUT_MESSAGE =
+    'Qubic Wallet did not respond. Open Qubic Wallet, unlock it, then refresh accounts.';
+
 const ConnectModal = ({ open, onClose, darkMode }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -147,11 +151,17 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
     }
 
     try {
-      const nextAccounts = normalizeWalletConnectAccounts(await requestAccounts());
+      const accountsResponse = await Promise.race([
+        requestAccounts(),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error(ACCOUNT_REQUEST_TIMEOUT_MESSAGE)), ACCOUNT_REQUEST_TIMEOUT_MS);
+        }),
+      ]);
+      const nextAccounts = normalizeWalletConnectAccounts(accountsResponse);
       if (nextAccounts.length === 0) {
         setAccounts([]);
         setSelectedAccount(0);
-        setAccountsError('No accounts returned by wallet.');
+        setAccountsError('No accounts returned by Qubic Wallet. Open Qubic Wallet, unlock it, then refresh accounts.');
         return;
       }
 
@@ -159,10 +169,18 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
       setAccounts(nextAccounts);
       setSelectedAccount(currentIndex >= 0 ? currentIndex : 0);
     } catch (error) {
-      setAccountsError(error?.message || 'Failed to load wallet accounts.');
+      setAccounts([]);
+      setSelectedAccount(0);
+      setAccountsError(
+          error?.message || ACCOUNT_REQUEST_TIMEOUT_MESSAGE
+      );
     } finally {
       setAccountsLoading(false);
     }
+  };
+
+  const openAccountSelector = () => {
+    loadWalletConnectAccounts({ nextMode: 'account-select' });
   };
 
   const selectWalletConnectAccount = () => {
@@ -271,7 +289,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                                   color='primary'
                                   size='small'
                                   startIcon={<SwapHorizIcon />}
-                                  onClick={() => loadWalletConnectAccounts({ nextMode: 'account-select' })}
+                                  onClick={openAccountSelector}
                                   disabled={accountsLoading}
                                   sx={{ mt: 1.5 }}
                               >

@@ -7,6 +7,7 @@ import {
   Stack,
   Chip,
   CircularProgress,
+  Alert,
   useTheme,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -73,6 +74,12 @@ const AccountSelector = ({
           <Typography variant='body2' color='text.secondary'>
             No accounts available.
           </Typography>
+        )}
+
+        {!isLoading && options.length === 0 && error && (
+          <Alert severity='warning' variant='outlined' sx={{ alignItems: 'center' }}>
+            {error}
+          </Alert>
         )}
 
         {options.map((option, index) => {
@@ -194,7 +201,7 @@ const AccountSelector = ({
         </Box>
       )}
 
-      {error && (
+      {error && options.length > 0 && (
         <Typography variant='caption' color='error' sx={{ mt: 0.75, display: 'block' }}>
           {error}
         </Typography>
