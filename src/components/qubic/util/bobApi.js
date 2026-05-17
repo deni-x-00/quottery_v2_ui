@@ -1075,6 +1075,7 @@ export async function getEventInfo(bobUrl, eventId) {
     // After QtryEventInfo (offset 280)
     const resultByGO = readInt32LE(raw, 280);
     const publishTickTime = readUint32LE(raw, 284);
+    const isFinalized = resultByGO !== -1 && publishTickTime === 0xffffffff;
 
     // DepositInfo at offset 288
     const disputerPubkey = raw.slice(288, 320);
@@ -1097,6 +1098,7 @@ export async function getEventInfo(bobUrl, eventId) {
         option1Desc: decodeText(opt1Bytes),
         resultByGO,
         publishTickTime,
+        isFinalized,
         disputerId,
         disputeAmount,
         computorsVote0,

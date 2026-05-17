@@ -52,6 +52,7 @@ import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 
 const TRANSFER_QUBIC_FEE = 100;
+const CLAIM_REWARD_QUBIC_FEE = 1000000;
 const WHOLE_SHARE_PRICE = 100000;
 const TRANSFER_RIGHTS_IDENTIFIERS = [
     "TransferShareManagementRights",
@@ -359,17 +360,8 @@ function MiscPage() {
                 const result = await getUserPositions(bobUrl, walletPublicIdentity);
                 const positions = (result?.positions || []).filter((position) => Number(position?.amount || 0) > 0);
                 const uniqueEventIds = [...new Set(positions.map((position) => position.eventId))];
-                const knownEventsById = new Map(
-                    (allEvents || [])
-                        .filter((event) => event?.eid !== undefined && event?.eid !== null)
-                        .map((event) => [String(event.eid), event])
-                );
-
                 const fetchedEvents = await Promise.all(
                     uniqueEventIds.map(async (eventId) => {
-                        const knownEvent = knownEventsById.get(String(eventId));
-                        if (knownEvent && knownEvent.resultByGO !== undefined) return knownEvent;
-
                         try {
                             return await getEventInfo(bobUrl, eventId);
                         } catch (eventError) {
@@ -390,8 +382,9 @@ function MiscPage() {
                         const event = eventsById.get(String(position.eventId));
                         const resultByGO = Number(event?.resultByGO);
                         const option = Number(position.option);
+                        const isFinalized = event?.isFinalized === true || Number(event?.publishTickTime) === 0xffffffff;
 
-                        if (!event || !Number.isInteger(resultByGO) || resultByGO < 0 || resultByGO !== option) {
+                        if (!event || !isFinalized || !Number.isInteger(resultByGO) || resultByGO < 0 || resultByGO !== option) {
                             return null;
                         }
 
@@ -683,7 +676,7 @@ function MiscPage() {
             const payload = packEventIdPayload(eid);
             await signAndBroadcast(
                 QTRY_USER_CLAIM_REWARD,
-                null,
+                CLAIM_REWARD_QUBIC_FEE,
                 payload,
                 `Claim reward for event ${eid}`,
                 null,
