@@ -65,14 +65,14 @@ import {
 } from "../components/qubic/util/quotteryTx";
 import { getPositionAmount, isEventClosed, validateOrderPreflight } from "../components/qubic/util/tradeValidation";
 
-import gcLogo from "../assets/gc.png";
+import gcLogo from "../../assets/gc.png";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import { useTxTracker } from "../hooks/useTxTracker";
 import TradeAmountSlider from "../components/TradeAmountSlider";
 import TradePriceSelector from "../components/TradePriceSelector";
 import EventHeader from "../components/EventHeader";
 import { calculateOptionProbability } from "../utils/eventProbability";
-const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
+const thumbnails = require.context("../../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
     try {
         return thumbnails(`./${name}`);

@@ -27,7 +27,7 @@ import {
     QTRY_ADD_BID_ORDER,
 } from './qubic/util/quotteryTx';
 import { isEventClosed, validateOrderPreflight } from './qubic/util/tradeValidation';
-import gcLogo from '../assets/gc.png';
+import gcLogo from '../../assets/gc.png';
 import TradePriceSelector from './TradePriceSelector';
 import TradeAmountSlider from './TradeAmountSlider';
 

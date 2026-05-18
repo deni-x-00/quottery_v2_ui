@@ -19,7 +19,7 @@ import { isEventClosed } from "./qubic/util/tradeValidation";
 import { formatCompactAmount } from "../utils/eventVolumes";
 import QuickBuyModal from "./QuickBuyModal";
 
-const thumbnails = require.context("../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
+const thumbnails = require.context("../../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const yesColor = "#2e7d32";
 const yesColorDark = "#81c784";
 const noColor = "#d32f2f";

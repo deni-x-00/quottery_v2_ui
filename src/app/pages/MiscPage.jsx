@@ -885,6 +885,9 @@ function MiscPage() {
                             </MenuItem>
                         ))}
                     </TextField>
+                    <Typography variant="caption" color="text.secondary">
+                        * Claim requires a 1M QU deposit. It is returned automatically if the claim succeeds.
+                    </Typography>
                     {claimOptionsError && <Alert severity="warning">{claimOptionsError}</Alert>}
                 </ActionCard>
 

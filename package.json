@@ -37,9 +37,11 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:main": "node scripts/start-target.js main",
     "start:api": "node server/bob-proxy.js",
     "serve:prod": "node server/bob-proxy.js",
     "build": "react-scripts build",
+    "build:main": "node scripts/build-target.js main",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "version": "auto-changelog -p"

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import circleInfo from '../../../assets/circle-info.svg';
+import circleInfo from '../../../../assets/circle-info.svg';
 
 const LabelWithPopover = ({ htmlFor, label, description }) => {
   const [isPopoverOpen, setIsPopoverOpen] = useState(false);

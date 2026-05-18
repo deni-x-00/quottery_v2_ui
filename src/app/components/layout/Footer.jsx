@@ -1,6 +1,6 @@
 import { useLocation } from "react-router-dom";
-import pkg from "../../../package.json";
-import logoShort from "../../assets/logo/logo-text-short.svg";
+import pkg from "../../../../package.json";
+import logoShort from "../../../assets/logo/logo-text-short.svg";
 import { Box, Typography, Link, useTheme, Divider, IconButton, Tooltip } from "@mui/material";
 import { FaDiscord, FaXTwitter } from "react-icons/fa6";
 

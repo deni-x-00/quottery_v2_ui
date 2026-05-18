@@ -1,13 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import './App.css';
-import App from './App';
+import App from './app/App';
+import MainLanding from './main/MainLanding';
 import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
+const Root = process.env.REACT_APP_BUILD_TARGET === 'main' ? MainLanding : App;
+
 root.render(
-  <App />
+  <Root />
 );
 
 // If you want to start measuring performance in your app, pass a function

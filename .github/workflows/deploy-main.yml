@@ -1,21 +1,19 @@
-name: Deploy app to server
+name: Deploy main preview to server
 
 on:
   push:
     branches: [main]
     paths:
-      - "src/app/**"
+      - "src/main/**"
       - "src/assets/**"
       - "src/index.js"
       - "src/index.css"
       - "src/reportWebVitals.js"
-      - "src/setupTests.js"
       - "public/**"
-      - "server/**"
       - "scripts/**"
       - "package.json"
       - "yarn.lock"
-      - ".github/workflows/deploy.yml"
+      - ".github/workflows/deploy-main.yml"
 
 concurrency:
   group: quottery-deploy
@@ -26,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy over SSH
+      - name: Deploy main preview over SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
@@ -34,8 +32,11 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT }}
           script: |
-            cd /var/www/quottery_frontend/app
-            git pull origin main
+            mkdir -p /var/www/quottery_frontend
+            if [ ! -d /var/www/quottery_frontend/main/.git ]; then
+              git clone "$(git -C /var/www/quottery_frontend/app remote get-url origin)" /var/www/quottery_frontend/main
+            fi
+            cd /var/www/quottery_frontend/main
+            git pull --ff-only origin main
             yarn install --frozen-lockfile
-            npm run build
-            sudo -n /usr/bin/systemctl restart quottery-bob-proxy.service
+            npm run build:main
