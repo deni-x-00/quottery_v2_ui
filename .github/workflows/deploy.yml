@@ -33,7 +33,16 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT }}
+          script_stop: true
           script: |
+            set -e
+            export NVM_DIR="$HOME/.nvm"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh"
+              nvm use 24
+            fi
+            node -v
+            yarn -v
             cd /var/www/quottery_frontend/app
             git pull origin main
             yarn install --frozen-lockfile

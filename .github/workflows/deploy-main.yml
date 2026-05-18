@@ -31,7 +31,16 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           port: ${{ secrets.PORT }}
+          script_stop: true
           script: |
+            set -e
+            export NVM_DIR="$HOME/.nvm"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh"
+              nvm use 24
+            fi
+            node -v
+            yarn -v
             mkdir -p /var/www/quottery_frontend
             if [ ! -d /var/www/quottery_frontend/main/.git ]; then
               git clone "$(git -C /var/www/quottery_frontend/app remote get-url origin)" /var/www/quottery_frontend/main
