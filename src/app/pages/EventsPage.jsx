@@ -53,7 +53,7 @@ const getValidGroupId = (groupId) => (
   isValidGroupId(groupId) ? groupId : "all"
 );
 
-const getValidTopicId = (topicId) => {
+const getValidTopicId = (topicId, groupId = null) => {
   if (topicId === null || topicId === undefined || topicId === "") return "";
   const topicValue = String(topicId).trim();
 
@@ -63,7 +63,7 @@ const getValidTopicId = (topicId) => {
     return getAllTags().some((tag) => tag.id === id) ? String(id) : "";
   }
 
-  const id = getTagIdBySlug(topicValue);
+  const id = getTagIdBySlug(topicValue, groupId);
   return id > 0 ? String(id) : "";
 };
 
@@ -80,10 +80,11 @@ function EventsPage() {
   const [sortMenuAnchorEl, setSortMenuAnchorEl] = useState(null);
   const [eventVolumes, setEventVolumes] = useState({});
   const [eventProbabilities, setEventProbabilities] = useState({});
-  const selectedTopicId = getValidTopicId(searchParams.get("topic"));
+  const requestedGroupId = getValidGroupId(searchParams.get("group"));
+  const selectedTopicId = getValidTopicId(searchParams.get("topic"), requestedGroupId);
   const selectedGroupId = selectedTopicId
       ? getTagGroupId(Number(selectedTopicId))
-      : getValidGroupId(searchParams.get("group"));
+      : requestedGroupId;
   const selectedSortMode = getValidSortMode(searchParams.get("sort"));
   const searchTerm = searchParams.get("q") || "";
   const eventsReturnPath = `${location.pathname}${location.search}`;
@@ -275,7 +276,7 @@ function EventsPage() {
     }
 
     if (Object.prototype.hasOwnProperty.call(updates, "topic")) {
-      const nextTopicId = getValidTopicId(updates.topic);
+      const nextTopicId = getValidTopicId(updates.topic, getValidGroupId(nextParams.get("group")));
       nextParams.delete("topic");
       if (nextTopicId) {
         nextParams.set("topic", getTagSlug(Number(nextTopicId)));

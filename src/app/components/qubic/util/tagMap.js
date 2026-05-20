@@ -91,14 +91,25 @@ export function getTagSlug(tagId) {
     return normalizeTagSlug(tag.slug || tag.label);
 }
 
-export function getTagIdBySlug(slug) {
+export function getTagIdBySlug(slug, groupId = null) {
     const normalizedSlug = normalizeTagSlug(slug);
     if (!normalizedSlug) return 0;
 
-    const tag = getAllTags().find((item) => (
+    const tags = getAllTags();
+    const group = TAG_GROUPS.find((item) => item.id === groupId);
+    const scopedTags = group
+        ? tags.filter((tag) => tag.id >= group.min && tag.id <= group.max)
+        : tags;
+
+    const tag = scopedTags.find((item) => (
         item.id > 0 && getTagSlug(item.id) === normalizedSlug
     ));
-    return tag?.id || 0;
+    if (tag) return tag.id;
+
+    const fallbackTag = tags.find((item) => (
+        item.id > 0 && getTagSlug(item.id) === normalizedSlug
+    ));
+    return fallbackTag?.id || 0;
 }
 
 export function getAllTags() {

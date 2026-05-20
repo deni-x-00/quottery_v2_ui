@@ -6,7 +6,6 @@ export const HEADERS = {
 export const MIN_BALANCE_THRESHOLD = 100;
 export const QTRY_CONTRACT_INDEX = 2;
 export const LOG_DEBUG = false;
-export const excludedEventIds = [31, 34, 58, 76];
 export const makeJsonData = (
   contractIndex,
   inputType,
@@ -73,5 +72,4 @@ export const debuglog = (...message) => {
   }
 };
 
-// export const externalJsonAssetUrl = 'https://91.210.226.146'
 export const externalJsonAssetUrl = 'https://api.quottery.org';
