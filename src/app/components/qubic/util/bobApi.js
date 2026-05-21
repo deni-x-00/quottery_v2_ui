@@ -13,7 +13,7 @@ const FUNC_GET_POSITION = 6;
 const FUNC_GET_APPROVED = 7;
 const FUNC_GET_TOP_PROPOSALS = 8;
 export const QTRYGOV_ASSET_NAME = 'QTRYGOV';
-export const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
+export const QTRYGOV_ISSUER = 'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACNKL';
 const QTRYGOV_MANAGE_SC_INDEX = 2;
 export const GARTH_ASSET_NAME = 'GARTH';
 export const GARTH_ISSUER = 'PHOENIXCLQOBHDZCHJOCKCPZVTKALQBMXYOEDBUHSDCJRMTUCUBPLSUFNBIE';
@@ -651,7 +651,7 @@ async function queryScViaPublicRpc(funcNumber, inputHex = '') {
 async function getEntityBalanceViaPublicRpc(identity) {
     for (const baseUrl of PUBLIC_RPC_BASE_URLS) {
         try {
-            const res = await fetchWithTimeout(`${baseUrl}/balance/${identity}`, {}, 10000);
+            const res = await fetchWithTimeout(`${baseUrl}/balances/${identity}`, {}, 10000);
             const body = await res.json();
             if (!res.ok || body?.error) {
                 const message = body?.error || body?.message || `HTTP ${res.status}`;
@@ -659,7 +659,14 @@ async function getEntityBalanceViaPublicRpc(identity) {
                 continue;
             }
 
-            const balance = Number(body?.balance?.balance ?? body?.balance ?? body?.amount ?? 0);
+            const balance = Number(
+                body?.balance?.balance
+                ?? body?.balance
+                ?? body?.amount
+                ?? body?.balances?.[0]?.balance
+                ?? body?.balances?.[0]?.amount
+                ?? 0
+            );
             return Number.isFinite(balance) && balance >= 0 ? balance : 0;
         } catch (e) {
             console.warn(`[getEntityBalanceViaPublicRpc] ${baseUrl} failed:`, e?.message || e);
@@ -848,11 +855,31 @@ async function getAssetBalanceViaPublicRpc(identity, issuer, assetName, managing
                 continue;
             }
 
-            const assets = Array.isArray(body?.assets) ? body.assets : [];
+            const assets = [
+                ...(Array.isArray(body?.assets) ? body.assets : []),
+                ...(Array.isArray(body?.ownerships) ? body.ownerships : []),
+                ...(Array.isArray(body?.assetOwnerships) ? body.assetOwnerships : []),
+                ...(Array.isArray(body?.data) ? body.data : []),
+            ];
+            if (assets.length === 0) assets.push(body);
             const total = assets.reduce((sum, asset) => {
-                const data = asset?.data || {};
-                if (Number(data?.managingContractIndex) !== Number(managingContractIndex)) return sum;
-                return sum + Number(data?.numberOfUnits || 0);
+                const data = asset?.data || asset || {};
+                const responseManagingContract = data?.managingContractIndex ?? data?.ownershipManagingContract;
+                if (
+                    responseManagingContract !== undefined &&
+                    Number(responseManagingContract) !== Number(managingContractIndex)
+                ) {
+                    return sum;
+                }
+
+                return sum + Number(
+                    data?.numberOfUnits
+                    ?? data?.numberOfShares
+                    ?? data?.shares
+                    ?? data?.amount
+                    ?? data?.balance
+                    ?? 0
+                );
             }, 0);
 
             return Number.isFinite(total) && total >= 0 ? total : 0;
