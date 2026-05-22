@@ -48,6 +48,7 @@ export const TAG_MAP = {
     34: { label: 'Weather',         thumbnail: 'weather.svg' },
     35: { label: 'Gaming',          thumbnail: 'gaming.svg' },
     36: { label: 'Celebrity',       thumbnail: 'celebrity.svg' },
+    37: { label: 'Medicine',        thumbnail: 'medicine.svg' },
 };
 
 export const TAG_GROUPS = [
