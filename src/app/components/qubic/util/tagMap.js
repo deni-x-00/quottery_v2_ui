@@ -34,6 +34,7 @@ export const TAG_MAP = {
     14: { label: 'Tennis',          thumbnail: 'tennis.svg' },
     15: { label: 'Hockey',          thumbnail: 'hockey.svg' },
     16: { label: 'MMA',             thumbnail: 'mma.svg' },
+    17: { label: 'Chess',           thumbnail: 'chess.svg' },
 
     // Finance: 21-30
     21: { label: 'GOLD',            thumbnail: 'gold-bar.svg' },
