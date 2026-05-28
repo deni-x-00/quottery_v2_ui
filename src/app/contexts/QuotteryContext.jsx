@@ -18,6 +18,7 @@ import {
   getEntityBalance,
   getQtryGovBalance,
 } from '../components/qubic/util/bobApi';
+import { excludedEventIds } from '../components/qubic/util/commons';
 import { useTickRate } from '../hooks/useTickRate';
 
 const QuotteryContext = createContext();
@@ -29,6 +30,14 @@ const DEFAULT_TICK_SETTINGS = {
 };
 const WHOLE_SHARE_PRICE = 100000;
 const OPEN_ORDERS_CONCURRENCY = 6;
+const excludedEventIdSet = new Set(excludedEventIds.map(Number));
+
+function filterVisibleEvents(events) {
+  return (Array.isArray(events) ? events : []).filter((event) => {
+    const eventId = Number(event?.eid ?? event?.eventId);
+    return Number.isFinite(eventId) && !excludedEventIdSet.has(eventId);
+  });
+}
 
 async function runWithConcurrency(items, limit, task) {
   const results = [];
@@ -125,7 +134,7 @@ export const QuotteryProvider = ({ children }) => {
     setLoading(true);
     try {
       const events = await fetchAllActiveEvents(bobUrl);
-      setAllEvents(events || []);
+      setAllEvents(filterVisibleEvents(events));
     } catch (error) {
       console.error('Error fetching events via Bob:', error);
       setAllEvents([]);
@@ -283,9 +292,9 @@ export const QuotteryProvider = ({ children }) => {
     try {
       let events = allEventsRef.current || [];
       if (events.length === 0) {
-        events = await fetchAllActiveEvents(bobUrl);
-        allEventsRef.current = events || [];
-        setAllEvents(events || []);
+        events = filterVisibleEvents(await fetchAllActiveEvents(bobUrl));
+        allEventsRef.current = events;
+        setAllEvents(events);
       }
 
       const identityPrefix = walletIdentity.slice(0, 56);

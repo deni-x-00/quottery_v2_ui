@@ -52,6 +52,7 @@ import {
 } from "../components/qubic/util";
 import { fetchEventDetail } from "../components/qubic/util/eventApi";
 import { broadcastTransaction, getBasicInfo } from "../components/qubic/util/bobApi";
+import { excludedEventIds } from "../components/qubic/util/commons";
 import {
     buildQuotteryTx,
     packOrderPayload,
@@ -219,7 +220,7 @@ function EventDetailsPage() {
     const updateEventDetails = useCallback(async () => {
         try {
             setLoading(true);
-            if (!id) {
+            if (!id || excludedEventIds.includes(parseInt(id))) {
                 setEvent(null);
                 navigate(backTarget);
                 return;
