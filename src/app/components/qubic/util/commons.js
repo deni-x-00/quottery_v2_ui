@@ -6,7 +6,12 @@ export const HEADERS = {
 export const MIN_BALANCE_THRESHOLD = 100;
 export const QTRY_CONTRACT_INDEX = 2;
 export const LOG_DEBUG = false;
-export const excludedEventIds = Array.from({ length: 13 }, (_, index) => 67 + index);
+export const excludedEventIds = [
+  ...Array.from({ length: 13 }, (_, index) => 67 + index),
+  ...Array.from({ length: 5 }, (_, index) => 84 + index),
+  102,
+  111,
+];
 export const makeJsonData = (
   contractIndex,
   inputType,
