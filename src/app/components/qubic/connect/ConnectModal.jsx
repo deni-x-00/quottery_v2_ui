@@ -323,7 +323,12 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                             }}
                         >
                           <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={1.5}>
-                            <Typography variant="overline" color="text.secondary">Transaction Tick</Typography>
+                            <Box>
+                              <Typography variant="overline" color="text.secondary">Transaction Tick</Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.25 }}>
+                                Choose one tick scheduling mode.
+                              </Typography>
+                            </Box>
                             <Typography variant="caption" color="text.secondary">
                               +{adaptiveOffset} ticks
                             </Typography>
