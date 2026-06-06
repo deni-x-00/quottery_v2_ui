@@ -1,5 +1,7 @@
 export const getEventId = (event) => event?.eid ?? event?.eventId;
 
+const API_BASE = process.env.REACT_APP_QUOTTERY_API_BASE || "";
+
 export const getEventVolumesUrl = (bobUrl, ids) => {
   const query = `ids=${encodeURIComponent(ids.join(","))}`;
   const fallbackPath = `/api/event-volumes?${query}`;
@@ -19,6 +21,11 @@ export const getEventVolumesUrl = (bobUrl, ids) => {
   } catch {
     return fallbackPath;
   }
+};
+
+export const getDbEventMetricsUrl = (ids) => {
+  const query = `ids=${encodeURIComponent(ids.join(","))}`;
+  return `${API_BASE}/api/quottery/event-metrics?${query}`;
 };
 
 export const formatCompactAmount = (value) => {
@@ -57,7 +64,38 @@ export async function fetchEventVolumesByIds(bobUrl, eventIds, signal) {
       .filter((eventId, index, array) => array.indexOf(eventId) === index);
 
   if (ids.length === 0) {
-    return { volumes: {}, probabilities: {}, deferredEventIds: [], missingEventIds: [], failedEventIds: [] };
+    return {
+      volumes: {},
+      tradedVolumes: {},
+      openOrderVolumes: {},
+      probabilities: {},
+      deferredEventIds: [],
+      missingEventIds: [],
+      failedEventIds: [],
+    };
+  }
+
+  try {
+    const dbRes = await fetch(getDbEventMetricsUrl(ids), { signal });
+    const dbBody = await dbRes.json().catch(() => ({}));
+    if (dbRes.ok && !dbBody?.error) {
+      const tradedVolumes = dbBody?.tradedVolumes || dbBody?.volumes || {};
+      return {
+        volumes: tradedVolumes,
+        tradedVolumes,
+        openOrderVolumes: dbBody?.openOrderVolumes || {},
+        probabilities: dbBody?.probabilities || {},
+        partial: false,
+        deferredEventIds: [],
+        missingEventIds: [],
+        failedEventIds: [],
+        source: dbBody?.source || "db",
+        cached: Boolean(dbBody?.cached),
+        lastUpdatedAt: dbBody?.lastUpdatedAt || 0,
+      };
+    }
+  } catch (error) {
+    if (error.name === "AbortError") throw error;
   }
 
   const res = await fetch(getEventVolumesUrl(bobUrl, ids), { signal });
@@ -68,6 +106,8 @@ export async function fetchEventVolumesByIds(bobUrl, eventIds, signal) {
 
   return {
     volumes: body?.volumes || {},
+    tradedVolumes: body?.tradedVolumes || body?.volumes || {},
+    openOrderVolumes: body?.openOrderVolumes || body?.volumes || {},
     probabilities: body?.probabilities || {},
     partial: Boolean(body?.partial),
     deferredEventIds: Array.isArray(body?.deferredEventIds) ? body.deferredEventIds : [],

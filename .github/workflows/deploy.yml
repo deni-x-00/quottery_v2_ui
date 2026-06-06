@@ -46,5 +46,10 @@ jobs:
             cd /var/www/quottery_frontend/app
             git pull origin main
             yarn install --frozen-lockfile
+            set -a
+            . /etc/quottery/quottery-db.env
+            set +a
+            yarn db:migrate
             npm run build
             sudo -n /usr/bin/systemctl restart quottery-bob-proxy.service
+            sudo -n /usr/bin/systemctl restart quottery-indexer.service

@@ -32,6 +32,12 @@ const STATUS_RESPONSE_KEYS = [
 ];
 const BUILD_DIR = path.join(__dirname, '..', 'build');
 const INDEX_HTML = path.join(BUILD_DIR, 'index.html');
+let handleQuotteryDbApi = null;
+try {
+  ({ handleQuotteryDbApi } = require('./quottery-db/api'));
+} catch (error) {
+  console.warn('[bob-proxy] Quottery DB API unavailable:', error.message);
+}
 
 const bobTargetUrls = String(BOB_TARGET_URL || '')
   .split(',')
@@ -442,6 +448,21 @@ async function getPublicTick() {
   } catch {
     return 0;
   }
+}
+
+async function handlePublicTick(req, res) {
+  if (req.method !== 'GET') {
+    sendJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  const tick = await getPublicTick();
+  if (!tick) {
+    sendJson(res, 502, { error: 'Failed to load public tick-info' });
+    return;
+  }
+
+  sendJson(res, 200, { tick, source: 'public-rpc', updatedAt: Date.now() });
 }
 
 function pickStatusResponse(data) {
@@ -959,6 +980,15 @@ const server = http.createServer(async (req, res) => {
 
   if (requestUrl.pathname === EVENT_VOLUMES_PATH) {
     await handleEventVolumes(req, res, requestUrl);
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/public-tick') {
+    await handlePublicTick(req, res);
+    return;
+  }
+
+  if (handleQuotteryDbApi && await handleQuotteryDbApi(req, res, requestUrl, sendJson)) {
     return;
   }
 

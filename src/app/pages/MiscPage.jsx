@@ -50,6 +50,7 @@ import {
 } from "../components/qubic/util/quotteryTx";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
+import usePageTitle from "../hooks/usePageTitle";
 
 const TRANSFER_QUBIC_FEE = 100;
 const CLAIM_REWARD_QUBIC_FEE = 1000000;
@@ -270,6 +271,7 @@ const ReceiverIdentityField = ({ value, onChange }) => {
 };
 
 function MiscPage() {
+    usePageTitle("Utilities");
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
     const {
         allEvents,

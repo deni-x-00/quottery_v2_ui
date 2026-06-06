@@ -34,6 +34,7 @@ import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import SecurityIcon from "@mui/icons-material/Security";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import TokenIcon from "@mui/icons-material/Token";
+import usePageTitle from "../hooks/usePageTitle";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 
 const getAccentTextColor = (theme) => (
@@ -211,6 +212,7 @@ const SectionHeader = ({ eyebrow, title, body }) => {
 };
 
 function AboutPage() {
+    usePageTitle("About");
     const theme = useTheme();
     const heroBackground = theme.palette.mode === "dark"
         ? "rgba(97, 240, 254, 0.08)"

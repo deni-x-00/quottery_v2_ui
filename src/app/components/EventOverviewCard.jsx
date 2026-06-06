@@ -9,11 +9,13 @@ import {
     Divider,
     Chip,
     Button,
+    Tooltip,
 } from "@mui/material";
 import { motion } from "framer-motion";
 import HelpIcon from "@mui/icons-material/Help";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import BarChartIcon from "@mui/icons-material/BarChart";
+import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import { getCanonicalTagId, getTagInfo } from "./qubic/util/tagMap";
 import { isEventClosed } from "./qubic/util/tradeValidation";
 import { formatCompactAmount } from "../utils/eventVolumes";
@@ -25,7 +27,7 @@ const yesColorDark = "#81c784";
 const noColor = "#d32f2f";
 const noColorDark = "#ef9a9a";
 
-function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
+function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroadcast }) {
     const theme = useTheme();
     const isDarkMode = theme.palette.mode === "dark";
     const [isHovered, setIsHovered] = useState(false);
@@ -48,28 +50,44 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
     const tagId = getCanonicalTagId(data?.tag);
     const thumbSrc = tagInfo.thumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
     const hasEnded = isEventClosed(data);
-    const hasVolume = data?.volume !== undefined && data?.volume !== null;
+    const hasTradedVolume = data?.tradedVolume !== undefined && data?.tradedVolume !== null;
+    const hasOpenOrderVolume = data?.openOrderVolume !== undefined && data?.openOrderVolume !== null;
     const chancePercent = Number(data?.probability?.percent);
-    const roundedChancePercent = Number.isFinite(chancePercent)
-        ? Math.max(0, Math.min(100, Math.round(chancePercent)))
+    const normalizedChancePercent = Number.isFinite(chancePercent)
+        ? Math.max(0, Math.min(100, chancePercent))
         : null;
-    const option0Chance = roundedChancePercent === null ? null : `${roundedChancePercent}%`;
-    const option1Chance = roundedChancePercent === null ? null : `${100 - roundedChancePercent}%`;
+    const formatChance = (value) => value.toLocaleString("en-US", {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+    });
+    const option0Chance = normalizedChancePercent === null ? null : `${formatChance(normalizedChancePercent)}%`;
+    const option1Chance = normalizedChancePercent === null ? null : `${formatChance(100 - normalizedChancePercent)}%`;
 
     const handleOptionClick = (e, optionIndex) => {
+        e.preventDefault();
         e.stopPropagation();
         setQuickBuyOption(optionIndex);
         setQuickBuyOpen(true);
     };
 
+    const handleCardClick = (event) => {
+        if (event.defaultPrevented) return;
+        if (eventUrl && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button === 1)) {
+            return;
+        }
+        if (eventUrl) event.preventDefault();
+        onClick?.(event);
+    };
+
     return (
         <>
             <Card
-                component={motion.div}
+                component={eventUrl ? motion.a : motion.div}
+                href={eventUrl || undefined}
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, type: "spring", stiffness: 200, damping: 15 }}
-                onClick={onClick}
+                onClick={handleCardClick}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
                 elevation={2}
@@ -78,6 +96,8 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
                     display: "flex",
                     flexDirection: "column",
                     width: "100%",
+                    color: "inherit",
+                    textDecoration: "none",
                     position: "relative",
                     borderRadius: 2,
                     border: `1px solid ${isHovered ? dynamicColors.cardBorderHover : theme.palette.divider}`,
@@ -192,36 +212,79 @@ function EventOverviewCard({ data, onClick, status = "", onTxBroadcast }) {
 
                     {/* End date */}
                     <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}
-                           sx={{ color: theme.palette.text.secondary }}>
-                        <Box display="flex" alignItems="center" gap={1} sx={{ minWidth: 0 }}>
+                           sx={{ color: theme.palette.text.secondary, minWidth: 0 }}>
+                        <Box
+                            display="flex"
+                            alignItems="center"
+                            gap={1}
+                            sx={{
+                                minWidth: 0,
+                                flex: "1 1 auto",
+                            }}
+                        >
                             <AccessTimeIcon sx={{ fontSize: "1.2rem", [theme.breakpoints.down("sm")]: { fontSize: "1rem" } }} />
                             <Typography
                                 variant="body2"
-                                noWrap
+                                noWrap={!isHovered}
                                 sx={{
                                     fontSize: "0.9rem",
-                                    overflow: "hidden",
-                                    textOverflow: "ellipsis",
+                                    overflow: isHovered ? "visible" : "hidden",
+                                    textOverflow: isHovered ? "clip" : "ellipsis",
+                                    minWidth: 0,
                                     [theme.breakpoints.down("sm")]: { fontSize: "0.8rem" },
                                 }}
                             >
                                 {hasEnded ? "Ended" : data.endDate}
                             </Typography>
                         </Box>
-                        {hasVolume && (
-                            <Box display="flex" alignItems="center" gap={0.5} sx={{ flexShrink: 0 }}>
-                                <BarChartIcon sx={{ fontSize: "1.05rem", [theme.breakpoints.down("sm")]: { fontSize: "0.95rem" } }} />
-                                <Typography
-                                    variant="body2"
-                                    sx={{
-                                        fontSize: "0.85rem",
-                                        fontWeight: 650,
-                                        whiteSpace: "nowrap",
-                                        [theme.breakpoints.down("sm")]: { fontSize: "0.76rem" },
-                                    }}
-                                >
-                                    {formatCompactAmount(data.volume)}
-                                </Typography>
+                        {(hasTradedVolume || hasOpenOrderVolume) && (
+                            <Box
+                                display="flex"
+                                alignItems="center"
+                                gap={0.8}
+                                sx={{
+                                    flexShrink: 0,
+                                    whiteSpace: "nowrap",
+                                }}
+                            >
+                                <Stack direction="row" spacing={0.85} alignItems="center">
+                                    {hasTradedVolume && (
+                                        <Tooltip title="Traded volume" arrow>
+                                            <Box display="flex" alignItems="center" gap={0.35}>
+                                                <BarChartIcon sx={{ fontSize: "0.95rem", [theme.breakpoints.down("sm")]: { fontSize: "0.86rem" } }} />
+                                                <Typography
+                                                    variant="body2"
+                                                    sx={{
+                                                        fontSize: "0.78rem",
+                                                        fontWeight: 650,
+                                                        lineHeight: 1,
+                                                        [theme.breakpoints.down("sm")]: { fontSize: "0.72rem" },
+                                                    }}
+                                                >
+                                                    {formatCompactAmount(data.tradedVolume)}
+                                                </Typography>
+                                            </Box>
+                                        </Tooltip>
+                                    )}
+                                    {hasOpenOrderVolume && (
+                                        <Tooltip title="Open orders volume" arrow>
+                                            <Box display="flex" alignItems="center" gap={0.35}>
+                                                <FormatListBulletedIcon sx={{ fontSize: "0.95rem", [theme.breakpoints.down("sm")]: { fontSize: "0.86rem" } }} />
+                                                <Typography
+                                                    variant="body2"
+                                                    sx={{
+                                                        fontSize: "0.78rem",
+                                                        fontWeight: 650,
+                                                        lineHeight: 1,
+                                                        [theme.breakpoints.down("sm")]: { fontSize: "0.72rem" },
+                                                    }}
+                                                >
+                                                    {formatCompactAmount(data.openOrderVolume)}
+                                                </Typography>
+                                            </Box>
+                                        </Tooltip>
+                                    )}
+                                </Stack>
                             </Box>
                         )}
                     </Stack>

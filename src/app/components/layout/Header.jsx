@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   AppBar, Toolbar, Box, IconButton, Container, useTheme,
-  useScrollTrigger, Button, Typography,
+  useScrollTrigger, Button, Typography, Menu, MenuItem, useMediaQuery,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import ConnectLink from '../qubic/connect/ConnectLink';
@@ -18,11 +18,15 @@ import TickIndicator from '../TickIndicator';
 
 const Header = () => {
   const theme = useTheme();
+  const isDesktopNav = useMediaQuery(theme.breakpoints.up('md'));
   const { isDarkMode, toggleTheme } = useThemeContext();
   const { isConnected } = useConfig();
   const { walletPublicIdentity, fetchBalance } = useQuotteryContext();
   const { refreshBalanceWithNotifications } = useBalanceNotifier();
   const [refreshing, setRefreshing] = useState(false);
+  const [moreAnchorEl, setMoreAnchorEl] = useState(null);
+  const moreOpenTimerRef = useRef(null);
+  const moreCloseTimerRef = useRef(null);
 
   useEffect(() => {
     let intervalId;
@@ -41,8 +45,91 @@ const Header = () => {
     try { setRefreshing(true); await refreshBalanceWithNotifications(); }
     finally { setRefreshing(false); }
   };
+  const clearMoreOpenTimer = () => {
+    if (moreOpenTimerRef.current) {
+      clearTimeout(moreOpenTimerRef.current);
+      moreOpenTimerRef.current = null;
+    }
+  };
+  const clearMoreCloseTimer = () => {
+    if (moreCloseTimerRef.current) {
+      clearTimeout(moreCloseTimerRef.current);
+      moreCloseTimerRef.current = null;
+    }
+  };
+  const handleMoreOpen = (event) => {
+    clearMoreOpenTimer();
+    clearMoreCloseTimer();
+    setMoreAnchorEl(event.currentTarget);
+  };
+  const handleMoreClose = () => {
+    clearMoreOpenTimer();
+    clearMoreCloseTimer();
+    setMoreAnchorEl(null);
+  };
+  const scheduleMoreOpen = (event) => {
+    if (!isDesktopNav) return;
+    const anchor = event.currentTarget;
+    clearMoreCloseTimer();
+    clearMoreOpenTimer();
+    moreOpenTimerRef.current = setTimeout(() => setMoreAnchorEl(anchor), 120);
+  };
+  const scheduleMoreClose = () => {
+    if (!isDesktopNav) return;
+    clearMoreOpenTimer();
+    clearMoreCloseTimer();
+    moreCloseTimerRef.current = setTimeout(() => setMoreAnchorEl(null), 400);
+  };
+  const handleMoreClick = (event) => {
+    if (moreAnchorEl) handleMoreClose();
+    else handleMoreOpen(event);
+  };
+
+  useEffect(() => () => {
+    clearMoreOpenTimer();
+    clearMoreCloseTimer();
+  }, []);
 
   const scrollTrigger = useScrollTrigger({ disableHysteresis: true, threshold: 100 });
+  const navButtonSx = { flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } };
+  const navTextSx = { fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' };
+  const moreButton = (
+      <Button
+          color='inherit'
+          size='small'
+          onClick={handleMoreClick}
+          onMouseEnter={isDesktopNav ? scheduleMoreOpen : undefined}
+          onMouseLeave={isDesktopNav ? scheduleMoreClose : undefined}
+          onFocus={isDesktopNav ? handleMoreOpen : undefined}
+          sx={navButtonSx}
+      >
+        <Typography color="text.secondary" sx={navTextSx}>More</Typography>
+      </Button>
+  );
+  const moreMenu = (
+      <Menu
+          anchorEl={moreAnchorEl}
+          open={Boolean(moreAnchorEl)}
+          onClose={handleMoreClose}
+          disableScrollLock
+          keepMounted
+          transitionDuration={180}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          MenuListProps={{
+            onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
+            onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
+          }}
+          PaperProps={{
+            onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
+            onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
+          }}
+      >
+        <MenuItem component={Link} to='/about' onClick={handleMoreClose}>About</MenuItem>
+        <MenuItem component={Link} to='/governance' onClick={handleMoreClose}>Governance</MenuItem>
+        <MenuItem component={Link} to='/misc' onClick={handleMoreClose}>Utilities</MenuItem>
+      </Menu>
+  );
 
   return (
       <>
@@ -129,23 +216,19 @@ const Header = () => {
                 scrollbarWidth: 'none',
                 '&::-webkit-scrollbar': { display: 'none' },
               }}>
-                <Button component={Link} to='/about' color='inherit' size='small' sx={{ flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } }}>
-                  <Typography color="text.secondary" sx={{ fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' }}>About</Typography>
+                <Button component={Link} to='/events' color='inherit' size='small' sx={navButtonSx}>
+                  <Typography color="text.secondary" sx={navTextSx}>Markets</Typography>
                 </Button>
-                <Button component={Link} to='/events' color='inherit' size='small' sx={{ flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } }}>
-                  <Typography color="text.secondary" sx={{ fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' }}>Events</Typography>
+                <Button component={Link} to='/leaderboard' color='inherit' size='small' sx={navButtonSx}>
+                  <Typography color="text.secondary" sx={navTextSx}>Leaderboard</Typography>
                 </Button>
                 {isConnected && (
                     <>
-                      <Button component={Link} to='/orders' color='inherit' size='small' sx={{ flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } }}>
-                        <Typography color="text.secondary" sx={{ fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' }}>Orders & Positions</Typography>
+                      <Button component={Link} to='/profile' color='inherit' size='small' sx={navButtonSx}>
+                        <Typography color="text.secondary" sx={navTextSx}>Profile</Typography>
                       </Button>
-                      <Button component={Link} to='/governance' color='inherit' size='small' sx={{ flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } }}>
-                        <Typography color="text.secondary" sx={{ fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' }}>Governance</Typography>
-                      </Button>
-                      <Button component={Link} to='/misc' color='inherit' size='small' sx={{ flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } }}>
-                        <Typography color="text.secondary" sx={{ fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' }}>Utilities</Typography>
-                      </Button>
+                      {moreButton}
+                      {moreMenu}
                       <IconButton onClick={handleRefreshBalance} color='inherit' size='small' disabled={refreshing} sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
                         <RefreshIcon fontSize='small'
                                      sx={refreshing ? {
@@ -156,6 +239,12 @@ const Header = () => {
                       <Box sx={{ display: { xs: 'none', md: 'block' } }}>
                         <ConnectLink />
                       </Box>
+                    </>
+                )}
+                {!isConnected && (
+                    <>
+                      {moreButton}
+                      {moreMenu}
                     </>
                 )}
                 <IconButton

@@ -1,14 +1,25 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Box,
   Button,
+  Checkbox,
   Container,
+  FormControlLabel,
   Grid,
   IconButton,
   Menu,
   MenuItem,
+  Pagination,
+  Paper,
   Stack,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  Tabs,
   Tooltip,
   Typography,
   useTheme,
@@ -23,26 +34,81 @@ import EventOverviewCard from "../components/EventOverviewCard";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
+import usePageTitle from "../hooks/usePageTitle";
 import { TAG_GROUPS, getAllTags, getCanonicalTagId, getTagGroupId, getTagIdBySlug, getTagSlug, getTagsForGroup } from "../components/qubic/util/tagMap";
 import { isEventClosed, parseQubicUtcDate } from "../components/qubic/util/tradeValidation";
 import { fetchCachedEventVolumes, fetchEventVolumesByIds, getEventId } from "../utils/eventVolumes";
+import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
 
 const SORT_MODES = {
   VOLUME: "volume",
+  OPEN_VOLUME: "open-volume",
   NEWEST: "newest",
   ENDING_SOON: "ending-soon",
+  CREATED_DATE: "created-date",
+  ARCHIVED_DATE: "archived-date",
+};
+const SORT_DIRECTIONS = {
+  DESC: "desc",
+  ASC: "asc",
 };
 
 const SORT_LABELS = {
-  [SORT_MODES.VOLUME]: "Volume",
+  [SORT_MODES.VOLUME]: "Traded volume",
+  [SORT_MODES.OPEN_VOLUME]: "Open orders volume",
   [SORT_MODES.NEWEST]: "Newest",
   [SORT_MODES.ENDING_SOON]: "Ending soon",
+  [SORT_MODES.CREATED_DATE]: "Created date",
+  [SORT_MODES.ARCHIVED_DATE]: "Archived date",
+};
+const SORT_DIRECTION_LABELS = {
+  [SORT_DIRECTIONS.DESC]: "Newest",
+  [SORT_DIRECTIONS.ASC]: "Oldest",
 };
 
+const EVENT_VIEW = {
+  ACTIVE: "active",
+  ARCHIVE: "archive",
+};
+const PAGE_SIZE = 50;
+const EVENT_METRICS_REFRESH_MS = 15000;
+const EVENT_METRICS_DUPLICATE_WINDOW_MS = 5000;
+
+const API_BASE = process.env.REACT_APP_QUOTTERY_API_BASE || "";
+
+function apiUrl(path) {
+  return `${API_BASE}${path}`;
+}
+
+function formatAmount(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  return String(value)
+      .split(".")[0]
+      .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function formatDateUtc(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const part = (next) => String(next).padStart(2, "0");
+  return `${part(date.getUTCMonth() + 1)}/${part(date.getUTCDate())}/${date.getUTCFullYear()}, ${part(date.getUTCHours())}:${part(date.getUTCMinutes())}:${part(date.getUTCSeconds())}`;
+}
+
+function winnerLabel(event) {
+  if (event?.result === null || event?.result === undefined) return "Pending";
+  if (Number(event.result) === 0) return event.option0 || "Yes";
+  if (Number(event.result) === 1) return event.option1 || "No";
+  return String(event.result);
+}
+
 const getValidSortMode = (sortMode) => (
-    [SORT_MODES.NEWEST, SORT_MODES.ENDING_SOON].includes(sortMode)
+    [SORT_MODES.OPEN_VOLUME, SORT_MODES.NEWEST, SORT_MODES.ENDING_SOON, SORT_MODES.CREATED_DATE, SORT_MODES.ARCHIVED_DATE].includes(sortMode)
         ? sortMode
         : SORT_MODES.VOLUME
+);
+const getValidSortDirection = (direction) => (
+  direction === SORT_DIRECTIONS.ASC ? SORT_DIRECTIONS.ASC : SORT_DIRECTIONS.DESC
 );
 
 const isValidGroupId = (groupId) => (
@@ -79,15 +145,54 @@ function EventsPage() {
   const [expandedGroupIds, setExpandedGroupIds] = useState({});
   const [sortMenuAnchorEl, setSortMenuAnchorEl] = useState(null);
   const [eventVolumes, setEventVolumes] = useState({});
+  const [eventOpenOrderVolumes, setEventOpenOrderVolumes] = useState({});
   const [eventProbabilities, setEventProbabilities] = useState({});
+  const [archivedEvents, setArchivedEvents] = useState([]);
+  const [archiveLoading, setArchiveLoading] = useState(false);
+  const [archiveError, setArchiveError] = useState("");
+  const [archivePage, setArchivePage] = useState(1);
+  const [showZeroVolumeArchiveEvents, setShowZeroVolumeArchiveEvents] = useState(false);
+  const lastImmediateMetricsRef = useRef({ key: "", at: 0 });
   const requestedGroupId = getValidGroupId(searchParams.get("group"));
+  const selectedView = searchParams.get("view") === EVENT_VIEW.ARCHIVE ? EVENT_VIEW.ARCHIVE : EVENT_VIEW.ACTIVE;
+  usePageTitle(selectedView === EVENT_VIEW.ARCHIVE ? "Archived events" : "Events");
   const selectedTopicId = getValidTopicId(searchParams.get("topic"), requestedGroupId);
   const selectedGroupId = selectedTopicId
       ? getTagGroupId(Number(selectedTopicId))
       : requestedGroupId;
   const selectedSortMode = getValidSortMode(searchParams.get("sort"));
+  const selectedSortDirection = getValidSortDirection(searchParams.get("dir"));
+  const activeSortMode = [SORT_MODES.VOLUME, SORT_MODES.OPEN_VOLUME, SORT_MODES.ENDING_SOON, SORT_MODES.NEWEST].includes(selectedSortMode)
+      ? selectedSortMode
+      : SORT_MODES.VOLUME;
+  const archiveSortMode = [SORT_MODES.VOLUME, SORT_MODES.CREATED_DATE, SORT_MODES.ARCHIVED_DATE].includes(selectedSortMode)
+      ? selectedSortMode
+      : SORT_MODES.VOLUME;
+  const sortOptions = selectedView === EVENT_VIEW.ARCHIVE
+      ? [SORT_MODES.VOLUME, SORT_MODES.CREATED_DATE, SORT_MODES.ARCHIVED_DATE]
+      : [SORT_MODES.VOLUME, SORT_MODES.OPEN_VOLUME, SORT_MODES.ENDING_SOON, SORT_MODES.NEWEST];
   const searchTerm = searchParams.get("q") || "";
   const eventsReturnPath = `${location.pathname}${location.search}`;
+
+  const loadArchivedEvents = React.useCallback(async () => {
+    setArchiveLoading(true);
+    setArchiveError("");
+    try {
+      const response = await fetch(apiUrl("/api/quottery/events?status=archived&limit=1000"));
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body?.details || body?.error || `Request failed with ${response.status}`);
+      setArchivedEvents(Array.isArray(body.events) ? body.events : []);
+    } catch (error) {
+      setArchiveError(error.message || "Failed to load archived events");
+      setArchivedEvents([]);
+    } finally {
+      setArchiveLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadArchivedEvents();
+  }, [loadArchivedEvents]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -104,6 +209,11 @@ function EventsPage() {
   }, [isConnected]);
 
   const handleRefresh = async () => {
+    if (selectedView === EVENT_VIEW.ARCHIVE) {
+      await loadArchivedEvents();
+      return;
+    }
+
     setIsFilterLoading(true);
     try {
       await fetchEvents();
@@ -115,22 +225,40 @@ function EventsPage() {
   useEffect(() => {
     if (!isConnected || !Array.isArray(allEvents) || allEvents.length === 0) {
       setEventVolumes({});
+      setEventOpenOrderVolumes({});
       setEventProbabilities({});
       return undefined;
     }
 
     const controller = new AbortController();
+    const metricsKey = allEvents
+        .map(getEventId)
+        .filter((eventId) => eventId !== undefined && eventId !== null)
+        .join(",");
     const mergeVolumes = (volumes) => {
       setEventVolumes((prev) => ({ ...prev, ...(volumes || {}) }));
+    };
+    const mergeOpenOrderVolumes = (volumes) => {
+      setEventOpenOrderVolumes((prev) => ({ ...prev, ...(volumes || {}) }));
     };
     const mergeProbabilities = (probabilities) => {
       setEventProbabilities((prev) => ({ ...prev, ...(probabilities || {}) }));
     };
 
-    const loadVolumes = async () => {
+    const loadVolumes = async ({ immediate = false } = {}) => {
+      if (immediate) {
+        const now = Date.now();
+        const last = lastImmediateMetricsRef.current;
+        if (last.key === metricsKey && now - last.at < EVENT_METRICS_DUPLICATE_WINDOW_MS) {
+          return;
+        }
+        lastImmediateMetricsRef.current = { key: metricsKey, at: now };
+      }
+
       try {
         const firstResult = await fetchCachedEventVolumes(bobUrl, allEvents, controller.signal);
         mergeVolumes(firstResult.volumes);
+        mergeOpenOrderVolumes(firstResult.openOrderVolumes);
         mergeProbabilities(firstResult.probabilities);
 
         let deferredEventIds = firstResult.deferredEventIds || [];
@@ -140,6 +268,7 @@ function EventsPage() {
 
           const nextResult = await fetchEventVolumesByIds(bobUrl, deferredEventIds, controller.signal);
           mergeVolumes(nextResult.volumes);
+          mergeOpenOrderVolumes(nextResult.openOrderVolumes);
           mergeProbabilities(nextResult.probabilities);
           deferredEventIds = nextResult.deferredEventIds || [];
         }
@@ -150,8 +279,12 @@ function EventsPage() {
       }
     };
 
-    loadVolumes();
-    return () => controller.abort();
+    loadVolumes({ immediate: true });
+    const intervalId = setInterval(loadVolumes, EVENT_METRICS_REFRESH_MS);
+    return () => {
+      clearInterval(intervalId);
+      controller.abort();
+    };
   }, [allEvents, bobUrl, isConnected]);
 
   const baseEventsToDisplay = React.useMemo(() => {
@@ -236,7 +369,7 @@ function EventsPage() {
     };
 
     const sortEvents = (events) => {
-      if (selectedSortMode === SORT_MODES.VOLUME) {
+      if (activeSortMode === SORT_MODES.VOLUME) {
         return [...events].sort((a, b) => {
           const aId = getEventId(a);
           const bId = getEventId(b);
@@ -247,7 +380,18 @@ function EventsPage() {
         });
       }
 
-      if (selectedSortMode === SORT_MODES.ENDING_SOON) {
+      if (activeSortMode === SORT_MODES.OPEN_VOLUME) {
+        return [...events].sort((a, b) => {
+          const aId = getEventId(a);
+          const bId = getEventId(b);
+          const aVolume = Number(eventOpenOrderVolumes[aId] || 0);
+          const bVolume = Number(eventOpenOrderVolumes[bId] || 0);
+          if (aVolume !== bVolume) return bVolume - aVolume;
+          return compareEndingSoon(a, b);
+        });
+      }
+
+      if (activeSortMode === SORT_MODES.ENDING_SOON) {
         return [...events].sort(compareEndingSoon);
       }
 
@@ -260,7 +404,7 @@ function EventsPage() {
     }
     if (selectedGroupId === "all") return sortEvents(baseEventsToDisplay);
     return sortEvents(baseEventsToDisplay.filter((event) => getTagGroupId(event.tag) === selectedGroupId));
-  }, [baseEventsToDisplay, eventVolumes, selectedGroupId, selectedSortMode, selectedTopicId]);
+  }, [activeSortMode, baseEventsToDisplay, eventOpenOrderVolumes, eventVolumes, selectedGroupId, selectedTopicId]);
 
   const updateEventsQuery = React.useCallback((updates, options = {}) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -297,8 +441,18 @@ function EventsPage() {
       const nextSortMode = getValidSortMode(updates.sort);
       if (nextSortMode === SORT_MODES.VOLUME) {
         nextParams.delete("sort");
+        nextParams.delete("dir");
       } else {
         nextParams.set("sort", nextSortMode);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "dir")) {
+      const nextDirection = getValidSortDirection(updates.dir);
+      if (nextDirection === SORT_DIRECTIONS.DESC) {
+        nextParams.delete("dir");
+      } else {
+        nextParams.set("dir", nextDirection);
       }
     }
 
@@ -325,6 +479,13 @@ function EventsPage() {
     updateEventsQuery({ sort: sortMode });
     setSortMenuAnchorEl(null);
   }, [updateEventsQuery]);
+
+  const handleViewChange = React.useCallback((event, nextView) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (nextView === EVENT_VIEW.ARCHIVE) nextParams.set("view", EVENT_VIEW.ARCHIVE);
+    else nextParams.delete("view");
+    setSearchParams(nextParams);
+  }, [searchParams, setSearchParams]);
 
   const toggleGroupExpansion = (groupId) => {
     setExpandedGroupIds((current) => ({
@@ -354,6 +515,182 @@ function EventsPage() {
       </Box>
   );
 
+  const archivedEventsToDisplay = React.useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    const rows = Array.isArray(archivedEvents) ? archivedEvents : [];
+    const searchedRows = !term ? rows : /^\d+$/.test(term)
+      ? rows.filter((event) => String(event.event_id || "") === term)
+      : rows.filter((event) =>
+          String(event.description || "").toLowerCase().includes(term)
+          || String(event.option0 || "").toLowerCase().includes(term)
+          || String(event.option1 || "").toLowerCase().includes(term)
+      );
+    const filteredRows = showZeroVolumeArchiveEvents
+      ? searchedRows
+      : searchedRows.filter((event) => Number(event.traded_volume || 0) > 0);
+
+    const getCreatedTime = (event) => {
+      const time = new Date(event.created_tx_timestamp || 0).getTime();
+      return Number.isFinite(time) && time > 0 ? time : Number(event.created_tick || 0);
+    };
+    const getArchivedTime = (event) => {
+      const time = new Date(event.archived_tx_timestamp || event.finalized_tx_timestamp || event.result_tx_timestamp || 0).getTime();
+      return Number.isFinite(time) && time > 0 ? time : Number(event.archived_tick || event.finalized_tick || event.result_tick || 0);
+    };
+
+    return [...filteredRows].sort((a, b) => {
+      if (archiveSortMode === SORT_MODES.CREATED_DATE) {
+        const delta = getCreatedTime(b) - getCreatedTime(a);
+        return selectedSortDirection === SORT_DIRECTIONS.ASC ? -delta : delta;
+      }
+      if (archiveSortMode === SORT_MODES.ARCHIVED_DATE) {
+        const delta = getArchivedTime(b) - getArchivedTime(a);
+        return selectedSortDirection === SORT_DIRECTIONS.ASC ? -delta : delta;
+      }
+      const volumeDelta = Number(b.traded_volume || 0) - Number(a.traded_volume || 0);
+      if (volumeDelta !== 0) return volumeDelta;
+      return getArchivedTime(b) - getArchivedTime(a);
+    });
+  }, [archiveSortMode, archivedEvents, searchTerm, selectedSortDirection, showZeroVolumeArchiveEvents]);
+  const archivePageCount = Math.max(1, Math.ceil(archivedEventsToDisplay.length / PAGE_SIZE));
+  const safeArchivePage = Math.min(archivePage, archivePageCount);
+  const pagedArchivedEvents = archivedEventsToDisplay.slice((safeArchivePage - 1) * PAGE_SIZE, safeArchivePage * PAGE_SIZE);
+
+  useEffect(() => {
+    setArchivePage(1);
+  }, [archiveSortMode, searchTerm, selectedSortDirection, showZeroVolumeArchiveEvents]);
+
+  useEffect(() => {
+    if (archivePage > archivePageCount) setArchivePage(archivePageCount);
+  }, [archivePage, archivePageCount]);
+
+  const renderTickWithDate = (tick, timestamp, tickRef = null) => {
+    const explorerRef = tickRef || tick;
+    return (
+    <Stack spacing={0.15} alignItems="center">
+      {tick ? (
+        <Button
+          size="small"
+          variant="text"
+          component="a"
+          href={explorerTickOrTxUrl(explorerRef)}
+          target="_blank"
+          rel="noreferrer"
+          sx={{
+            minWidth: 0,
+            p: 0,
+            textTransform: "none",
+            fontWeight: 750,
+            fontVariantNumeric: "tabular-nums",
+            "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+          }}
+        >
+          {explorerTickOrTxLabel(explorerRef, formatAmount)}
+        </Button>
+      ) : (
+        <Typography variant="body2">-</Typography>
+      )}
+      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
+        {formatDateUtc(timestamp)}
+      </Typography>
+    </Stack>
+    );
+  };
+
+  const renderArchive = () => {
+    if (archiveLoading) return renderLoading();
+    if (archiveError) {
+      return (
+          <Box sx={{ textAlign: "center", py: 6, color: "error.main" }}>
+            <Typography>{archiveError}</Typography>
+          </Box>
+      );
+    }
+
+    if (archivedEventsToDisplay.length === 0) {
+      return (
+          <Box sx={{ textAlign: "center", py: 6 }}>
+            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>No archived events found.</Typography>
+          </Box>
+      );
+    }
+
+    return (
+      <>
+        <Paper elevation={0} variant="outlined" sx={{ overflowX: "auto", borderRadius: 2 }}>
+          <Table size="small" sx={{ minWidth: 940 }}>
+            <TableHead>
+              <TableRow>
+                <TableCell align="center" sx={{ fontWeight: 700 }}>ID</TableCell>
+                <TableCell sx={{ fontWeight: 700, minWidth: 280 }}>Event</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700 }}>Winner</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700 }}>Volume</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700 }}>Created tick</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700 }}>Finalized tick</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 700 }}>Archived tick</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {pagedArchivedEvents.map((event) => (
+                  <TableRow key={event.event_id}>
+                    <TableCell align="center">{event.event_id}</TableCell>
+                    <TableCell sx={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
+                      <Button
+                        size="small"
+                        variant="text"
+                        component="a"
+                        href={`/events?view=archive&q=${encodeURIComponent(event.event_id || event.description || "")}`}
+                        onClick={(clickEvent) => {
+                          if (clickEvent.metaKey || clickEvent.ctrlKey || clickEvent.shiftKey || clickEvent.altKey) return;
+                          clickEvent.preventDefault();
+                          updateEventsQuery({ q: String(event.event_id || event.description || "") });
+                        }}
+                        sx={{
+                          minWidth: 0,
+                          p: 0,
+                          textTransform: "none",
+                          textAlign: "left",
+                          fontWeight: 650,
+                          color: theme.palette.primary.main,
+                          whiteSpace: "normal",
+                          overflowWrap: "anywhere",
+                          "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+                        }}
+                      >
+                        {event.description || `Event #${event.event_id}`}
+                      </Button>
+                      <Typography variant="caption" color="text.secondary">
+                        {event.option0 || "Yes"} | {event.option1 || "No"}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{winnerLabel(event)}</Typography>
+                    </TableCell>
+                    <TableCell align="center">{formatAmount(event.traded_volume)}</TableCell>
+                    <TableCell align="center">{renderTickWithDate(event.created_tick, event.created_tx_timestamp)}</TableCell>
+                    <TableCell align="center">{renderTickWithDate(event.finalized_tick, event.finalized_tx_timestamp)}</TableCell>
+                    <TableCell align="center">{renderTickWithDate(event.archived_tick, event.archived_tx_timestamp || event.finalized_tx_timestamp || event.result_tx_timestamp, event.archived_tick_ref)}</TableCell>
+                  </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Paper>
+        {archivedEventsToDisplay.length > PAGE_SIZE && (
+          <Stack direction="row" justifyContent="center" sx={{ mt: 2 }}>
+            <Pagination
+              count={archivePageCount}
+              page={safeArchivePage}
+              onChange={(event, nextPage) => setArchivePage(nextPage)}
+              siblingCount={1}
+              boundaryCount={1}
+              color="primary"
+            />
+          </Stack>
+        )}
+      </>
+    );
+  };
+
   const isLoadingOverall = loading || isFilterLoading;
 
   const cardVariants = {
@@ -379,10 +716,104 @@ function EventsPage() {
             </Tooltip>
           </Box>
 
-          {!isConnected ? (
+          <Tabs
+              value={selectedView}
+              onChange={handleViewChange}
+              centered
+              sx={{ mb: 3, minHeight: 40, "& .MuiTab-root": { minHeight: 40, textTransform: "none", fontWeight: 700 } }}
+          >
+            <Tab value={EVENT_VIEW.ACTIVE} label="Active" />
+            <Tab value={EVENT_VIEW.ARCHIVE} label={`Archive (${archivedEvents.length || 0})`} />
+          </Tabs>
+
+          {selectedView === EVENT_VIEW.ACTIVE && !isConnected ? (
               <Box sx={{ textAlign: "center", py: 8 }}>
                 <Typography variant="h6" color="text.secondary">Connect your wallet to browse events.</Typography>
               </Box>
+          ) : selectedView === EVENT_VIEW.ARCHIVE ? (
+              <>
+                <Box sx={{ mb: 3 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <ModernSearchFilter searchTerm={searchTerm} onSearchChange={handleSearchChange} />
+                    </Box>
+                    <Button
+                        onClick={handleSortMenuOpen}
+                        variant="outlined"
+                        size="small"
+                        sx={{
+                          borderRadius: 1,
+                          minHeight: 38,
+                          px: 1.5,
+                          textTransform: "none",
+                          fontWeight: 700,
+                          flexShrink: 0,
+                        }}
+                    >
+                      Sort: {SORT_LABELS[archiveSortMode]}
+                    </Button>
+                  </Box>
+                  <Menu
+                      anchorEl={sortMenuAnchorEl}
+                      open={Boolean(sortMenuAnchorEl)}
+                      onClose={handleSortMenuClose}
+                  >
+                    {sortOptions.map((sortMode) => (
+                        <MenuItem
+                            key={sortMode}
+                            selected={archiveSortMode === sortMode}
+                            onClick={() => handleSortChange(sortMode)}
+                        >
+                          {SORT_LABELS[sortMode]}
+                        </MenuItem>
+                    ))}
+                  </Menu>
+                  {[SORT_MODES.CREATED_DATE, SORT_MODES.ARCHIVED_DATE].includes(archiveSortMode) && (
+                    <Stack direction="row" spacing={1} sx={{ mt: 1.25, justifyContent: "flex-end" }}>
+                      {[SORT_DIRECTIONS.DESC, SORT_DIRECTIONS.ASC].map((direction) => (
+                        <Button
+                          key={direction}
+                          size="small"
+                          variant={selectedSortDirection === direction ? "contained" : "outlined"}
+                          onClick={() => updateEventsQuery({ dir: direction })}
+                          sx={{
+                            borderRadius: 1,
+                            minHeight: 30,
+                            px: 1.25,
+                            textTransform: "none",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {SORT_DIRECTION_LABELS[direction]}
+                        </Button>
+                      ))}
+                    </Stack>
+                  )}
+                  <Stack direction="row" justifyContent="flex-end" sx={{ mt: 1 }}>
+                    <FormControlLabel
+                      control={(
+                        <Checkbox
+                          size="small"
+                          checked={showZeroVolumeArchiveEvents}
+                          onChange={(event) => setShowZeroVolumeArchiveEvents(event.target.checked)}
+                          sx={{
+                            py: 0.25,
+                            color: "text.secondary",
+                            "&.Mui-checked": { color: theme.palette.primary.main },
+                          }}
+                        />
+                      )}
+                      label="Show zero volume events"
+                      sx={{
+                        m: 0,
+                        color: "text.secondary",
+                        "& .MuiFormControlLabel-label": { fontSize: "0.875rem", fontWeight: 650 },
+                      }}
+                    />
+                  </Stack>
+                </Box>
+                {renderArchive()}
+              </>
           ) : (
               <>
                 <Box sx={{ mb: 3 }}>
@@ -425,17 +856,17 @@ function EventsPage() {
                           flexShrink: 0,
                         }}
                     >
-                      Sort: {SORT_LABELS[selectedSortMode]}
+                      Sort: {SORT_LABELS[activeSortMode]}
                     </Button>
                     <Menu
                         anchorEl={sortMenuAnchorEl}
                         open={Boolean(sortMenuAnchorEl)}
                         onClose={handleSortMenuClose}
                     >
-                      {[SORT_MODES.VOLUME, SORT_MODES.ENDING_SOON, SORT_MODES.NEWEST].map((sortMode) => (
+                      {sortOptions.map((sortMode) => (
                           <MenuItem
                               key={sortMode}
-                              selected={selectedSortMode === sortMode}
+                              selected={activeSortMode === sortMode}
                               onClick={() => handleSortChange(sortMode)}
                           >
                             {SORT_LABELS[sortMode]}
@@ -546,7 +977,14 @@ function EventsPage() {
                                   return (
                                       <Grid item xs={12} sm={6} lg={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                         <EventOverviewCard
-                                            data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0, probability: eventProbabilities[getEventId(event)] }}
+                                            eventUrl={`/event/${event.eid}`}
+                                            data={{
+                                              ...event,
+                                              desc: event.desc,
+                                              tradedVolume: eventVolumes[getEventId(event)] ?? 0,
+                                              openOrderVolume: eventOpenOrderVolumes[getEventId(event)] ?? 0,
+                                              probability: eventProbabilities[getEventId(event)],
+                                            }}
                                             onClick={() => navigate(`/event/${event.eid}`, { state: { from: eventsReturnPath } })}
                                             status={event.status}
                                             onTxBroadcast={trackTx}

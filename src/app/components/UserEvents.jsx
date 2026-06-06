@@ -1,9 +1,9 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 
-// UserEvents now redirects to the unified Orders & Positions page
+// UserEvents is kept as a compatibility redirect for old links.
 const UserEvents = () => {
-  return <Navigate to="/orders" replace />;
+  return <Navigate to="/profile" replace />;
 };
 
 export default UserEvents;

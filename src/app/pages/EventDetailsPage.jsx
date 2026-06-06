@@ -70,6 +70,7 @@ import TradeAmountSlider from "../components/TradeAmountSlider";
 import TradePriceSelector from "../components/TradePriceSelector";
 import EventHeader from "../components/EventHeader";
 import { calculateOptionProbability } from "../utils/eventProbability";
+import usePageTitle from "../hooks/usePageTitle";
 const thumbnails = require.context("../../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
     try {
@@ -119,6 +120,7 @@ function EventDetailsPage() {
     const [detailsExpanded, setDetailsExpanded] = useState(false);
     const [aiContextExpanded, setAiContextExpanded] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    usePageTitle(event?.desc || (id ? `Event #${id}` : "Event"));
 
     // Trading box state
     const WHOLE_SHARE_PRICE = 100000;
@@ -158,12 +160,13 @@ function EventDetailsPage() {
     const [orderBookExpanded, setOrderBookExpanded] = useState(true);
     const [obTab, setObTab] = useState(0);
     const option0Probability = calculateOptionProbability(orderbook, 0);
-    const roundedOption0Percent = Number.isFinite(Number(option0Probability?.percent))
-        ? Math.max(0, Math.min(100, Math.round(Number(option0Probability.percent))))
+    const option0Percent = Number.isFinite(Number(option0Probability?.percent))
+        ? Math.max(0, Math.min(100, Number(option0Probability.percent)))
         : null;
-    const optionChanceTexts = roundedOption0Percent === null
+    const formatChanceText = (value) => `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
+    const optionChanceTexts = option0Percent === null
         ? null
-        : [`${roundedOption0Percent}%`, `${100 - roundedOption0Percent}%`];
+        : [formatChanceText(option0Percent), formatChanceText(100 - option0Percent)];
     const optionColor = (option) => (option === 0 ? theme.palette.success : theme.palette.error);
     const optionToggleSx = (option) => {
         const palette = optionColor(option);
@@ -335,12 +338,6 @@ function EventDetailsPage() {
         fetchOrderbook(event.eid, isCancelled);
         return () => { cancelled = true; };
     }, [event, fetchOrderbook]);
-
-    useEffect(() => {
-        if (event?.desc) {
-            document.title = event.desc;
-        }
-    }, [event]);
 
     // Automatic refresh every 60s
     useEffect(() => {

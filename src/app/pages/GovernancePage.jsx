@@ -13,6 +13,7 @@ import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
+import usePageTitle from "../hooks/usePageTitle";
 import { copyText } from "../utils";
 import { byteArrayToHexString, formatQubicAmount } from "../components/qubic/util";
 import {
@@ -31,6 +32,7 @@ const GOV_TOTAL_VOTES = 676;
 const GOV_ACCEPTANCE_THRESHOLD = 451;
 
 function GovernancePage() {
+    usePageTitle("Governance");
     const theme = useTheme();
     const { bobUrl } = useConfig();
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();

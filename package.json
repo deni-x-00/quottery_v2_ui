@@ -1,7 +1,8 @@
 {
   "name": "quottery-frontend",
-  "version": "1.0",
+  "version": "1.1",
   "private": true,
+  "proxy": "http://localhost:40421",
   "dependencies": {
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
@@ -21,6 +22,7 @@
     "dayjs": "^1.11.13",
     "framer-motion": "^11.14.0",
     "jotai": "^2.14.0",
+    "pg": "8.13.1",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-device-detect": "^2.2.3",
@@ -33,12 +35,18 @@
     "react-simple-typewriter": "^5.0.1",
     "react-toastify": "^11.0.0",
     "uuid": "^8.3.2",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "ws": "8.18.0",
+    "xlsx": "0.18.5"
   },
   "scripts": {
     "start": "react-scripts start",
     "start:main": "node scripts/start-target.js main",
     "start:api": "node server/bob-proxy.js",
+    "db:migrate": "node server/quottery-db/migrate.js",
+    "history:import": "node server/quottery-db/import-history.js",
+    "indexer:start": "node server/quottery-db/indexer.js",
+    "end-epoch:scan": "node server/quottery-db/end-epoch-scanner.js",
     "serve:prod": "node server/bob-proxy.js",
     "build": "react-scripts build",
     "build:main": "node scripts/build-target.js main",

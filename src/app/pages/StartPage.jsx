@@ -17,11 +17,14 @@ import EventOverviewCard from "../components/EventOverviewCard";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
+import usePageTitle from "../hooks/usePageTitle";
 import { fetchCachedEventVolumes, fetchEventVolumesByIds, getEventId } from "../utils/eventVolumes";
 
 const RECENT_EVENT_LIMIT = 6;
+const EVENT_METRICS_REFRESH_MS = 15000;
 
 function StartPage() {
+  usePageTitle();
   const navigate = useNavigate();
   const theme = useTheme();
   const { bobUrl, isConnected } = useConfig();
@@ -29,6 +32,7 @@ function StartPage() {
   const { trackTx } = useTxTracker();
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
   const [eventVolumes, setEventVolumes] = useState({});
+  const [eventOpenOrderVolumes, setEventOpenOrderVolumes] = useState({});
   const [eventProbabilities, setEventProbabilities] = useState({});
 
   useEffect(() => {
@@ -54,6 +58,7 @@ function StartPage() {
   useEffect(() => {
     if (!isConnected || recentEvents.length === 0) {
       setEventVolumes({});
+      setEventOpenOrderVolumes({});
       setEventProbabilities({});
       return undefined;
     }
@@ -61,6 +66,9 @@ function StartPage() {
     const controller = new AbortController();
     const mergeVolumes = (volumes) => {
       setEventVolumes((prev) => ({ ...prev, ...(volumes || {}) }));
+    };
+    const mergeOpenOrderVolumes = (volumes) => {
+      setEventOpenOrderVolumes((prev) => ({ ...prev, ...(volumes || {}) }));
     };
     const mergeProbabilities = (probabilities) => {
       setEventProbabilities((prev) => ({ ...prev, ...(probabilities || {}) }));
@@ -70,6 +78,7 @@ function StartPage() {
       try {
         const firstResult = await fetchCachedEventVolumes(bobUrl, recentEvents, controller.signal);
         mergeVolumes(firstResult.volumes);
+        mergeOpenOrderVolumes(firstResult.openOrderVolumes);
         mergeProbabilities(firstResult.probabilities);
 
         let deferredEventIds = firstResult.deferredEventIds || [];
@@ -79,6 +88,7 @@ function StartPage() {
 
           const nextResult = await fetchEventVolumesByIds(bobUrl, deferredEventIds, controller.signal);
           mergeVolumes(nextResult.volumes);
+          mergeOpenOrderVolumes(nextResult.openOrderVolumes);
           mergeProbabilities(nextResult.probabilities);
           deferredEventIds = nextResult.deferredEventIds || [];
         }
@@ -90,7 +100,11 @@ function StartPage() {
     };
 
     loadVolumes();
-    return () => controller.abort();
+    const intervalId = setInterval(loadVolumes, EVENT_METRICS_REFRESH_MS);
+    return () => {
+      clearInterval(intervalId);
+      controller.abort();
+    };
   }, [bobUrl, isConnected, recentEvents]);
 
   const isLoadingOverall = loading || isLoadingEvents;
@@ -206,7 +220,14 @@ function StartPage() {
                           return (
                               <Grid item xs={12} sm={6} md={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                 <EventOverviewCard
-                                    data={{ ...event, desc: event.desc, volume: eventVolumes[getEventId(event)] ?? 0, probability: eventProbabilities[getEventId(event)] }}
+                                    eventUrl={`/event/${event.eid}`}
+                                    data={{
+                                      ...event,
+                                      desc: event.desc,
+                                      tradedVolume: eventVolumes[getEventId(event)] ?? 0,
+                                      openOrderVolume: eventOpenOrderVolumes[getEventId(event)] ?? 0,
+                                      probability: eventProbabilities[getEventId(event)],
+                                    }}
                                     onClick={() => navigate(`/event/${event.eid}`, { state: { from: "/" } })}
                                     status={event.status}
                                     onTxBroadcast={trackTx}

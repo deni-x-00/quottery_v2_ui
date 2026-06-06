@@ -61,6 +61,8 @@ export const formatChancePercent = (probability) => {
   const percent = Number(probability?.percent);
   if (!Number.isFinite(percent)) return null;
   const clamped = Math.max(0, Math.min(100, percent));
-  const rounded = Math.round(clamped);
-  return `${rounded}%`;
+  return `${clamped.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}%`;
 };

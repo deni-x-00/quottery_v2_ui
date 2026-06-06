@@ -1,13 +1,14 @@
 // src/App.js
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/layout/Header';
 import StartPage from './pages/StartPage';
 import AboutPage from './pages/AboutPage';
 import EventsPage from './pages/EventsPage';
 import EventDetailsPage from './pages/EventDetailsPage';
 import EventPublishPage from './pages/EventPublishPage';
-import UserOrdersPage from "./pages/UserOrdersPage";
+import ProfilePage from "./pages/ProfilePage";
+import LeaderboardPage from "./pages/LeaderboardPage";
 import GovernancePage from "./pages/GovernancePage";
 import MiscPage from "./pages/MiscPage";
 import Footer from './components/layout/Footer';
@@ -39,7 +40,10 @@ function App() {
                         <Route path='/event/:id' element={<EventDetailsPage />} />
                         <Route path='/publish/:id' element={<EventPublishPage />} />
                         <Route path='/user-events' element={<UserEvents />} />
-                        <Route path="/orders" element={<UserOrdersPage />} />
+                        <Route path="/profile" element={<ProfilePage />} />
+                        <Route path="/profile/:identity" element={<ProfilePage />} />
+                        <Route path="/leaderboard" element={<LeaderboardPage />} />
+                        <Route path="/orders" element={<Navigate to="/profile" replace />} />
                         <Route path="/governance" element={<GovernancePage />} />
                         <Route path="/misc" element={<MiscPage />} />
                       </Routes>
