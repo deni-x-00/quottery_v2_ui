@@ -174,7 +174,7 @@ const ConnectLink = () => {
                                                 Do not see your GARTH? Go to{' '}
                                                 <Link
                                                     component={RouterLink}
-                                                    to="/misc"
+                                                    to="/utilities"
                                                     underline="hover"
                                                     onClick={() => setShowBalanceBubble(false)}
                                                 >

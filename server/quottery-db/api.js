@@ -101,7 +101,7 @@ async function getOrders(identity, limit) {
 
 async function getOrderEvents(identity, limit) {
   const result = await query(`
-    SELECT oe.*, e.description, e.option0, e.option1
+    SELECT oe.*, e.description, e.option0, e.option1, e.status AS event_status
     FROM order_events oe
     LEFT JOIN events e ON e.event_id = oe.event_id
     WHERE oe.owner = $1

@@ -399,7 +399,7 @@ function AboutPage() {
                                                 Qubic Swap
                                             </MuiLink>
                                             . Once GARTH is deposited into the contract through{" "}
-                                            <MuiLink component={RouterLink} to="/misc" underline="hover">
+                                            <MuiLink component={RouterLink} to="/utilities" underline="hover">
                                                 Utilities
                                             </MuiLink>
                                             , the markets on the{" "}
@@ -445,7 +445,7 @@ function AboutPage() {
                                         </Button>
                                         <Button
                                             component={RouterLink}
-                                            to="/misc"
+                                            to="/utilities"
                                             variant="outlined"
                                             size="small"
                                             startIcon={<SwapHorizIcon fontSize="small" />}

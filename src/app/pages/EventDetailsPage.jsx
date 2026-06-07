@@ -594,7 +594,7 @@ function EventDetailsPage() {
                     sx={{ mt: 2 }}
                     onClick={handleBack}
                 >
-                    Back to Events
+                    Back to Markets
                 </Button>
             </Container>
         );

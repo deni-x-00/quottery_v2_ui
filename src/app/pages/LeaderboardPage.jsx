@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
   CircularProgress,
   IconButton,
+  InputAdornment,
   Pagination,
   Paper,
   Stack,
@@ -17,6 +19,7 @@ import {
   TableHead,
   TableRow,
   Tabs,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -24,6 +27,7 @@ import { alpha, useTheme } from "@mui/material/styles";
 import LeaderboardIcon from "@mui/icons-material/Leaderboard";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SearchIcon from "@mui/icons-material/Search";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
 import usePageTitle from "../hooks/usePageTitle";
 
@@ -33,11 +37,17 @@ const METRICS = {
   VOLUME: "volume",
 };
 const PAGE_SIZE = 50;
+const SEARCH_RESET_REASON = "reset";
+const IDENTITY_RE = /^[A-Z]{56,60}$/;
 const POSITIVE_COLOR = "#39c979";
 const NEGATIVE_COLOR = "#ef6674";
 
 function apiUrl(path) {
   return `${API_BASE}${path}`;
+}
+
+function normalizeIdentity(value) {
+  return String(value || "").trim().toUpperCase();
 }
 
 function formatNumeric(value, maxFractionDigits = 2) {
@@ -72,6 +82,9 @@ const LeaderboardPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [searchOptions, setSearchOptions] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   const loadLeaderboard = useCallback(async () => {
     setLoading(true);
@@ -94,6 +107,59 @@ const LeaderboardPage = () => {
   useEffect(() => {
     loadLeaderboard();
   }, [loadLeaderboard]);
+
+  useEffect(() => {
+    const normalized = normalizeIdentity(search);
+    if (!normalized) {
+      setSearchOptions([]);
+      setSearchLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const response = await fetch(apiUrl(`/api/quottery/search?q=${encodeURIComponent(normalized)}&limit=8`));
+        const body = await response.json().catch(() => ({}));
+        const remoteOptions = response.ok ? (body.results || []) : [];
+        const byIdentity = new Map();
+
+        if (IDENTITY_RE.test(normalized)) {
+          byIdentity.set(normalized, { identity: normalized, source: "typed" });
+        }
+        for (const option of remoteOptions) {
+          if (option?.identity) byIdentity.set(option.identity, option);
+        }
+
+        if (!cancelled) setSearchOptions(Array.from(byIdentity.values()));
+      } catch {
+        if (!cancelled) {
+          setSearchOptions(IDENTITY_RE.test(normalized) ? [{ identity: normalized, source: "typed" }] : []);
+        }
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [search]);
+
+  const openPortfolio = useCallback((identityValue) => {
+    const identity = normalizeIdentity(identityValue);
+    if (!identity) return;
+    navigate(`/portfolio/${identity}`);
+    setSearch("");
+    setSearchOptions([]);
+  }, [navigate]);
+
+  const handleSearch = (event) => {
+    event.preventDefault();
+    openPortfolio(search);
+  };
 
   const topStats = useMemo(() => {
     const totalAccounts = leaders.length;
@@ -173,7 +239,68 @@ const LeaderboardPage = () => {
           </Box>
         </Stack>
 
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Box component="form" onSubmit={handleSearch} sx={{ display: "flex", gap: 1, minWidth: { xs: 0, md: 500 } }}>
+          <Autocomplete
+            freeSolo
+            fullWidth
+            options={searchOptions}
+            inputValue={search}
+            value={null}
+            loading={searchLoading}
+            clearOnBlur={false}
+            selectOnFocus={false}
+            autoSelect={false}
+            blurOnSelect
+            getOptionLabel={(option) => (typeof option === "string" ? option : option?.identity || "")}
+            isOptionEqualToValue={(option, value) => option?.identity === value?.identity}
+            onInputChange={(event, nextValue, reason) => {
+              if (reason === SEARCH_RESET_REASON) return;
+              setSearch(nextValue);
+            }}
+            onChange={(event, option) => {
+              openPortfolio(typeof option === "string" ? option : option?.identity);
+            }}
+            renderOption={(props, option) => (
+              <Box component="li" {...props} key={option.identity}>
+                <Stack spacing={0.25} sx={{ minWidth: 0 }}>
+                  <Typography sx={{ fontWeight: 700, fontFamily: "monospace" }}>{shortIdentity(option.identity)}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                    {option.source === "typed" ? "Open pasted address" : `Volume ${formatNumeric(option.traded_volume)} | PnL ${formatSignedAmount(option.realized_pnl)}`}
+                  </Typography>
+                </Stack>
+              </Box>
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                size="small"
+                placeholder="Search address"
+                inputProps={{
+                  ...params.inputProps,
+                  autoComplete: "off",
+                }}
+                InputProps={{
+                  ...params.InputProps,
+                  startAdornment: (
+                    <>
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                      {params.InputProps.startAdornment}
+                    </>
+                  ),
+                }}
+              />
+            )}
+          />
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Tooltip title="Open portfolio">
+              <span>
+                <IconButton type="submit" color="primary" disabled={!normalizeIdentity(search)} sx={{ border: `1px solid ${theme.palette.divider}` }}>
+                  <SearchIcon fontSize="small" />
+                </IconButton>
+              </span>
+            </Tooltip>
           {loading && <Chip label="Refreshing" size="small" variant="outlined" />}
           <Tooltip title="Refresh">
             <span>
@@ -182,7 +309,8 @@ const LeaderboardPage = () => {
               </IconButton>
             </span>
           </Tooltip>
-        </Stack>
+          </Stack>
+        </Box>
       </Stack>
 
       {error && (
@@ -287,7 +415,7 @@ const LeaderboardPage = () => {
                         <Button
                           size="small"
                           variant="text"
-                          onClick={() => navigate(`/profile/${row.identity}`)}
+                          onClick={() => navigate(`/portfolio/${row.identity}`)}
                           sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 800 }}
                         >
                           {shortIdentity(row.identity)}

@@ -181,7 +181,7 @@ function StartPage() {
                   color="primary"
                   sx={{ borderRadius: 1, textTransform: "none", fontWeight: 700 }}
               >
-                All Events
+                All Markets
               </Button>
               <Button
                   onClick={() => navigate("/about")}
@@ -200,17 +200,17 @@ function StartPage() {
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2, mb: 2.5 }}>
                   <Box />
                   <Typography variant="h4" color="text.primary" sx={{ fontWeight: 700, fontSize: { xs: "1.5rem", md: "2rem" } }}>
-                    Recent Events
+                    Recent Markets
                   </Typography>
                   <Button component={RouterLink} to="/events" size="small" variant="text" sx={{ justifySelf: "end", textTransform: "none", fontWeight: 700 }}>
-                    All Events
+                    All Markets
                   </Button>
                 </Box>
 
                 {isLoadingOverall ? (
                     <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", py: 8, gap: 2 }}>
                       <AnimatedBars />
-                      <Typography variant="h6" color="text.secondary">Loading events, please wait...</Typography>
+                      <Typography variant="h6" color="text.secondary">Loading markets, please wait...</Typography>
                     </Box>
                 ) : recentEvents.length > 0 ? (
                     <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} justifyContent="center" alignItems="stretch">
@@ -240,7 +240,7 @@ function StartPage() {
                 ) : (
                     <Box sx={{ textAlign: "center", py: 6 }}>
                       <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>
-                        No events found.
+                        No markets found.
                       </Typography>
                     </Box>
                 )}

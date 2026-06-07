@@ -127,7 +127,7 @@ const Header = () => {
       >
         <MenuItem component={Link} to='/about' onClick={handleMoreClose}>About</MenuItem>
         <MenuItem component={Link} to='/governance' onClick={handleMoreClose}>Governance</MenuItem>
-        <MenuItem component={Link} to='/misc' onClick={handleMoreClose}>Utilities</MenuItem>
+        <MenuItem component={Link} to='/utilities' onClick={handleMoreClose}>Utilities</MenuItem>
       </Menu>
   );
 
@@ -224,8 +224,8 @@ const Header = () => {
                 </Button>
                 {isConnected && (
                     <>
-                      <Button component={Link} to='/profile' color='inherit' size='small' sx={navButtonSx}>
-                        <Typography color="text.secondary" sx={navTextSx}>Profile</Typography>
+                      <Button component={Link} to='/portfolio' color='inherit' size='small' sx={navButtonSx}>
+                        <Typography color="text.secondary" sx={navTextSx}>Portfolio</Typography>
                       </Button>
                       {moreButton}
                       {moreMenu}

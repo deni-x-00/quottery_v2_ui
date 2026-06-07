@@ -37,7 +37,7 @@ const SearchFilter = ({
       <TextField
         fullWidth
         variant='outlined'
-        placeholder='Search events...'
+        placeholder='Search markets...'
         value={searchTerm}
         onChange={(e) => onSearchChange(e.target.value)}
         InputProps={{

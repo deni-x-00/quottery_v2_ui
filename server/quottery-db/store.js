@@ -417,7 +417,7 @@ async function reduceOpenOrder(client, { owner, eventId, option, side, amount, p
       VALUES ($1,$2,$3,$4,$5,$6,'matched',$7,$8,$9,$10,$11,$12)
       ON CONFLICT (order_event_uid) DO NOTHING
     `, [
-      eventUid('order_matched', tick, txHash, logUid, openOrder.order_uid),
+      eventUid('order_matched', tick, txHash, logUid, `${openOrder.order_uid}:${usedAmount.toString()}:${price ?? 'no_price'}`),
       openOrder.order_uid,
       owner,
       eventId,

@@ -623,7 +623,7 @@ async function reduceOrder(client, item, status = 'matched', priceMode = 'exact'
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (order_event_uid) DO NOTHING
     `, [
-      `historical:missing_order:${item.txHash || 'no_tx'}:${item.owner}:${item.eventId}:${item.option}:${item.side}:${item.amount}:${status}`,
+      `historical:missing_order:${item.txHash || 'no_tx'}:${item.owner}:${item.eventId}:${item.option}:${item.side}:${item.amount}:${item.price || 'no_price'}:${status}:${item.meta.rowNumber}`,
       syntheticOrderUid,
       item.owner,
       item.eventId,
@@ -668,7 +668,7 @@ async function reduceOrder(client, item, status = 'matched', priceMode = 'exact'
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (order_event_uid) DO NOTHING
     `, [
-      `historical:order_${status}:${item.txHash || 'no_tx'}:${openOrder.order_uid}:${usedAmount.toString()}`,
+      `historical:order_${status}:${item.txHash || 'no_tx'}:${openOrder.order_uid}:${usedAmount.toString()}:${item.price || 'no_price'}:${item.meta.rowNumber}`,
       openOrder.order_uid,
       item.owner,
       item.eventId,

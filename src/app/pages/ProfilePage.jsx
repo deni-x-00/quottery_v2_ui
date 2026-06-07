@@ -1,15 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
-  Autocomplete,
   Box,
   Button,
   Chip,
   CircularProgress,
   Divider,
   IconButton,
-  InputAdornment,
   Pagination,
   Paper,
   Stack,
@@ -20,7 +18,6 @@ import {
   TableHead,
   TableRow,
   Tabs,
-  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -31,9 +28,23 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import SearchIcon from "@mui/icons-material/Search";
+import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext";
+import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
+import { useSnackbar } from "../contexts/SnackbarContext";
+import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import usePageTitle from "../hooks/usePageTitle";
+import { useTxTracker } from "../hooks/useTxTracker";
+import { broadcastTransaction, getBasicInfo } from "../components/qubic/util/bobApi";
+import { byteArrayToHexString } from "../components/qubic/util";
+import {
+  buildQuotteryTx,
+  packEventIdPayload,
+  packOrderPayload,
+  QTRY_REMOVE_ASK_ORDER,
+  QTRY_REMOVE_BID_ORDER,
+  QTRY_USER_CLAIM_REWARD,
+} from "../components/qubic/util/quotteryTx";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl, shortExplorerTickOrTxLabel } from "../utils/explorerLinks";
 
 const API_BASE = process.env.REACT_APP_QUOTTERY_API_BASE || "";
@@ -47,8 +58,9 @@ const SUB_TABS = {
   ACTIVE: "active",
   CLOSED: "closed",
 };
-const SEARCH_RESET_REASON = "reset";
 const PAGE_SIZE = 50;
+const CLAIM_REWARD_QUBIC_FEE = 1000000;
+const PENDING_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
 const POSITIVE_COLOR = "#39c979";
 const NEGATIVE_COLOR = "#ef6674";
 const ORDER_STATUS_META = {
@@ -133,6 +145,42 @@ function formatPricePercent(value) {
 function formatPriceWithPercent(value) {
   if (value === null || value === undefined || value === "") return "-";
   return `${formatPrice(value)} (${formatPricePercent(value)})`;
+}
+
+function integerString(value, fallback = "0") {
+  if (value === null || value === undefined || value === "") return fallback;
+  return String(value).replace(/,/g, "").split(".")[0] || fallback;
+}
+
+function pendingClaimsStorageKey(identity) {
+  return `quottery:pending-claims:${normalizeIdentity(identity)}`;
+}
+
+function readPendingClaimIds(identity) {
+  if (!identity || typeof window === "undefined") return [];
+  try {
+    const now = Date.now();
+    const parsed = JSON.parse(window.localStorage.getItem(pendingClaimsStorageKey(identity)) || "[]");
+    return (Array.isArray(parsed) ? parsed : [])
+      .filter((item) => item?.eventId && now - Number(item.at || 0) < PENDING_CLAIM_TTL_MS)
+      .map((item) => String(item.eventId));
+  } catch {
+    return [];
+  }
+}
+
+function writePendingClaimIds(identity, eventIds) {
+  if (!identity || typeof window === "undefined") return;
+  const uniqueIds = [...new Set((eventIds || []).map((eventId) => String(eventId)).filter(Boolean))];
+  const now = Date.now();
+  try {
+    window.localStorage.setItem(
+      pendingClaimsStorageKey(identity),
+      JSON.stringify(uniqueIds.map((eventId) => ({ eventId, at: now })))
+    );
+  } catch {
+    // localStorage is best-effort only.
+  }
 }
 
 function optionLabel(row) {
@@ -339,17 +387,19 @@ const ProfilePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const { identity: routeIdentity } = useParams();
-  const { walletPublicIdentity } = useQuotteryContext();
+  const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
+  const { bobUrl } = useConfig();
+  const { showSnackbar } = useSnackbar();
+  const { scheduleBalanceRefresh } = useBalanceNotifier();
+  const { trackTx } = useTxTracker();
+  const { walletPublicIdentity, walletPublicKeyBytes, getScheduledTick, quBalance } = useQuotteryContext();
 
   const activeIdentity = useMemo(
     () => normalizeIdentity(routeIdentity || walletPublicIdentity),
     [routeIdentity, walletPublicIdentity]
   );
-  usePageTitle(activeIdentity ? `${shortLinkText(activeIdentity)} profile` : "Profile");
+  usePageTitle(activeIdentity ? `${shortLinkText(activeIdentity)} portfolio` : "Portfolio");
 
-  const [search, setSearch] = useState("");
-  const [searchOptions, setSearchOptions] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
   const [tab, setTab] = useState(MAIN_TABS.POSITIONS);
   const [subTab, setSubTab] = useState(SUB_TABS.ACTIVE);
   const [loading, setLoading] = useState(false);
@@ -359,6 +409,9 @@ const ProfilePage = () => {
   const [liveTick, setLiveTick] = useState(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [page, setPage] = useState(1);
+  const [cancellingOrderUid, setCancellingOrderUid] = useState("");
+  const [claimingEventId, setClaimingEventId] = useState("");
+  const [pendingClaimEventIds, setPendingClaimEventIds] = useState([]);
 
   const loadProfile = useCallback(async () => {
     if (!activeIdentity || !IDENTITY_RE.test(activeIdentity)) {
@@ -378,7 +431,7 @@ const ProfilePage = () => {
       setProfile(body);
     } catch (err) {
       setProfile(null);
-      setError(err.message || "Failed to load profile");
+      setError(err.message || "Failed to load portfolio");
     } finally {
       setLoading(false);
     }
@@ -414,7 +467,25 @@ const ProfilePage = () => {
     setTab(MAIN_TABS.POSITIONS);
     setSubTab(SUB_TABS.ACTIVE);
     setPage(1);
+    setPendingClaimEventIds(readPendingClaimIds(activeIdentity));
   }, [activeIdentity]);
+
+  useEffect(() => {
+    if (!activeIdentity || !profile?.positions) return;
+
+    const actualClaimedIds = new Set(
+      profile.positions
+        .filter((position) => Number(position.actual_payout || 0) > 0)
+        .map((position) => String(position.event_id))
+    );
+    if (actualClaimedIds.size === 0) return;
+
+    setPendingClaimEventIds((currentIds) => {
+      const nextIds = currentIds.filter((eventId) => !actualClaimedIds.has(String(eventId)));
+      if (nextIds.length !== currentIds.length) writePendingClaimIds(activeIdentity, nextIds);
+      return nextIds;
+    });
+  }, [activeIdentity, profile?.positions]);
 
   const copyActiveIdentity = useCallback(async () => {
     if (!activeIdentity) return;
@@ -427,57 +498,190 @@ const ProfilePage = () => {
     }
   }, [activeIdentity]);
 
-  const handleSearch = (event) => {
-    event.preventDefault();
-    const nextIdentity = normalizeIdentity(search);
-    if (!nextIdentity) return;
-    navigate(`/profile/${nextIdentity}`);
-    setSearch("");
-    setSearchOptions([]);
-  };
-
-  useEffect(() => {
-    const normalized = normalizeIdentity(search);
-    if (!normalized) {
-      setSearchOptions([]);
-      setSearchLoading(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const response = await fetch(apiUrl(`/api/quottery/search?q=${encodeURIComponent(normalized)}&limit=8`));
-        const body = await response.json().catch(() => ({}));
-        const remoteOptions = response.ok ? (body.results || []) : [];
-        const byIdentity = new Map();
-
-        if (IDENTITY_RE.test(normalized)) {
-          byIdentity.set(normalized, { identity: normalized, source: "typed" });
-        }
-        for (const option of remoteOptions) {
-          if (option?.identity) byIdentity.set(option.identity, option);
-        }
-
-        if (!cancelled) setSearchOptions(Array.from(byIdentity.values()));
-      } catch (err) {
-        if (!cancelled) {
-          setSearchOptions(IDENTITY_RE.test(normalized) ? [{ identity: normalized, source: "typed" }] : []);
-        }
-      } finally {
-        if (!cancelled) setSearchLoading(false);
-      }
-    }, 180);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [search]);
-
   const account = profile?.account;
   const isOwnProfile = activeIdentity && walletPublicIdentity && activeIdentity === normalizeIdentity(walletPublicIdentity);
+  const claimReward = useCallback(async (row) => {
+    if (claimingEventId) return;
+    if (!connected) {
+      toggleConnectModal();
+      return;
+    }
+    if (!isOwnProfile) {
+      showSnackbar("Connect the wallet that owns this position.", "error");
+      return;
+    }
+    if (!walletPublicKeyBytes) {
+      showSnackbar("Wallet public key not found.", "error");
+      return;
+    }
+    if (!getSignedTx || !getScheduledTick || !bobUrl) {
+      showSnackbar("Wallet or network connection is not ready.", "error");
+      return;
+    }
+    if (quBalance !== null && quBalance !== undefined && Number(quBalance) < CLAIM_REWARD_QUBIC_FEE) {
+      showSnackbar(`Claim requires ${formatAmount(CLAIM_REWARD_QUBIC_FEE)} QU deposit.`, "error");
+      return;
+    }
+
+    const eventId = Number(row.event_id);
+    if (!Number.isInteger(eventId) || eventId < 0) {
+      showSnackbar("Invalid event ID.", "error");
+      return;
+    }
+
+    setClaimingEventId(String(eventId));
+    try {
+      const tickInfo = await getScheduledTick();
+      if (!tickInfo) throw new Error("Failed to get current tick from network.");
+
+      const payload = packEventIdPayload(eventId);
+      const packet = buildQuotteryTx(
+        walletPublicKeyBytes,
+        tickInfo.scheduledTick,
+        QTRY_USER_CLAIM_REWARD,
+        CLAIM_REWARD_QUBIC_FEE,
+        payload
+      );
+
+      showSnackbar("Sign claim transaction in wallet.", "info");
+      const confirmed = await getSignedTx(packet);
+      if (!confirmed) return;
+
+      const txHex = typeof confirmed.tx === "string"
+        ? confirmed.tx
+        : byteArrayToHexString(confirmed.tx);
+      const res = await broadcastTransaction(bobUrl, txHex);
+      if (!res || res.error) throw new Error(res?.error || "Transaction broadcast failed");
+
+      trackTx({
+        txHash: res.txHash,
+        scheduledTick: tickInfo.scheduledTick,
+        description: `Claim reward for ${row.description || `event ${eventId}`}`,
+        inputType: QTRY_USER_CLAIM_REWARD,
+        eventId,
+        txAmount: CLAIM_REWARD_QUBIC_FEE,
+      });
+      setPendingClaimEventIds((currentIds) => {
+        const nextIds = [...new Set([...currentIds, String(eventId)])];
+        writePendingClaimIds(activeIdentity, nextIds);
+        return nextIds;
+      });
+      scheduleBalanceRefresh(2000);
+      window.setTimeout(loadProfile, 5000);
+    } catch (err) {
+      showSnackbar(`Claim failed: ${err.message || err}`, "error");
+    } finally {
+      setClaimingEventId("");
+    }
+  }, [
+    activeIdentity,
+    bobUrl,
+    claimingEventId,
+    connected,
+    getScheduledTick,
+    getSignedTx,
+    isOwnProfile,
+    loadProfile,
+    quBalance,
+    scheduleBalanceRefresh,
+    showSnackbar,
+    toggleConnectModal,
+    trackTx,
+    walletPublicKeyBytes,
+  ]);
+
+  const cancelOrder = useCallback(async (row) => {
+    if (cancellingOrderUid) return;
+    if (!connected) {
+      toggleConnectModal();
+      return;
+    }
+    if (!isOwnProfile) {
+      showSnackbar("Connect the wallet that owns this order.", "error");
+      return;
+    }
+    if (!walletPublicKeyBytes) {
+      showSnackbar("Wallet public key not found.", "error");
+      return;
+    }
+    if (!getSignedTx || !getScheduledTick || !bobUrl) {
+      showSnackbar("Wallet or network connection is not ready.", "error");
+      return;
+    }
+
+    const eventId = integerString(row.event_id);
+    const option = integerString(row.option);
+    const amount = integerString(row.open_amount || row.original_amount);
+    const price = integerString(row.price);
+    if (amount === "0") {
+      showSnackbar("This order has no open amount to cancel.", "warning");
+      return;
+    }
+
+    setCancellingOrderUid(row.order_uid || `${eventId}:${option}:${row.side}:${price}`);
+    try {
+      const [tickInfo, basicInfo] = await Promise.all([
+        getScheduledTick(),
+        getBasicInfo(bobUrl),
+      ]);
+      if (!tickInfo) throw new Error("Failed to get current tick from network.");
+      if (!basicInfo) throw new Error("Failed to get contract info.");
+
+      const inputType = row.side === "bid" ? QTRY_REMOVE_BID_ORDER : QTRY_REMOVE_ASK_ORDER;
+      const antiSpamAmount = basicInfo.antiSpamAmount || 0;
+      const payload = packOrderPayload(eventId, option, amount, price);
+      const packet = buildQuotteryTx(
+        walletPublicKeyBytes,
+        tickInfo.scheduledTick,
+        inputType,
+        antiSpamAmount,
+        payload
+      );
+
+      showSnackbar("Sign cancellation transaction in wallet.", "info");
+      const confirmed = await getSignedTx(packet);
+      if (!confirmed) return;
+
+      const txHex = typeof confirmed.tx === "string"
+        ? confirmed.tx
+        : byteArrayToHexString(confirmed.tx);
+      const res = await broadcastTransaction(bobUrl, txHex);
+      if (!res || res.error) throw new Error(res?.error || "Transaction broadcast failed");
+
+      trackTx({
+        txHash: res.txHash,
+        scheduledTick: tickInfo.scheduledTick,
+        description: `Cancel ${row.side === "bid" ? "buy" : "sell"} ${formatAmount(amount)} ${optionLabel(row)} @ ${formatPrice(price)}`,
+        inputType,
+        type: "order",
+        action: "remove",
+        eventId,
+        option,
+        side: row.side === "bid" ? "buy" : "sell",
+        amount,
+        price,
+      });
+      scheduleBalanceRefresh(2000);
+      window.setTimeout(loadProfile, 5000);
+    } catch (err) {
+      showSnackbar(`Failed to cancel order: ${err.message || err}`, "error");
+    } finally {
+      setCancellingOrderUid("");
+    }
+  }, [
+    bobUrl,
+    cancellingOrderUid,
+    connected,
+    getScheduledTick,
+    getSignedTx,
+    isOwnProfile,
+    loadProfile,
+    scheduleBalanceRefresh,
+    showSnackbar,
+    toggleConnectModal,
+    trackTx,
+    walletPublicKeyBytes,
+  ]);
   const panelSx = {
     p: { xs: 1.5, sm: 2 },
     borderRadius: 2,
@@ -493,7 +697,7 @@ const ProfilePage = () => {
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        navigate(`/event/${row.event_id}`, { state: { from: `/profile/${activeIdentity}` } });
+        navigate(`/event/${row.event_id}`, { state: { from: `/portfolio/${activeIdentity}` } });
       }}
       sx={{
         minWidth: 0,
@@ -520,7 +724,7 @@ const ProfilePage = () => {
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        navigate(`/events?view=archive&q=${encodeURIComponent(row.event_id || row.description || "")}`, { state: { from: `/profile/${activeIdentity}` } });
+        navigate(`/events?view=archive&q=${encodeURIComponent(row.event_id || row.description || "")}`, { state: { from: `/portfolio/${activeIdentity}` } });
       }}
       sx={{
         minWidth: 0,
@@ -662,7 +866,46 @@ const ProfilePage = () => {
     { key: "price", label: "Price", minWidth: 116, render: (row) => formatPriceWithPercent(row.price) },
   ];
 
-  const closedOrderColumns = orderColumns;
+  const activeOrderColumns = [
+    ...orderColumns,
+    {
+      key: "action",
+      label: "",
+      minWidth: 88,
+      render: (row) => {
+        if (!isOwnProfile) return <Box component="span" sx={{ display: "block", minHeight: 24 }} />;
+        const isCancelling = cancellingOrderUid === row.order_uid;
+        return (
+          <Tooltip title={connected ? "Cancel order" : "Connect wallet to cancel"}>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                color="warning"
+                disabled={isCancelling}
+                onClick={() => cancelOrder(row)}
+                sx={{
+                  minHeight: 26,
+                  px: 1,
+                  borderRadius: 1,
+                  textTransform: "none",
+                  fontWeight: 750,
+                  fontSize: "0.78rem",
+                }}
+              >
+                {isCancelling ? "..." : "Cancel"}
+              </Button>
+            </span>
+          </Tooltip>
+        );
+      },
+    },
+  ];
+
+  const closedOrderColumns = [
+    { ...orderColumns[0], render: renderGroupedResolvedEventLink },
+    ...orderColumns.slice(1),
+  ];
 
   const positionColumns = [
     { key: "description", label: "Event", minWidth: 340, wrap: true, render: renderGroupedEventLink },
@@ -706,6 +949,61 @@ const ProfilePage = () => {
         );
       },
     },
+    {
+      key: "claim",
+      label: "",
+      minWidth: 86,
+      render: (row) => {
+        const actualPayout = Number(row.actual_payout || 0);
+        const isPendingClaim = pendingClaimEventIds.includes(String(row.event_id));
+        const isClaimable = isOwnProfile
+          && row.status === "win"
+          && actualPayout <= 0
+          && !isPendingClaim
+          && Number(row.amount || 0) > 0;
+        if (isPendingClaim) {
+          return (
+            <Chip
+              size="small"
+              label="Pending"
+              variant="outlined"
+              sx={{
+                height: 25,
+                color: "text.secondary",
+                borderColor: alpha(theme.palette.text.primary, 0.18),
+                fontWeight: 700,
+              }}
+            />
+          );
+        }
+        if (!isClaimable) return <Box component="span" sx={{ display: "block", minHeight: 24 }} />;
+
+        const isClaiming = claimingEventId === String(row.event_id);
+        return (
+          <Tooltip title={connected ? "Claim reward" : "Connect wallet to claim"}>
+            <span>
+              <Button
+                size="small"
+                variant="outlined"
+                color="success"
+                disabled={isClaiming}
+                onClick={() => claimReward(row)}
+                sx={{
+                  minHeight: 26,
+                  px: 1,
+                  borderRadius: 1,
+                  textTransform: "none",
+                  fontWeight: 750,
+                  fontSize: "0.78rem",
+                }}
+              >
+                {isClaiming ? "..." : "Claim"}
+              </Button>
+            </span>
+          </Tooltip>
+        );
+      },
+    },
   ];
 
   const transferColumns = [
@@ -715,7 +1013,7 @@ const ProfilePage = () => {
       key: "source",
       label: "Source",
       render: (row) => row.source ? (
-        <Button size="small" variant="text" onClick={() => navigate(`/profile/${row.source}`)} sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
+        <Button size="small" variant="text" onClick={() => navigate(`/portfolio/${row.source}`)} sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
           {shortLinkText(row.source)}
         </Button>
       ) : "-",
@@ -724,7 +1022,7 @@ const ProfilePage = () => {
       key: "destination",
       label: "Destination",
       render: (row) => row.destination ? (
-        <Button size="small" variant="text" onClick={() => navigate(`/profile/${row.destination}`)} sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
+        <Button size="small" variant="text" onClick={() => navigate(`/portfolio/${row.destination}`)} sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
           {shortLinkText(row.destination)}
         </Button>
       ) : "-",
@@ -769,12 +1067,12 @@ const ProfilePage = () => {
   const currentColumns = tab === MAIN_TABS.POSITIONS
     ? subTab === SUB_TABS.ACTIVE ? positionColumns : closedPositionColumns
     : tab === MAIN_TABS.ORDERS
-      ? subTab === SUB_TABS.ACTIVE ? orderColumns : closedOrderColumns
+      ? subTab === SUB_TABS.ACTIVE ? activeOrderColumns : closedOrderColumns
       : transferColumns;
   const currentMinWidth = tab === MAIN_TABS.POSITIONS
     ? subTab === SUB_TABS.ACTIVE ? 980 : 1040
     : tab === MAIN_TABS.ORDERS
-      ? 920
+      ? subTab === SUB_TABS.ACTIVE ? 1010 : 920
       : 760;
 
   const emptyText = tab === MAIN_TABS.POSITIONS
@@ -801,7 +1099,7 @@ const ProfilePage = () => {
           <AccountCircleIcon color="primary" />
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="h4" sx={{ lineHeight: 1.2 }}>
-              {isOwnProfile ? "My Profile" : "Profile"}
+              {isOwnProfile ? "My Portfolio" : "Portfolio"}
             </Typography>
             <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0, mt: 0.5 }}>
               <Typography
@@ -817,7 +1115,7 @@ const ProfilePage = () => {
                   maxWidth: { xs: "100%", md: 760 },
                 }}
               >
-                {activeIdentity || "Connect wallet or search address"}
+                {activeIdentity || "Connect wallet to open your portfolio"}
               </Typography>
               {activeIdentity && (
                 <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
@@ -848,71 +1146,7 @@ const ProfilePage = () => {
           </Box>
         </Stack>
 
-        <Box component="form" onSubmit={handleSearch} sx={{ display: "flex", gap: 1, minWidth: { xs: 0, md: 520 } }}>
-          <Autocomplete
-            freeSolo
-            fullWidth
-            options={searchOptions}
-            inputValue={search}
-            value={null}
-            loading={searchLoading}
-            clearOnBlur={false}
-            selectOnFocus={false}
-            autoSelect={false}
-            blurOnSelect
-            getOptionLabel={(option) => (typeof option === "string" ? option : option?.identity || "")}
-            isOptionEqualToValue={(option, value) => option?.identity === value?.identity}
-            onInputChange={(event, nextValue, reason) => {
-              if (reason === SEARCH_RESET_REASON) return;
-              setSearch(nextValue);
-            }}
-            onChange={(event, option) => {
-              const identity = normalizeIdentity(typeof option === "string" ? option : option?.identity);
-              if (!identity) return;
-              navigate(`/profile/${identity}`);
-              setSearch("");
-              setSearchOptions([]);
-            }}
-            renderOption={(props, option) => (
-              <Box component="li" {...props} key={option.identity}>
-                <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 700, fontFamily: "monospace" }}>{shortLinkText(option.identity)}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
-                    {option.source === "typed" ? "Open pasted address" : `Volume ${formatAmount(option.traded_volume)} | PnL ${formatSignedAmount(option.realized_pnl)}`}
-                  </Typography>
-                </Stack>
-              </Box>
-            )}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                size="small"
-                placeholder="Search identity"
-                inputProps={{
-                  ...params.inputProps,
-                  autoComplete: "off",
-                }}
-                InputProps={{
-                  ...params.InputProps,
-                  startAdornment: (
-                    <>
-                      <InputAdornment position="start">
-                        <SearchIcon fontSize="small" />
-                      </InputAdornment>
-                      {params.InputProps.startAdornment}
-                    </>
-                  ),
-                }}
-              />
-            )}
-          />
-          <Tooltip title="Search profile">
-            <span>
-              <IconButton type="submit" color="primary" disabled={!normalizeIdentity(search)} sx={{ border: `1px solid ${theme.palette.divider}` }}>
-                <SearchIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
+        <Box sx={{ display: "flex", justifyContent: { xs: "flex-start", md: "flex-end" } }}>
           <Tooltip title="Refresh">
             <span>
               <IconButton onClick={loadProfile} disabled={loading || !activeIdentity} sx={{ border: `1px solid ${theme.palette.divider}` }}>
@@ -925,13 +1159,28 @@ const ProfilePage = () => {
 
       {!activeIdentity && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          Connect your wallet to open your profile, or paste any identity into search.
+          Connect your wallet to open your portfolio, or search an identity from the leaderboard.
         </Alert>
       )}
 
       {activeIdentity && !IDENTITY_RE.test(activeIdentity) && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           Invalid identity format.
+        </Alert>
+      )}
+
+      {isOwnProfile && (
+        <Alert severity="info" sx={{ mb: 2, alignItems: "center" }}>
+          Transfers, reward claiming, etc.{" "}
+          <Button
+            component={RouterLink}
+            to="/utilities"
+            size="small"
+            variant="text"
+            sx={{ minWidth: 0, p: 0, ml: 0.5, textTransform: "none", fontWeight: 800, verticalAlign: "baseline" }}
+          >
+            Go to Utilities
+          </Button>
         </Alert>
       )}
 

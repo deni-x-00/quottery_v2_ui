@@ -155,7 +155,7 @@ function EventsPage() {
   const lastImmediateMetricsRef = useRef({ key: "", at: 0 });
   const requestedGroupId = getValidGroupId(searchParams.get("group"));
   const selectedView = searchParams.get("view") === EVENT_VIEW.ARCHIVE ? EVENT_VIEW.ARCHIVE : EVENT_VIEW.ACTIVE;
-  usePageTitle(selectedView === EVENT_VIEW.ARCHIVE ? "Archived events" : "Events");
+  usePageTitle(selectedView === EVENT_VIEW.ARCHIVE ? "Archived markets" : "Markets");
   const selectedTopicId = getValidTopicId(searchParams.get("topic"), requestedGroupId);
   const selectedGroupId = selectedTopicId
       ? getTagGroupId(Number(selectedTopicId))
@@ -183,7 +183,7 @@ function EventsPage() {
       if (!response.ok) throw new Error(body?.details || body?.error || `Request failed with ${response.status}`);
       setArchivedEvents(Array.isArray(body.events) ? body.events : []);
     } catch (error) {
-      setArchiveError(error.message || "Failed to load archived events");
+      setArchiveError(error.message || "Failed to load archived markets");
       setArchivedEvents([]);
     } finally {
       setArchiveLoading(false);
@@ -325,7 +325,7 @@ function EventsPage() {
 
   const sidebarItems = React.useMemo(() => {
     if (selectedGroupId === "all") {
-      const items = [{ type: "all", id: "", label: "All Events" }];
+      const items = [{ type: "all", id: "", label: "All Markets" }];
 
       for (const group of TAG_GROUPS) {
         items.push({ type: "group", id: group.id, label: group.label });
@@ -345,7 +345,7 @@ function EventsPage() {
     }
 
     return [
-      { type: "all", id: "", label: `All ${groupOptions.find((group) => group.id === selectedGroupId)?.label || "Events"}` },
+      { type: "all", id: "", label: `All ${groupOptions.find((group) => group.id === selectedGroupId)?.label || "Markets"}` },
       ...getTagsForGroup(selectedGroupId).map((tag) => ({ type: "tag", groupId: selectedGroupId, ...tag })),
     ];
   }, [expandedGroupIds, groupOptions, selectedGroupId]);
@@ -511,7 +511,7 @@ function EventsPage() {
   const renderLoading = () => (
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", py: 8, gap: 2 }}>
         <AnimatedBars />
-        <Typography variant="h6" color="text.secondary">Loading events, please wait...</Typography>
+        <Typography variant="h6" color="text.secondary">Loading markets, please wait...</Typography>
       </Box>
   );
 
@@ -610,7 +610,7 @@ function EventsPage() {
     if (archivedEventsToDisplay.length === 0) {
       return (
           <Box sx={{ textAlign: "center", py: 6 }}>
-            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>No archived events found.</Typography>
+            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>No archived markets found.</Typography>
           </Box>
       );
     }
@@ -705,11 +705,11 @@ function EventsPage() {
           <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2, mb: 3 }}>
             <Box />
             <Typography variant="h3" color="text.primary" sx={{ fontWeight: 700, fontSize: { xs: "2rem", md: "2.7rem" } }}>
-              Events
+              Markets
             </Typography>
-            <Tooltip title="Refresh events">
+            <Tooltip title="Refresh markets">
               <Box component="span" sx={{ justifySelf: "end" }}>
-                <IconButton aria-label="refresh events" onClick={handleRefresh} disabled={isLoadingOverall} size="small">
+                <IconButton aria-label="refresh markets" onClick={handleRefresh} disabled={isLoadingOverall} size="small">
                   <RefreshIcon fontSize="small" sx={{ color: theme.palette.text.secondary }} />
                 </IconButton>
               </Box>
@@ -728,7 +728,7 @@ function EventsPage() {
 
           {selectedView === EVENT_VIEW.ACTIVE && !isConnected ? (
               <Box sx={{ textAlign: "center", py: 8 }}>
-                <Typography variant="h6" color="text.secondary">Connect your wallet to browse events.</Typography>
+                <Typography variant="h6" color="text.secondary">Connect your wallet to browse markets.</Typography>
               </Box>
           ) : selectedView === EVENT_VIEW.ARCHIVE ? (
               <>
@@ -803,7 +803,7 @@ function EventsPage() {
                           }}
                         />
                       )}
-                      label="Show zero volume events"
+                      label="Show zero volume markets"
                       sx={{
                         m: 0,
                         color: "text.secondary",
@@ -996,7 +996,7 @@ function EventsPage() {
                             </Grid>
                         ) : (
                             <Box sx={{ textAlign: "center", py: 6 }}>
-                              <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>No events found.</Typography>
+                              <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>No markets found.</Typography>
                             </Box>
                         )}
                       </Box>

@@ -40,12 +40,15 @@ function App() {
                         <Route path='/event/:id' element={<EventDetailsPage />} />
                         <Route path='/publish/:id' element={<EventPublishPage />} />
                         <Route path='/user-events' element={<UserEvents />} />
+                        <Route path="/portfolio" element={<ProfilePage />} />
+                        <Route path="/portfolio/:identity" element={<ProfilePage />} />
                         <Route path="/profile" element={<ProfilePage />} />
                         <Route path="/profile/:identity" element={<ProfilePage />} />
                         <Route path="/leaderboard" element={<LeaderboardPage />} />
-                        <Route path="/orders" element={<Navigate to="/profile" replace />} />
+                        <Route path="/orders" element={<Navigate to="/portfolio" replace />} />
                         <Route path="/governance" element={<GovernancePage />} />
-                        <Route path="/misc" element={<MiscPage />} />
+                        <Route path="/utilities" element={<MiscPage />} />
+                        <Route path="/misc" element={<Navigate to="/utilities" replace />} />
                       </Routes>
                     </Box>
                     <Footer />
