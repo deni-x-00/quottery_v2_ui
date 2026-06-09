@@ -1171,7 +1171,7 @@ const ProfilePage = () => {
 
       {isOwnProfile && (
         <Alert severity="info" sx={{ mb: 2, alignItems: "center" }}>
-          Transfers, reward claiming, etc.{" "}
+          Transfers, reward claiming.{" "}
           <Button
             component={RouterLink}
             to="/utilities"

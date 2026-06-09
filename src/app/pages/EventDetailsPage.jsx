@@ -69,6 +69,7 @@ import { useTxTracker } from "../hooks/useTxTracker";
 import TradeAmountSlider from "../components/TradeAmountSlider";
 import TradePriceSelector from "../components/TradePriceSelector";
 import EventHeader from "../components/EventHeader";
+import EventRules from "../components/EventRules";
 import { calculateOptionProbability } from "../utils/eventProbability";
 import usePageTitle from "../hooks/usePageTitle";
 const thumbnails = require.context("../../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
@@ -858,6 +859,7 @@ function EventDetailsPage() {
                                             </Typography>
                                         </Box>
                                     )}
+                                    <EventRules event={event} />
                                 </AccordionDetails>
                             </Accordion>
                         </Box>
