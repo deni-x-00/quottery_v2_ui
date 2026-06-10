@@ -22,6 +22,12 @@ const SC_INDEX = 2;
 const FUNC_GET_ORDERS = 3;
 const WHOLE_SHARE_PRICE = 100000;
 const PUBLIC_RPC_BASE_URL = 'https://rpc.qubic.org/live/v1';
+const PUBLIC_TICK_URLS = [
+  { url: 'https://rpc.qubic.org/live/v1/tick-info', parse: (data) => data?.tickInfo?.tick || data?.tick || data },
+  { url: 'https://rpc.qubic.org/v1/tick-info', parse: (data) => data?.tickInfo?.tick || data?.tick || data },
+  { url: 'https://api.qubic.li/public/currenttick', parse: (data) => data?.tick || data?.currentTick || data },
+  { url: 'https://api.qubic.global/currenttick', parse: (data) => data?.tick || data?.currentTick || data },
+];
 const STATUS_RESPONSE_KEYS = [
   'currentProcessingEpoch',
   'currentFetchingTick',
@@ -441,13 +447,17 @@ async function getBobStatus(target) {
 }
 
 async function getPublicTick() {
-  try {
-    const data = await getJsonFromUrl(`${PUBLIC_RPC_BASE_URL}/tick-info`);
-    const tick = Number(data?.tickInfo?.tick || data?.tick || 0);
-    return Number.isFinite(tick) && tick > 0 ? tick : 0;
-  } catch {
-    return 0;
+  for (const { url, parse } of PUBLIC_TICK_URLS) {
+    try {
+      const data = await getJsonFromUrl(url);
+      const tick = Number(parse(data));
+      if (Number.isFinite(tick) && tick > 0) return { tick, source: url };
+    } catch {
+      // try next public source
+    }
   }
+
+  return { tick: 0, source: null };
 }
 
 async function handlePublicTick(req, res) {
@@ -456,13 +466,13 @@ async function handlePublicTick(req, res) {
     return;
   }
 
-  const tick = await getPublicTick();
-  if (!tick) {
+  const tickInfo = await getPublicTick();
+  if (!tickInfo.tick) {
     sendJson(res, 502, { error: 'Failed to load public tick-info' });
     return;
   }
 
-  sendJson(res, 200, { tick, source: 'public-rpc', updatedAt: Date.now() });
+  sendJson(res, 200, { tick: tickInfo.tick, source: tickInfo.source || 'public-rpc', updatedAt: Date.now() });
 }
 
 function pickStatusResponse(data) {
@@ -480,10 +490,11 @@ async function getPreferredDataSource() {
     return sourceCache;
   }
 
-  const [bobStatuses, publicTick] = await Promise.all([
+  const [bobStatuses, publicTickInfo] = await Promise.all([
     Promise.all(bobTargets.map((target) => getBobProcessedTick(target))),
     getPublicTick(),
   ]);
+  const publicTick = publicTickInfo.tick || 0;
   const eligibleBobStatuses = bobStatuses
     .map((status) => ({
       ...status,
@@ -509,6 +520,7 @@ async function getPreferredDataSource() {
         error: status.error,
       })),
       publicTick,
+      publicSource: publicTickInfo.source,
       lag: bestBob?.lag ?? (
         bestObservedBob?.tick && publicTick ? publicTick - bestObservedBob.tick : 0
       ),

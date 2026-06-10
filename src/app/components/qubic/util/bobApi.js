@@ -22,10 +22,10 @@ const QUBIC_STATIC_SMART_CONTRACTS_URL = 'https://static.qubic.org/v1/general/da
 export const PUBLIC_TICK_TOLERANCE = 15;
 const PUBLIC_TICK_TIMEOUT_MS = 3000;
 const PUBLIC_TICK_URLS = [
-    { url: 'https://api.qubic.global/currenttick', parse: (d) => d?.tick || d?.currentTick || d },
-    { url: 'https://api.qubic.li/public/currenttick', parse: (d) => d?.tick || d?.currentTick || d },
     { url: 'https://rpc.qubic.org/live/v1/tick-info', parse: (d) => d?.tickInfo?.tick || d?.tick || d },
     { url: 'https://rpc.qubic.org/v1/tick-info', parse: (d) => d?.tickInfo?.tick || d?.tick || d },
+    { url: 'https://api.qubic.li/public/currenttick', parse: (d) => d?.tick || d?.currentTick || d },
+    { url: 'https://api.qubic.global/currenttick', parse: (d) => d?.tick || d?.currentTick || d },
 ];
 const PUBLIC_BROADCAST_URLS = [
     'https://rpc.qubic.org/live/v1/broadcast-transaction',
@@ -246,7 +246,7 @@ export async function getPublicTick() {
 
             const data = await res.json();
             const tick = Number(parse(data));
-            if (tick > 0) {
+            if (Number.isFinite(tick) && tick > 0) {
                 return { tick, source: url };
             }
         } catch {
