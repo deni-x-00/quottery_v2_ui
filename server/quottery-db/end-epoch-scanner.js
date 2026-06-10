@@ -416,27 +416,69 @@ async function fetchLogRange(epoch, from, to) {
   throw lastError || new Error('No Bob HTTP base configured');
 }
 
+async function fetchEndEpochLogFromBase(base, epoch) {
+  const url = `${base}/getEndEpochLog/${epoch}`;
+  const response = await fetch(url);
+  const text = await response.text();
+  let body;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${text.slice(0, 200)}`);
+  return { base, body };
+}
+
 async function fetchEndEpochLog(epoch) {
   let lastError = null;
   for (const base of HTTP_BASES) {
-    const url = `${base}/getEndEpochLog/${epoch}`;
     try {
-      const response = await fetch(url);
-      const text = await response.text();
-      let body;
-      try {
-        body = text ? JSON.parse(text) : null;
-      } catch {
-        body = text;
-      }
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${text.slice(0, 200)}`);
+      const { body } = await fetchEndEpochLogFromBase(base, epoch);
       return body;
     } catch (error) {
       lastError = error;
-      console.warn(`[end-epoch] GET ${url} failed: ${error.message}`);
+      console.warn(`[end-epoch] GET ${base}/getEndEpochLog/${epoch} failed: ${error.message}`);
     }
   }
   throw lastError || new Error('No Bob HTTP base configured');
+}
+
+async function fetchEndEpochLogsFromHealthyBase(epoch) {
+  if (!HTTP_BASES.length) throw new Error('No Bob HTTP base configured');
+
+  let lastError = null;
+  let lastEmpty = null;
+
+  for (let attempt = 0; attempt <= EMPTY_RETRIES; attempt += 1) {
+    for (const base of HTTP_BASES) {
+      try {
+        const { body } = await fetchEndEpochLogFromBase(base, epoch);
+        const logs = collectLogsFromEndEpochResponse(body, epoch);
+        if (logs.length > 0) {
+          console.log(`[end-epoch] selected ${base}/getEndEpochLog/${epoch}: logs=${logs.length}`);
+          return { base, body, logs };
+        }
+        lastEmpty = { base, body, logs };
+        console.warn(`[end-epoch] ${base}/getEndEpochLog/${epoch} returned 0 logs, trying next node`);
+      } catch (error) {
+        lastError = error;
+        console.warn(`[end-epoch] GET ${base}/getEndEpochLog/${epoch} failed: ${error.message}`);
+      }
+    }
+
+    if (attempt < EMPTY_RETRIES) {
+      console.log(`[end-epoch] endpoint empty on all nodes for epoch=${epoch}, retry ${attempt + 1}/${EMPTY_RETRIES} in ${EMPTY_RETRY_MS}ms`);
+      await sleep(EMPTY_RETRY_MS);
+    }
+  }
+
+  const details = lastEmpty
+    ? `last empty node=${lastEmpty.base}`
+    : lastError
+      ? `last error=${lastError.message}`
+      : 'no node responses';
+  throw new Error(`No end-epoch logs found for epoch=${epoch} after checking all nodes (${details})`);
 }
 
 async function fetchStatus() {
@@ -893,19 +935,19 @@ async function scanLogs(epoch, startFrom) {
 
 async function scanEndEpochEndpoint(epoch) {
   await saveCursor(epoch, { scanStartedAt: new Date().toISOString(), status: 'endpoint_scanning' });
-  const body = await fetchEndEpochLog(epoch);
-  const logs = collectLogsFromEndEpochResponse(body, epoch);
+  const { base, logs } = await fetchEndEpochLogsFromHealthyBase(epoch);
   const result = await processLogs(epoch, logs);
   await saveCursor(epoch, {
     scanFinishedAt: new Date().toISOString(),
     status: 'complete',
     details: {
       endpoint: 'getEndEpochLog',
+      base,
       totalLogs: logs.length,
       totals: result,
     },
   });
-  console.log(`[end-epoch] endpoint complete epoch=${epoch}: logs=${logs.length}, relevant=${result.relevant}, archives=${result.archives}, transfers=${result.transfers}, payouts=${result.payouts}`);
+  console.log(`[end-epoch] endpoint complete epoch=${epoch}: base=${base}, logs=${logs.length}, relevant=${result.relevant}, archives=${result.archives}, transfers=${result.transfers}, payouts=${result.payouts}`);
   return result;
 }
 
