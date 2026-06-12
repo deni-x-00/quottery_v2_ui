@@ -2,6 +2,8 @@
 import { QubicHelper } from '@qubic-lib/qubic-ts-library/dist/qubicHelper';
 
 const SC_INDEX = 2; // Quottery contract index
+const QSWAP_CONTRACT_INDEX = 13;
+const QSWAP_GET_ASSET_INPUT_TYPE = 2;
 
 // View function numbers (REGISTER_USER_FUNCTION)
 const FUNC_BASIC_INFO = 1;
@@ -18,6 +20,7 @@ const QTRYGOV_MANAGE_SC_INDEX = 2;
 export const GARTH_ASSET_NAME = 'GARTH';
 export const GARTH_ISSUER = 'PHOENIXCLQOBHDZCHJOCKCPZVTKALQBMXYOEDBUHSDCJRMTUCUBPLSUFNBIE';
 export const QUOTTERY_CONTRACT_INDEX = 2;
+const QUBIC_LATEST_STATS_URL = 'https://rpc.qubic.org/v1/latest-stats';
 const QUBIC_STATIC_SMART_CONTRACTS_URL = 'https://static.qubic.org/v1/general/data/smart_contracts.json';
 export const PUBLIC_TICK_TOLERANCE = 15;
 const PUBLIC_TICK_TIMEOUT_MS = 3000;
@@ -611,11 +614,11 @@ async function broadcastTransactionViaPublicRpc(signedHex) {
     return { error: 'All public RPC broadcast endpoints failed' };
 }
 
-async function queryScViaPublicRpc(funcNumber, inputHex = '') {
+async function queryScViaPublicRpc(funcNumber, inputHex = '', contractIndex = SC_INDEX) {
     const requestData = inputHex ? hexToBase64(inputHex) : '';
     const inputSize = Math.floor((inputHex || '').length / 2);
     const payload = {
-        contractIndex: SC_INDEX,
+        contractIndex,
         inputType: funcNumber,
         inputSize,
         requestData,
@@ -646,6 +649,65 @@ async function queryScViaPublicRpc(funcNumber, inputHex = '') {
     }
 
     throw new Error('All public RPC querySmartContract endpoints failed');
+}
+
+function assetNameToBytes(assetName) {
+    const bytes = new Uint8Array(8);
+    const encoded = new TextEncoder().encode(String(assetName || '').trim().toUpperCase());
+    if (encoded.length > 8) throw new Error('Asset name must be at most 8 bytes');
+    bytes.set(encoded);
+    return bytes;
+}
+
+function packQswapAssetPayload(assetIssuerIdentity, assetName) {
+    const issuerBytes = identityToPubkey(assetIssuerIdentity);
+    const assetBytes = assetNameToBytes(assetName);
+    const payload = new Uint8Array(40);
+    payload.set(issuerBytes, 0);
+    payload.set(assetBytes, 32);
+    return payload;
+}
+
+export async function getQubicUsdPrice() {
+    const res = await fetchWithTimeout(QUBIC_LATEST_STATS_URL, {}, 10000);
+    const body = await res.json();
+    if (!res.ok || body?.error) {
+        throw new Error(body?.error || body?.message || `HTTP ${res.status}`);
+    }
+    const price = Number(body?.data?.price ?? body?.price ?? 0);
+    if (!Number.isFinite(price) || price <= 0) throw new Error('QUBIC price not found');
+    return price;
+}
+
+export async function getGarthQubicPrice() {
+    const payload = packQswapAssetPayload(GARTH_ISSUER, GARTH_ASSET_NAME);
+    const raw = await queryScViaPublicRpc(
+        QSWAP_GET_ASSET_INPUT_TYPE,
+        bytesToHex(payload),
+        QSWAP_CONTRACT_INDEX
+    );
+
+    if (!raw || raw.length < 24) throw new Error(`QSWAP response too short: ${raw?.length || 0}`);
+    const view = new DataView(raw.buffer, raw.byteOffset);
+    const reservedQuAmount = view.getBigUint64(8, true);
+    const reservedAssetAmount = view.getBigUint64(16, true);
+    if (reservedAssetAmount === 0n) throw new Error('QSWAP reserved asset amount is zero');
+
+    return Number(reservedQuAmount) / Number(reservedAssetAmount);
+}
+
+export async function getMarketPrices() {
+    const [qubicUsd, garthQubic] = await Promise.all([
+        getQubicUsdPrice(),
+        getGarthQubicPrice(),
+    ]);
+
+    return {
+        qubicUsd,
+        garthQubic,
+        garthUsd: qubicUsd * garthQubic,
+        updatedAt: Date.now(),
+    };
 }
 
 async function getEntityBalanceViaPublicRpc(identity) {

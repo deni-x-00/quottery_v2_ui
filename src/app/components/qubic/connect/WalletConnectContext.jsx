@@ -34,6 +34,14 @@ const getSessionAccounts = (session) => {
 const hasQubicAccounts = (session) =>
   getSessionAccounts(session).some((account) => String(account).startsWith('qubic:'));
 
+const isSessionExpired = (session) => {
+  const expiry = Number(session?.expiry || 0);
+  return expiry > 0 && expiry * 1000 <= Date.now();
+};
+
+const isUsableQubicSession = (session) =>
+  Boolean(session) && !isSessionExpired(session) && hasQubicAccounts(session);
+
 const isEmptyAccountsChangedEvent = (event) => {
   if (getSessionEventName(event) !== 'accountsChanged') return false;
 
@@ -50,6 +58,31 @@ export function WalletConnectProvider({ children }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  const clearSessionState = useCallback(() => {
+    setSessionTopic('');
+    setIsConnected(false);
+    localStorage.removeItem('sessionTopic');
+    clearStoredWalletConnectWallet();
+  }, []);
+
+  const ensureActiveSession = useCallback(() => {
+    if (!signClient || !sessionTopic) {
+      throw new Error('Not connected');
+    }
+
+    try {
+      const session = signClient.session.get(sessionTopic);
+      if (!isUsableQubicSession(session)) {
+        clearSessionState();
+        throw new Error('WalletConnect session expired. Reconnect wallet.');
+      }
+      return session;
+    } catch (error) {
+      clearSessionState();
+      throw error;
+    }
+  }, [clearSessionState, signClient, sessionTopic]);
 
   const connect = useCallback(async (onDisplayUri) => {
     if (!signClient) return { uri: '', approve: async () => {} };
@@ -128,7 +161,7 @@ export function WalletConnectProvider({ children }) {
   }, [signClient, sessionTopic]);
 
   const requestAccounts = useCallback(async () => {
-    if (!signClient || !sessionTopic) throw new Error('Not connected');
+    ensureActiveSession();
 
     try {
       const result = await signClient.request({
@@ -146,10 +179,10 @@ export function WalletConnectProvider({ children }) {
       console.error('Failed to request accounts:', error);
       throw error;
     }
-  }, [signClient, sessionTopic]);
+  }, [ensureActiveSession, signClient, sessionTopic]);
 
   const sendQubic = useCallback(async (params) => {
-    if (!signClient || !sessionTopic) throw new Error('Not connected');
+    ensureActiveSession();
 
     return await signClient.request({
       topic: sessionTopic,
@@ -162,10 +195,10 @@ export function WalletConnectProvider({ children }) {
         },
       },
     });
-  }, [signClient, sessionTopic]);
+  }, [ensureActiveSession, signClient, sessionTopic]);
 
   const signTransaction = useCallback(async (params) => {
-    if (!signClient || !sessionTopic) throw new Error('Not connected');
+    ensureActiveSession();
 
     try {
       return await signClient.request({
@@ -183,10 +216,10 @@ export function WalletConnectProvider({ children }) {
       toast.error(error?.message || 'Failed to sign transaction');
       throw error;
     }
-  }, [signClient, sessionTopic]);
+  }, [ensureActiveSession, signClient, sessionTopic]);
 
   const signMessage = useCallback(async (params) => {
-    if (!signClient || !sessionTopic) throw new Error('Not connected');
+    ensureActiveSession();
 
     return await signClient.request({
       topic: sessionTopic,
@@ -196,7 +229,7 @@ export function WalletConnectProvider({ children }) {
         params,
       },
     });
-  }, [signClient, sessionTopic]);
+  }, [ensureActiveSession, signClient, sessionTopic]);
 
   useEffect(() => {
     let mounted = true;
@@ -204,10 +237,7 @@ export function WalletConnectProvider({ children }) {
     const appUrl = window.location.origin;
     const clearSession = () => {
       if (!mounted) return;
-      setSessionTopic('');
-      setIsConnected(false);
-      localStorage.removeItem('sessionTopic');
-      clearStoredWalletConnectWallet();
+      clearSessionState();
     };
     const handleSessionEvent = (event) => {
       if (isEmptyAccountsChangedEvent(event)) {
@@ -237,7 +267,7 @@ export function WalletConnectProvider({ children }) {
       if (storedTopic) {
         try {
           const session = client.session.get(storedTopic);
-          if (session && hasQubicAccounts(session)) {
+          if (isUsableQubicSession(session)) {
             setSessionTopic(storedTopic);
             setIsConnected(true);
           } else {
@@ -273,7 +303,7 @@ export function WalletConnectProvider({ children }) {
         activeClient.off('session_update', handleSessionUpdate);
       }
     };
-  }, []);
+  }, [clearSessionState]);
 
   const contextValue = {
     signClient,

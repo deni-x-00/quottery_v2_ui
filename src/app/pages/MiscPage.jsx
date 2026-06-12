@@ -54,6 +54,7 @@ import usePageTitle from "../hooks/usePageTitle";
 
 const TRANSFER_QUBIC_FEE = 100;
 const CLAIM_REWARD_QUBIC_FEE = 1000000;
+const PENDING_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
 const WHOLE_SHARE_PRICE = 100000;
 const TRANSFER_RIGHTS_IDENTIFIERS = [
     "TransferShareManagementRights",
@@ -73,6 +74,37 @@ const normalizeIdentityInput = (value) => (
         .replace(/[^A-Z]/g, "")
         .slice(0, 60)
 );
+
+const normalizeIdentity = (value) => String(value || "").trim().toUpperCase();
+
+const pendingClaimsStorageKey = (identity) => `quottery:pending-claims:${normalizeIdentity(identity)}`;
+
+const readPendingClaimIds = (identity) => {
+    if (!identity || typeof window === "undefined") return [];
+    try {
+        const now = Date.now();
+        const parsed = JSON.parse(window.localStorage.getItem(pendingClaimsStorageKey(identity)) || "[]");
+        return (Array.isArray(parsed) ? parsed : [])
+            .filter((item) => item?.eventId && now - Number(item.at || 0) < PENDING_CLAIM_TTL_MS)
+            .map((item) => String(item.eventId));
+    } catch {
+        return [];
+    }
+};
+
+const writePendingClaimIds = (identity, eventIds) => {
+    if (!identity || typeof window === "undefined") return;
+    const uniqueIds = [...new Set((eventIds || []).map((eventId) => String(eventId)).filter(Boolean))];
+    const now = Date.now();
+    try {
+        window.localStorage.setItem(
+            pendingClaimsStorageKey(identity),
+            JSON.stringify(uniqueIds.map((eventId) => ({ eventId, at: now })))
+        );
+    } catch {
+        // localStorage is best-effort only.
+    }
+};
 
 const isValidReceiverIdentity = (identity) => RECEIVER_IDENTITY_REGEX.test(identity);
 
@@ -292,6 +324,7 @@ function MiscPage() {
     const [claimOptionsLoading, setClaimOptionsLoading] = useState(false);
     const [claimOptionsError, setClaimOptionsError] = useState("");
     const [claimSubmitting, setClaimSubmitting] = useState(false);
+    const [pendingClaimEventIds, setPendingClaimEventIds] = useState([]);
 
     const [garthReceiver, setGarthReceiver] = useState("");
     const [garthAmount, setGarthAmount] = useState("");
@@ -344,6 +377,10 @@ function MiscPage() {
     }, [quBalance, selectedSmrDestination, selectedSmrSource]);
 
     useEffect(() => {
+        setPendingClaimEventIds(readPendingClaimIds(walletPublicIdentity));
+    }, [walletPublicIdentity]);
+
+    useEffect(() => {
         let cancelled = false;
 
         const loadClaimOptions = async () => {
@@ -379,7 +416,7 @@ function MiscPage() {
                         .map((event) => [String(event.eid ?? event.eventId), event])
                 );
 
-                const nextOptions = positions
+                const rawOptions = positions
                     .map((position) => {
                         const event = eventsById.get(String(position.eventId));
                         const resultByGO = Number(event?.resultByGO);
@@ -408,6 +445,16 @@ function MiscPage() {
 
                 if (cancelled) return;
 
+                const rawOptionIds = new Set(rawOptions.map((option) => String(option.eventId)));
+                const activePendingIds = pendingClaimEventIds.filter((eventId) => rawOptionIds.has(String(eventId)));
+                if (activePendingIds.length !== pendingClaimEventIds.length) {
+                    setPendingClaimEventIds(activePendingIds);
+                    writePendingClaimIds(walletPublicIdentity, activePendingIds);
+                }
+
+                const pendingSet = new Set(activePendingIds.map(String));
+                const nextOptions = rawOptions.filter((option) => !pendingSet.has(String(option.eventId)));
+
                 setClaimOptions(nextOptions);
                 setClaimEventId((currentEventId) => (
                     nextOptions.some((option) => String(option.eventId) === String(currentEventId))
@@ -431,7 +478,7 @@ function MiscPage() {
         return () => {
             cancelled = true;
         };
-    }, [allEvents, bobUrl, connected, walletPublicIdentity]);
+    }, [allEvents, bobUrl, connected, pendingClaimEventIds, walletPublicIdentity]);
 
     useEffect(() => {
         let cancelled = false;
@@ -676,7 +723,7 @@ function MiscPage() {
         setClaimSubmitting(true);
         try {
             const payload = packEventIdPayload(eid);
-            await signAndBroadcast(
+            const res = await signAndBroadcast(
                 QTRY_USER_CLAIM_REWARD,
                 CLAIM_REWARD_QUBIC_FEE,
                 payload,
@@ -684,6 +731,20 @@ function MiscPage() {
                 null,
                 { eventId: eid }
             );
+            if (res?.txHash) {
+                const eventId = String(eid);
+                setPendingClaimEventIds((currentIds) => {
+                    const nextIds = [...new Set([...currentIds.map(String), eventId])];
+                    writePendingClaimIds(walletPublicIdentity, nextIds);
+                    return nextIds;
+                });
+                setClaimOptions((currentOptions) => {
+                    const nextOptions = currentOptions.filter((option) => String(option.eventId) !== eventId);
+                    setClaimEventId(nextOptions[0] ? String(nextOptions[0].eventId) : "");
+                    return nextOptions;
+                });
+                showSnackbar("Claim transaction sent. Reward is hidden until the indexer confirms it.", "success");
+            }
         } catch (e) {
             showSnackbar(`Claim failed: ${e.message}`, "error");
         } finally {

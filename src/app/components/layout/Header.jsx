@@ -15,6 +15,7 @@ import LightModeIcon from '@mui/icons-material/LightMode';
 import { useQuotteryContext } from '../../contexts/QuotteryContext';
 import { useBalanceNotifier } from '../../hooks/useBalanceNotifier';
 import TickIndicator from '../TickIndicator';
+import PriceTicker from '../PriceTicker';
 
 const Header = () => {
   const theme = useTheme();
@@ -164,6 +165,7 @@ const Header = () => {
                        sx={{ height: { xs: 28, sm: 36, md: 40 }, maxWidth: { xs: 150, sm: 220 }, display: 'block' }} />
                 </IconButton>
                 <TickIndicator />
+                {isDesktopNav && <PriceTicker />}
                 </Box>
                 <Box sx={{
                   display: { xs: 'flex', md: 'none' },
@@ -216,6 +218,7 @@ const Header = () => {
                 scrollbarWidth: 'none',
                 '&::-webkit-scrollbar': { display: 'none' },
               }}>
+                {!isDesktopNav && <PriceTicker />}
                 <Button component={Link} to='/events' color='inherit' size='small' sx={navButtonSx}>
                   <Typography color="text.secondary" sx={navTextSx}>Markets</Typography>
                 </Button>

@@ -13,12 +13,6 @@ import {
     Paper,
     Typography,
     useMediaQuery,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
     Stack,
     ToggleButtonGroup,
     ToggleButton,
@@ -216,6 +210,244 @@ function EventDetailsPage() {
         };
     };
 
+    const formatBookPrice = useCallback((value) => {
+        const price = Number(value);
+        if (!Number.isFinite(price)) return "-";
+        return formatQubicAmount(price);
+    }, []);
+
+    const formatBookPercent = useCallback((value) => {
+        const price = Number(value);
+        if (!Number.isFinite(price)) return "-";
+        return `${(price / 1000).toLocaleString("en-US", {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2,
+        })}%`;
+    }, []);
+
+    const renderOrderBookSide = useCallback(
+        (entries, side) => {
+            const isBidSide = side === "bids";
+            const color = isBidSide ? theme.palette.success.main : theme.palette.error.main;
+            const visibleEntries = entries;
+            let runningDepth = 0;
+            let runningTotal = 0;
+            const rowsInBookOrder = visibleEntries.map((entry) => {
+                const amount = Number(entry?.amount || 0);
+                const price = Number(entry?.price || 0);
+                runningDepth += amount;
+                runningTotal += amount * price;
+                return {
+                    amount,
+                    price,
+                    depth: runningDepth,
+                    total: runningTotal,
+                };
+            });
+            const maxDepth = rowsInBookOrder[rowsInBookOrder.length - 1]?.depth || 0;
+            const rows = isBidSide ? rowsInBookOrder : [...rowsInBookOrder].reverse();
+
+            if (visibleEntries.length === 0) {
+                return (
+                    <Box sx={{ py: 2.25, px: 1.5, color: "text.secondary", fontSize: "0.82rem" }}>
+                        No {isBidSide ? "buy" : "sell"} orders
+                    </Box>
+                );
+            }
+
+            return (
+                <Box
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "56px minmax(0, 1fr)", sm: "84px minmax(0, 1fr)" },
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                    }}
+                >
+                    <Box
+                        sx={{
+                            position: "relative",
+                            overflow: "hidden",
+                        }}
+                    >
+                        <Stack>
+                            {rows.map((row, index) => {
+                                const depthPct = maxDepth > 0 ? Math.max(12, (row.depth / maxDepth) * 100) : 0;
+                                return (
+                                    <Box
+                                        key={`${side}-depth-${row.price}-${index}`}
+                                        sx={{
+                                            position: "relative",
+                                            height: 36,
+                                            overflow: "hidden",
+                                        }}
+                                    >
+                                        <Box
+                                            sx={{
+                                                position: "absolute",
+                                                top: 0,
+                                                bottom: 0,
+                                                left: 0,
+                                                width: `${depthPct}%`,
+                                                bgcolor: alpha(color, theme.palette.mode === "dark" ? 0.36 : 0.2),
+                                                borderLeft: `10px solid ${alpha(color, theme.palette.mode === "dark" ? 0.38 : 0.24)}`,
+                                                borderTopRightRadius: index === 0 ? 4 : 0,
+                                                borderBottomRightRadius: index === rows.length - 1 ? 4 : 0,
+                                            }}
+                                        />
+                                    </Box>
+                                );
+                            })}
+                        </Stack>
+                    </Box>
+                    <Stack>
+                        {rows.map((row, index) => {
+                            return (
+                                <Box
+                                    key={`${side}-${row.price}-${index}`}
+                                    sx={{
+                                        position: "relative",
+                                        display: "grid",
+                                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                                        alignItems: "center",
+                                        minHeight: 36,
+                                        px: 0,
+                                        overflow: "hidden",
+                                    }}
+                                >
+                                    <Typography
+                                        align="center"
+                                        sx={{
+                                            position: "relative",
+                                            zIndex: 1,
+                                            color,
+                                            fontFamily: "var(--quottery-font-mono)",
+                                            fontSize: { xs: "0.74rem", sm: "0.82rem" },
+                                            fontWeight: 800,
+                                        }}
+                                    >
+                                        {formatBookPrice(row.price)}
+                                    </Typography>
+                                    <Typography
+                                        align="center"
+                                        sx={{
+                                            position: "relative",
+                                            zIndex: 1,
+                                            color: "text.primary",
+                                            fontFamily: "var(--quottery-font-mono)",
+                                            fontSize: { xs: "0.78rem", sm: "0.88rem" },
+                                            fontWeight: 750,
+                                        }}
+                                    >
+                                        {formatQubicAmount(row.amount)}
+                                    </Typography>
+                                    <Typography
+                                        align="center"
+                                        sx={{
+                                            position: "relative",
+                                            zIndex: 1,
+                                            color: "text.primary",
+                                            fontFamily: "var(--quottery-font-mono)",
+                                            fontSize: { xs: "0.78rem", sm: "0.88rem" },
+                                            fontWeight: 750,
+                                        }}
+                                    >
+                                        {formatQubicAmount(row.total)}
+                                    </Typography>
+                                </Box>
+                            );
+                        })}
+                    </Stack>
+                </Box>
+            );
+        },
+        [formatBookPrice, theme]
+    );
+
+    const renderOrderBookPanel = useCallback(() => {
+        const bids = buildOrderSideEntries(orderbook, obTab, "bids");
+        const asks = buildOrderSideEntries(orderbook, obTab, "asks");
+        const bestBid = bids[0]?.price;
+        const bestAsk = asks[0]?.price;
+        const spread = Number.isFinite(Number(bestBid)) && Number.isFinite(Number(bestAsk))
+            ? Number(bestAsk) - Number(bestBid)
+            : null;
+        const optionLabel = obTab === 0 ? "YES" : "NO";
+
+        return (
+            <Box
+                sx={{
+                    overflow: "hidden",
+                    bgcolor: "transparent",
+                }}
+            >
+                <Box
+                    sx={{
+                        display: "grid",
+                        gridTemplateColumns: { xs: "56px repeat(3, minmax(0, 1fr))", sm: "84px repeat(3, minmax(0, 1fr))" },
+                        alignItems: "center",
+                        gap: 0,
+                        px: { xs: 0, sm: 0 },
+                        py: 1,
+                        borderBottom: `1px solid ${theme.palette.divider}`,
+                    }}
+                >
+                    <Typography sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                        Trade {optionLabel}
+                    </Typography>
+                    <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                        Price
+                    </Typography>
+                    <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                        Shares
+                    </Typography>
+                    <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
+                        Total
+                    </Typography>
+                </Box>
+                <Box
+                    sx={{
+                        maxHeight: { xs: 292, sm: 328, md: 364 },
+                        overflowY: "auto",
+                        overflowX: "hidden",
+                        scrollbarWidth: "thin",
+                        scrollbarColor: `${alpha(theme.palette.text.secondary, 0.35)} transparent`,
+                        "&::-webkit-scrollbar": { width: 6 },
+                        "&::-webkit-scrollbar-thumb": {
+                            bgcolor: alpha(theme.palette.text.secondary, 0.28),
+                            borderRadius: 999,
+                        },
+                        "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
+                    }}
+                >
+                    {renderOrderBookSide(asks, "asks")}
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "56px repeat(3, minmax(0, 1fr))", sm: "84px repeat(3, minmax(0, 1fr))" },
+                            alignItems: "center",
+                            px: 0,
+                            py: 0.75,
+                            borderTop: `1px solid ${theme.palette.divider}`,
+                            borderBottom: `1px solid ${theme.palette.divider}`,
+                        }}
+                    >
+                        <Box />
+                        <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.74rem", fontWeight: 750 }}>
+                            Bid: {bestBid === undefined ? "-" : formatBookPrice(bestBid)}
+                        </Typography>
+                        <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.76rem", fontWeight: 800 }}>
+                            Spread: {spread === null ? "-" : formatBookPercent(Math.max(0, spread))}
+                        </Typography>
+                        <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.74rem", fontWeight: 750 }}>
+                            Ask: {bestAsk === undefined ? "-" : formatBookPrice(bestAsk)}
+                        </Typography>
+                    </Box>
+                    {renderOrderBookSide(bids, "bids")}
+                </Box>
+            </Box>
+        );
+    }, [buildOrderSideEntries, formatBookPercent, formatBookPrice, obTab, orderbook, renderOrderBookSide, theme]);
+
     const refreshData = useCallback(() => {
         if (!event || event.eid === undefined || event.eid < 0) return;
         fetchOrderbook(event.eid, () => false);
@@ -242,89 +474,6 @@ function EventDetailsPage() {
             setLoading(false);
         }
     }, [id, bobUrl, backTarget, navigate]);
-
-    const renderOrderRows = useCallback(
-        (entries, emptyLabel, isBidSide) => {
-            const total = entries.reduce(
-                (acc, o) => acc + Number(o?.amount || 0),
-                0
-            );
-            let running = 0;
-
-            if (entries.length === 0) {
-                return (
-                    <TableRow>
-                        <TableCell colSpan={3}>
-                            <Typography variant="body2" color="text.secondary">
-                                {emptyLabel}
-                            </Typography>
-                        </TableCell>
-                    </TableRow>
-                );
-            }
-
-            return entries.map((o, i) => {
-                const amt = Number(o?.amount || 0);
-                running += amt;
-                const pct = total > 0 ? (running / total) * 100 : 0;
-
-                return (
-                    <TableRow key={`${isBidSide ? "bid" : "ask"}-${i}`}>
-                        <TableCell sx={{ minWidth: 120 }}>
-                            <Box
-                                sx={{
-                                    position: "relative",
-                                    height: 24,
-                                    width: "100%",
-                                    minWidth: 100,
-                                    overflow: "hidden",
-                                    borderRadius: 0.5,
-                                    bgcolor: alpha(theme.palette.text.primary, 0.04),
-                                }}
-                            >
-                                <Box
-                                    sx={{
-                                        position: "absolute",
-                                        top: 0,
-                                        bottom: 0,
-                                        left: isBidSide ? 0 : undefined,
-                                        right: isBidSide ? undefined : 0,
-                                        width: `${pct}%`,
-                                        bgcolor: alpha(
-                                            isBidSide
-                                                ? theme.palette.success.main
-                                                : theme.palette.error.main,
-                                            0.25
-                                        ),
-                                        borderRadius: 0.5,
-                                    }}
-                                />
-                                <Typography
-                                    variant="caption"
-                                    sx={{
-                                        position: "absolute",
-                                        inset: 0,
-                                        px: 0.75,
-                                        display: "flex",
-                                        alignItems: "center",
-                                        justifyContent: isBidSide ? "flex-start" : "flex-end",
-                                        color: "text.primary",
-                                        fontWeight: 600,
-                                        zIndex: 1,
-                                    }}
-                                >
-                                    {formatQubicAmount(running)}
-                                </Typography>
-                            </Box>
-                        </TableCell>
-                        <TableCell align="right">{formatQubicAmount(amt)}</TableCell>
-                        <TableCell align="right">{formatQubicAmount(Number(o?.price ?? 0))}</TableCell>
-                    </TableRow>
-                );
-            });
-        },
-        [theme.palette.error.main, theme.palette.success.main, theme.palette.text.primary]
-    );
 
     // Fetch event details on mount
     useEffect(() => {
@@ -726,44 +875,7 @@ function EventDetailsPage() {
                                     {obError && <Typography variant="body2" color="error" sx={{ py: 1 }}>{obError}</Typography>}
 
                                     {!obLoading && !obError && (
-                                        <Grid container spacing={2}>
-                                            <Grid item xs={12} md={6}>
-                                                <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Buy Orders</Typography>
-                                                <TableContainer component={Paper} elevation={0} variant="outlined"
-                                                                sx={{ borderRadius: 1, maxHeight: 400, overflowY: "auto", scrollbarWidth: "none", "::-webkit-scrollbar": { width: 0 } }}>
-                                                    <Table size="small" stickyHeader>
-                                                        <TableHead>
-                                                            <TableRow>
-                                                                <TableCell>Depth</TableCell>
-                                                                <TableCell align="right">Amount</TableCell>
-                                                                <TableCell align="right">Price</TableCell>
-                                                            </TableRow>
-                                                        </TableHead>
-                                                        <TableBody>
-                                                            {renderOrderRows(buildOrderSideEntries(orderbook, obTab, "bids"), "No buy orders", true)}
-                                                        </TableBody>
-                                                    </Table>
-                                                </TableContainer>
-                                            </Grid>
-                                            <Grid item xs={12} md={6}>
-                                                <Typography variant="body2" sx={{ fontWeight: 700, mb: 0.5 }}>Sell Orders</Typography>
-                                                <TableContainer component={Paper} elevation={0} variant="outlined"
-                                                                sx={{ borderRadius: 1, maxHeight: 400, overflowY: "auto", scrollbarWidth: "none", "::-webkit-scrollbar": { width: 0 } }}>
-                                                    <Table size="small" stickyHeader>
-                                                        <TableHead>
-                                                            <TableRow>
-                                                                <TableCell>Depth</TableCell>
-                                                                <TableCell align="right">Amount</TableCell>
-                                                                <TableCell align="right">Price</TableCell>
-                                                            </TableRow>
-                                                        </TableHead>
-                                                        <TableBody>
-                                                            {renderOrderRows(buildOrderSideEntries(orderbook, obTab, "asks"), "No sell orders", false)}
-                                                        </TableBody>
-                                                    </Table>
-                                                </TableContainer>
-                                            </Grid>
-                                        </Grid>
+                                        renderOrderBookPanel()
                                     )}
                                 </AccordionDetails>
                             </Accordion>
@@ -895,7 +1007,11 @@ function EventDetailsPage() {
 
                                 {/* Option selector */}
                                 <ToggleButtonGroup value={selectedOption} exclusive
-                                                   onChange={(_, v) => setSelectedOption(typeof v === "number" ? v : selectedOption)}
+                                                   onChange={(_, v) => {
+                                                       if (typeof v !== "number") return;
+                                                       setSelectedOption(v);
+                                                       setObTab(v);
+                                                   }}
                                                    size="small" fullWidth
                                                    sx={{
                                                        "& .MuiToggleButton-root": { borderColor: theme.palette.divider },
