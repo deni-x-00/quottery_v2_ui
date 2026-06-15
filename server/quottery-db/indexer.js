@@ -21,7 +21,15 @@ const WS_TICKDATA_CHECK = process.env.INDEXER_WS_TICKDATA_CHECK !== '0'
   && process.env.INDEXER_WS_TICKDATA_CHECK !== 'false';
 const WS_TICKDATA_REQUIRE_DIGEST = process.env.INDEXER_WS_TICKDATA_REQUIRE_DIGEST === '1'
   || process.env.INDEXER_WS_TICKDATA_REQUIRE_DIGEST === 'true';
+const WS_PUBLIC_TICK_CHECK = process.env.INDEXER_WS_PUBLIC_TICK_CHECK !== '0'
+  && process.env.INDEXER_WS_PUBLIC_TICK_CHECK !== 'false';
 const WS_URLS = buildWsUrls();
+const PUBLIC_TICK_URLS = [
+  { url: 'https://rpc.qubic.org/live/v1/tick-info', parse: (data) => data?.tickInfo?.tick || data?.tick || data },
+  { url: 'https://rpc.qubic.org/v1/tick-info', parse: (data) => data?.tickInfo?.tick || data?.tick || data },
+  { url: 'https://api.qubic.li/public/currenttick', parse: (data) => data?.tick || data?.currentTick || data },
+  { url: 'https://api.qubic.global/currenttick', parse: (data) => data?.tick || data?.currentTick || data },
+];
 
 let stopped = false;
 let currentSocket = null;
@@ -117,6 +125,32 @@ async function fetchStatusTick(wsUrl) {
   }
 }
 
+async function fetchPublicTick() {
+  if (!WS_PUBLIC_TICK_CHECK) return null;
+
+  for (const { url, parse } of PUBLIC_TICK_URLS) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), WS_STATUS_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      const text = await response.text();
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${text.slice(0, 200)}`);
+      const body = text ? JSON.parse(text) : null;
+      const tick = Number(parse(body));
+      if (Number.isFinite(tick) && tick > 0) {
+        return { tick, source: url };
+      }
+      throw new Error(`public tick response has no tick: ${text.slice(0, 200)}`);
+    } catch (error) {
+      console.warn(`[quottery-indexer] Public tick check failed ${url}: ${error.message}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return null;
+}
+
 function tickDataFromBody(body) {
   return body?.tickdata || body?.tickData || body?.data?.tickdata || body?.data?.tickData || body?.result?.tickdata || body?.result?.tickData || null;
 }
@@ -175,29 +209,64 @@ async function fetchTickDataHealth(wsUrl, tick) {
 }
 
 async function selectHealthyWsIndex(startTick) {
-  if (!startTick) return currentWsIndex;
-
   const initialIndex = currentWsIndex;
   const failures = [];
+  const candidates = [];
+  const publicTickInfo = await fetchPublicTick();
+  if (publicTickInfo) {
+    console.log(`[quottery-indexer] Public tick ${publicTickInfo.tick} from ${publicTickInfo.source}`);
+  }
+
   for (let attempt = 0; attempt < WS_URLS.length; attempt += 1) {
     const index = (initialIndex + attempt) % WS_URLS.length;
     const wsUrl = WS_URLS[index];
     try {
       const tick = await fetchStatusTick(wsUrl);
-      if (tick >= startTick) {
-        const tickData = WS_TICKDATA_CHECK ? await fetchTickDataHealth(wsUrl, startTick) : null;
-        if (index !== currentWsIndex) {
-          console.log(`[quottery-indexer] Selected ${wsUrl}: statusTick=${tick} >= startTick=${startTick}${tickData ? `, tickdata epoch=${tickData.epoch}, txDigests=${tickData.transactionDigestCount}, votes=${tickData.voteCount}` : ''}`);
-        }
-        return index;
+      if (startTick && tick < startTick) {
+        failures.push(`${wsUrl} statusTick=${tick} < startTick=${startTick}`);
+        continue;
       }
-      failures.push(`${wsUrl} statusTick=${tick} < startTick=${startTick}`);
+
+      const tickData = startTick && WS_TICKDATA_CHECK ? await fetchTickDataHealth(wsUrl, startTick) : null;
+      const publicLag = publicTickInfo ? publicTickInfo.tick - tick : null;
+      candidates.push({
+        index,
+        wsUrl,
+        statusTick: tick,
+        publicLag,
+        tickData,
+      });
     } catch (error) {
       failures.push(`${wsUrl} status failed: ${error.message}`);
     }
   }
 
-  console.warn(`[quottery-indexer] No WS endpoint is confirmed at startTick=${startTick}; using ${WS_URLS[initialIndex]}. Checked: ${failures.join(' | ')}`);
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => {
+      if (publicTickInfo) {
+        const aLag = Math.abs(Number(a.publicLag));
+        const bLag = Math.abs(Number(b.publicLag));
+        if (aLag !== bLag) return aLag - bLag;
+      }
+      if (a.statusTick !== b.statusTick) return b.statusTick - a.statusTick;
+      return a.index - b.index;
+    });
+
+    const selected = candidates[0];
+    const checked = candidates
+      .map((candidate) => `${candidate.wsUrl} statusTick=${candidate.statusTick}${candidate.publicLag === null ? '' : ` publicLag=${candidate.publicLag}`}`)
+      .join(' | ');
+    console.log(
+      `[quottery-indexer] Selected ${selected.wsUrl}: statusTick=${selected.statusTick}`
+      + `${startTick ? ` >= startTick=${startTick}` : ''}`
+      + `${selected.publicLag === null ? '' : `, publicLag=${selected.publicLag}`}`
+      + `${selected.tickData ? `, tickdata epoch=${selected.tickData.epoch}, txDigests=${selected.tickData.transactionDigestCount}, votes=${selected.tickData.voteCount}` : ''}`
+      + `. Checked healthy: ${checked}`
+    );
+    return selected.index;
+  }
+
+  console.warn(`[quottery-indexer] No WS endpoint is confirmed${startTick ? ` at startTick=${startTick}` : ''}; using ${WS_URLS[initialIndex]}. Checked: ${failures.join(' | ')}`);
   return initialIndex;
 }
 
