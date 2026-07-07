@@ -23,9 +23,29 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
                 alignItems: "center",
                 gap: { xs: 1.25, sm: 2 },
                 mb: 3,
+                p: { xs: 1.5, sm: 2 },
+                borderRadius: 1.5,
+                border: `1px solid ${theme.palette.border.soft}`,
+                bgcolor: theme.palette.surface[1],
             }}
         >
-            <IconButton aria-label="go back" onClick={onBack} sx={{ alignSelf: "center" }}>
+            <IconButton
+                aria-label="go back"
+                onClick={onBack}
+                sx={{
+                    alignSelf: "center",
+                    width: 40,
+                    height: 40,
+                    border: `1px solid ${theme.palette.border.soft}`,
+                    bgcolor: theme.palette.surface[2],
+                    color: "text.secondary",
+                    "&:hover": {
+                        color: "text.primary",
+                        borderColor: theme.palette.border.default,
+                        bgcolor: theme.palette.surface[3],
+                    },
+                }}
+            >
                 <ArrowBackIcon />
             </IconButton>
 
@@ -34,9 +54,9 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
                     sx={{
                         width: { xs: 48, sm: 60 },
                         height: { xs: 48, sm: 60 },
-                        backgroundColor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.08)" : theme.palette.background.paper,
-                        border: `1px solid ${theme.palette.divider}`,
-                        borderRadius: 1,
+                        backgroundColor: theme.palette.surface[2],
+                        border: `1px solid ${theme.palette.border.soft}`,
+                        borderRadius: 1.25,
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
@@ -59,8 +79,10 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
                     <Typography
                         sx={{
                             color: "text.secondary",
-                            fontSize: { xs: "0.82rem", sm: "0.95rem" },
-                            fontWeight: 700,
+                            fontSize: { xs: "0.72rem", sm: "0.78rem" },
+                            fontWeight: 900,
+                            letterSpacing: "0.08em",
+                            textTransform: "uppercase",
                             mb: 0.45,
                             overflow: "hidden",
                             textOverflow: "ellipsis",
@@ -73,9 +95,10 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
                         component="h1"
                         color="text.primary"
                         sx={{
-                            fontSize: { xs: "1.08rem", sm: "1.45rem" },
+                            fontSize: { xs: "1.1rem", sm: "1.55rem", md: "1.85rem" },
                             fontWeight: 800,
-                            lineHeight: 1.15,
+                            lineHeight: 1.08,
+                            letterSpacing: "-0.02em",
                             display: "-webkit-box",
                             WebkitLineClamp: 2,
                             WebkitBoxOrient: "vertical",

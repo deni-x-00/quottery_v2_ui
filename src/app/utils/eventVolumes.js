@@ -1,6 +1,8 @@
-export const getEventId = (event) => event?.eid ?? event?.eventId;
+import { apiUrl } from "../api/client";
 
-const API_BASE = process.env.REACT_APP_QUOTTERY_API_BASE || "";
+export { formatCompactAmount } from "./format";
+
+export const getEventId = (event) => event?.eid ?? event?.eventId;
 
 export const getEventVolumesUrl = (bobUrl, ids) => {
   const query = `ids=${encodeURIComponent(ids.join(","))}`;
@@ -25,26 +27,7 @@ export const getEventVolumesUrl = (bobUrl, ids) => {
 
 export const getDbEventMetricsUrl = (ids) => {
   const query = `ids=${encodeURIComponent(ids.join(","))}`;
-  return `${API_BASE}/api/quottery/event-metrics?${query}`;
-};
-
-export const formatCompactAmount = (value) => {
-  const amount = Number(value || 0);
-  if (!Number.isFinite(amount) || amount <= 0) return "0";
-
-  const units = [
-    { suffix: "B", value: 1_000_000_000 },
-    { suffix: "M", value: 1_000_000 },
-    { suffix: "K", value: 1_000 },
-  ];
-  const unit = units.find((item) => amount >= item.value);
-  if (!unit) return String(Math.round(amount));
-
-  const compact = amount / unit.value;
-  const formatted = compact >= 10
-      ? Math.round(compact).toString()
-      : compact.toFixed(1).replace(/\.0$/, "");
-  return `${formatted}${unit.suffix}`;
+  return apiUrl(`/api/quottery/event-metrics?${query}`);
 };
 
 export async function fetchCachedEventVolumes(bobUrl, events, signal) {

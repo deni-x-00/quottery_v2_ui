@@ -4,6 +4,7 @@ import { useConfig } from '../contexts/ConfigContext';
 import { useSnackbar } from '../contexts/SnackbarContext';
 import { useQuotteryContext } from '../contexts/QuotteryContext';
 import { verifyTxWithBobLogs, verifyTxWithPublicRpcLogs } from '../components/qubic/util/txLogVerifier';
+import { getIndexerStatus } from '../api/quotteryApi';
 
 const txTrackingId = (tx) => (
     tx.txHash ||
@@ -24,6 +25,32 @@ const txTrackingId = (tx) => (
 const wasTxNotExecuted = (txData) => txData?.moneyFlew === false || txData?.moneyFlew === 'false';
 const wasTxExecuted = (txData) => txData && !wasTxNotExecuted(txData);
 const PUBLIC_TX_VERIFY_DELAY_MS = 3000;
+
+async function getLastIndexedTick() {
+    try {
+        const body = await getIndexerStatus();
+        const tick = Number(body?.status?.lastIndexedTick || 0);
+        return Number.isFinite(tick) && tick > 0 ? tick : 0;
+    } catch {
+        return 0;
+    }
+}
+
+async function hasReliableTickPastTx(tx, tickInfo) {
+    const scheduledTick = Number(tx?.scheduledTick || 0);
+    if (!Number.isFinite(scheduledTick) || scheduledTick <= 0) return false;
+
+    const publicTick = Number(tickInfo?.publicTick || 0);
+    if (Number.isFinite(publicTick) && publicTick > scheduledTick) return true;
+
+    if (tickInfo?.source === 'public') {
+        const tick = Number(tickInfo?.tick || 0);
+        if (Number.isFinite(tick) && tick > scheduledTick) return true;
+    }
+
+    const lastIndexedTick = await getLastIndexedTick();
+    return lastIndexedTick > scheduledTick;
+}
 
 export function useTxTracker() {
     const [pendingTxs, setPendingTxs] = useState([]);
@@ -85,6 +112,30 @@ export function useTxTracker() {
         });
     }, [closeSnackbar]);
 
+    const notifyTxSuccess = useCallback((tx, result = {}) => {
+        try {
+            tx.onSuccess?.(result);
+        } catch (e) {
+            console.warn('[useTxTracker] onSuccess callback failed:', e);
+        }
+    }, []);
+
+    const notifyTxFailure = useCallback((tx, result = {}) => {
+        try {
+            tx.onFailure?.(result);
+        } catch (e) {
+            console.warn('[useTxTracker] onFailure callback failed:', e);
+        }
+    }, []);
+
+    const notifyTxTimeout = useCallback((tx, result = {}) => {
+        try {
+            tx.onTimeout?.(result);
+        } catch (e) {
+            console.warn('[useTxTracker] onTimeout callback failed:', e);
+        }
+    }, []);
+
     const refreshWalletBalances = useCallback(async () => {
         if (!walletPublicIdentity) return null;
 
@@ -139,6 +190,7 @@ export function useTxTracker() {
                             `Tx tracking timed out for tick ${tx.scheduledTick}. Check manually.\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
                             'warning'
                         );
+                        notifyTxTimeout(tx, { reason: 'timeout' });
                         removeTx(tx.id);
                         continue;
                     }
@@ -151,6 +203,7 @@ export function useTxTracker() {
                                 `Tx confirmed on tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
                                 'success'
                             );
+                            notifyTxSuccess(tx, { reason: 'tx_found', tick: tx.scheduledTick });
                             removeTx(tx.id);
                             refreshWalletBalances();
                             continue;
@@ -193,6 +246,7 @@ export function useTxTracker() {
                                         );
                                     }
                                     refreshWalletBalances();
+                                    notifyTxSuccess(tx, { reason: 'logs_verified', tick: logVerification.tick || tx.scheduledTick });
                                     removeTx(tx.id);
                                     continue;
                                 }
@@ -203,6 +257,7 @@ export function useTxTracker() {
                                         'warning'
                                     );
                                     refreshWalletBalances();
+                                    notifyTxFailure(tx, { reason: 'not_executed', tick: tx.scheduledTick });
                                     removeTx(tx.id);
                                     continue;
                                 }
@@ -229,6 +284,7 @@ export function useTxTracker() {
                                         );
                                     }
                                     refreshWalletBalances();
+                                    notifyTxSuccess(tx, { reason: 'logs_verified', tick: logVerification.tick || tx.scheduledTick });
                                     removeTx(tx.id);
                                     continue;
                                 }
@@ -239,6 +295,7 @@ export function useTxTracker() {
                                         'warning'
                                     );
                                     refreshWalletBalances();
+                                    notifyTxFailure(tx, { reason: 'not_executed', tick: tx.scheduledTick });
                                     removeTx(tx.id);
                                     continue;
                                 }
@@ -267,16 +324,22 @@ export function useTxTracker() {
                                 'warning'
                             );
                             refreshWalletBalances();
+                            notifyTxFailure(tx, { reason: 'not_executed', tick: tx.scheduledTick });
                             removeTx(tx.id);
                             continue;
                         }
 
-                        if (!txFound && tickInfo.source === 'public' && tx.txHash) {
+                        const reliableTickPastTx = tx.txHash
+                            ? await hasReliableTickPastTx(tx, tickInfo)
+                            : false;
+
+                        if (!txFound && reliableTickPastTx && tx.txHash) {
                             showSnackbar(
                                 `Tx failed or was not found at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
                                 'error'
                             );
                             refreshWalletBalances();
+                            notifyTxFailure(tx, { reason: 'not_found', tick: tx.scheduledTick });
                             removeTx(tx.id);
                             continue;
                         }
@@ -294,11 +357,17 @@ export function useTxTracker() {
                                             : `Transaction was included, but the order was not added. The event may be closed or the balance/position was insufficient.\nTx: ${tx.txHash}`,
                                     success ? 'success' : 'warning'
                                 );
+                                if (success) {
+                                    notifyTxSuccess(tx, { reason: 'tx_found', tick: tx.scheduledTick });
+                                } else {
+                                    notifyTxFailure(tx, { reason: 'state_mismatch', tick: tx.scheduledTick });
+                                }
                             } else {
                                 showSnackbar(
                                     `Tx confirmed at tick ${tx.scheduledTick}: ${tx.description || ''}\nTx: ${tx.txHash}`,
                                     'success'
                                 );
+                                notifyTxSuccess(tx, { reason: 'tx_found', tick: tx.scheduledTick });
                             }
                             refreshWalletBalances();
                             removeTx(tx.id);
@@ -317,6 +386,7 @@ export function useTxTracker() {
                                 `Tx executed at tick ${tx.scheduledTick}: ${tx.description || ''}\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
                                 'success'
                             );
+                            notifyTxSuccess(tx, { reason: 'balance_changed', tick: tx.scheduledTick });
                         } else if (tx.type === 'order') {
                             const orderFound = await hasMatchingOpenOrder(tx);
                             const isRemove = tx.action === 'remove';
@@ -329,11 +399,17 @@ export function useTxTracker() {
                                         : `Could not verify that the order was added. Please refresh the order book before trying again.`,
                                 success ? 'success' : 'warning'
                             );
+                            if (success) {
+                                notifyTxSuccess(tx, { reason: 'order_state_verified', tick: tx.scheduledTick });
+                            } else {
+                                notifyTxFailure(tx, { reason: 'state_mismatch', tick: tx.scheduledTick });
+                            }
                         } else {
                             showSnackbar(
                                 `Could not verify tx execution at tick ${tx.scheduledTick}. Check manually.\n${tx.txHash ? 'Tx: ' + tx.txHash : ''}`,
                                 'info'
                             );
+                            notifyTxTimeout(tx, { reason: 'inconclusive', tick: tx.scheduledTick });
                         }
 
                         removeTx(tx.id);
@@ -352,7 +428,7 @@ export function useTxTracker() {
                 intervalRef.current = null;
             }
         };
-    }, [pendingTxs, bobUrl, walletPublicIdentity, fetchBalance, showSnackbar, removeTx, hasMatchingOpenOrder, refreshWalletBalances]);
+    }, [pendingTxs, bobUrl, walletPublicIdentity, fetchBalance, showSnackbar, removeTx, hasMatchingOpenOrder, refreshWalletBalances, notifyTxFailure, notifyTxSuccess, notifyTxTimeout]);
 
     return { trackTx, pendingTxs };
 }

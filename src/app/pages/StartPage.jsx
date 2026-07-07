@@ -3,17 +3,15 @@ import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   Typography,
   Button,
-  Container,
   Box,
   useTheme,
   Grid,
 } from "@mui/material";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import EventAvailableIcon from "@mui/icons-material/EventAvailable";
-import { Typewriter } from "react-simple-typewriter";
 import { motion, AnimatePresence } from "framer-motion";
-import AnimatedBars from "../components/qubic/ui/AnimateBars";
 import EventOverviewCard from "../components/EventOverviewCard";
+import { EmptyState, LoadingSkeleton, PAGE_GUTTER_X, PAGE_MAX_WIDTH } from "../components/ui";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
@@ -123,15 +121,33 @@ function StartPage() {
         pb: { xs: 6, sm: 8, md: 10 },
         overflow: "hidden",
       }}>
-        <Container maxWidth="lg">
+        <Box sx={{ width: "100%", maxWidth: PAGE_MAX_WIDTH, mx: "auto", px: PAGE_GUTTER_X }}>
           <Box component="header" sx={{
             display: "flex",
             flexDirection: "column",
-            alignItems: "center",
+            alignItems: "flex-start",
             mb: { xs: 4, sm: 5, md: 6 },
             mt: { xs: -2, sm: -3, md: -5 },
-            textAlign: "center",
+            textAlign: "left",
+            maxWidth: 860,
           }}>
+            <Typography
+              component={motion.p}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35 }}
+              sx={{
+                m: 0,
+                mb: 1.5,
+                color: "primary.main",
+                fontSize: "0.76rem",
+                fontWeight: 900,
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
+              Qubic-native prediction markets
+            </Typography>
             <Typography
                 variant="h2"
                 fontWeight="bold"
@@ -139,18 +155,20 @@ function StartPage() {
                 component={motion.h2}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7 }}
+                transition={{ duration: 0.45 }}
                 color="text.primary"
-                sx={{ fontSize: { xs: "2.7rem", sm: "3rem", md: "3.5rem", lg: "3.5rem" }, lineHeight: 1.2, mt: 3 }}
+                sx={{
+                  fontSize: { xs: "3rem", sm: "4rem", md: "5.2rem" },
+                  lineHeight: 0.95,
+                  letterSpacing: "-0.035em",
+                  mt: 0,
+                  mb: 2,
+                  maxWidth: 760,
+                }}
             >
-              Predict To{" "}
-              <Box component="span" sx={{
-                backgroundColor: theme.palette.primary.main,
-                color: theme.palette.primary.contrastText,
-                px: { xs: 0.5, sm: 1 },
-                fontSize: "inherit",
-              }} fontWeight="bold">
-                Profit.
+              Predict to{" "}
+              <Box component="span" sx={{ color: "primary.main", fontSize: "inherit" }} fontWeight="bold">
+                profit
               </Box>
             </Typography>
             <Typography
@@ -159,36 +177,65 @@ function StartPage() {
                 component={motion.div}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                transition={{ delay: 0.5, duration: 1 }}
-                sx={{ fontSize: { xs: "0.9rem", sm: "1.1rem", md: "1.3rem", lg: "1.5rem" }, mx: "auto", fontWeight: 500 }}
+                transition={{ delay: 0.15, duration: 0.45 }}
+                sx={{
+                  maxWidth: 680,
+                  fontSize: { xs: "1rem", sm: "1.12rem", md: "1.25rem" },
+                  fontWeight: 500,
+                  lineHeight: 1.55,
+                }}
             >
-              <Typewriter
-                  words={["P2P prediction market powered by Qubic. Safe, Secure, and Exciting"]}
-                  loop={1}
-                  cursor
-                  cursorStyle="_"
-                  typeSpeed={33}
-                  deleteSpeed={50}
-                  delaySpeed={1000}
-              />
+              Trade YES and NO outcome shares through transparent order books,
+              indexed portfolios, and on-chain settlement powered by Qubic.
             </Typography>
-            <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", justifyContent: "center", mt: { xs: 2, sm: 3 } }}>
+            <Box sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" },
+              gap: 1.25,
+              width: "100%",
+              maxWidth: 680,
+              mt: { xs: 2.5, sm: 3 },
+            }}>
+              {[
+                ["Whole share", "100,000 GARTH"],
+                ["Settlement", "On-chain"],
+                ["Data", "Live indexed"],
+              ].map(([label, value]) => (
+                <Box
+                  key={label}
+                  sx={{
+                    p: 1.5,
+                    borderRadius: 1.5,
+                    border: `1px solid ${theme.palette.border.soft}`,
+                    bgcolor: theme.palette.surface[1],
+                  }}
+                >
+                  <Typography variant="caption" sx={{ display: "block", color: "text.secondary", fontWeight: 800 }}>
+                    {label}
+                  </Typography>
+                  <Typography className="stat" sx={{ mt: 0.5, fontWeight: 900, color: "text.primary" }}>
+                    {value}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+            <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap", justifyContent: "flex-start", mt: { xs: 2.5, sm: 3 } }}>
               <Button
                   component={RouterLink}
-                  to="/events"
+                  to="/markets"
                   startIcon={<EventAvailableIcon />}
                   variant="contained"
                   color="primary"
-                  sx={{ borderRadius: 1, textTransform: "none", fontWeight: 700 }}
+                  sx={{ borderRadius: 1, textTransform: "none", fontWeight: 900, minHeight: 44 }}
               >
-                All Markets
+                Explore Markets
               </Button>
               <Button
                   onClick={() => navigate("/about")}
                   startIcon={<InfoOutlinedIcon />}
                   variant="outlined"
                   color="primary"
-                  sx={{ borderRadius: 1, textTransform: "none", fontWeight: 700 }}
+                  sx={{ borderRadius: 1, textTransform: "none", fontWeight: 900, minHeight: 44 }}
               >
                 About
               </Button>
@@ -202,16 +249,13 @@ function StartPage() {
                   <Typography variant="h4" color="text.primary" sx={{ fontWeight: 700, fontSize: { xs: "1.5rem", md: "2rem" } }}>
                     Recent Markets
                   </Typography>
-                  <Button component={RouterLink} to="/events" size="small" variant="text" sx={{ justifySelf: "end", textTransform: "none", fontWeight: 700 }}>
+                  <Button component={RouterLink} to="/markets" size="small" variant="text" sx={{ justifySelf: "end", textTransform: "none", fontWeight: 700 }}>
                     All Markets
                   </Button>
                 </Box>
 
                 {isLoadingOverall ? (
-                    <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", py: 8, gap: 2 }}>
-                      <AnimatedBars />
-                      <Typography variant="h6" color="text.secondary">Loading markets, please wait...</Typography>
-                    </Box>
+                    <LoadingSkeleton variant="cards" cards={3} />
                 ) : recentEvents.length > 0 ? (
                     <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} justifyContent="center" alignItems="stretch">
                       <AnimatePresence>
@@ -220,7 +264,7 @@ function StartPage() {
                           return (
                               <Grid item xs={12} sm={6} md={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                 <EventOverviewCard
-                                    eventUrl={`/event/${event.eid}`}
+                                    eventUrl={`/market/${event.eid}`}
                                     data={{
                                       ...event,
                                       desc: event.desc,
@@ -228,7 +272,7 @@ function StartPage() {
                                       openOrderVolume: eventOpenOrderVolumes[getEventId(event)] ?? 0,
                                       probability: eventProbabilities[getEventId(event)],
                                     }}
-                                    onClick={() => navigate(`/event/${event.eid}`, { state: { from: "/" } })}
+                                    onClick={() => navigate(`/market/${event.eid}`, { state: { from: "/" } })}
                                     status={event.status}
                                     onTxBroadcast={trackTx}
                                 />
@@ -238,15 +282,15 @@ function StartPage() {
                       </AnimatePresence>
                     </Grid>
                 ) : (
-                    <Box sx={{ textAlign: "center", py: 6 }}>
-                      <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>
-                        No markets found.
-                      </Typography>
-                    </Box>
+                    <EmptyState
+                      compact
+                      title="No markets found"
+                      description="Markets will appear here once the indexer returns active events."
+                    />
                 )}
               </Box>
           )}
-        </Container>
+        </Box>
       </Box>
   );
 }

@@ -8,7 +8,7 @@ const Footer = () => {
   const { pathname } = useLocation();
   const theme = useTheme();
 
-  if (pathname.includes("/event/")) {
+  if (pathname.includes("/market/") || pathname.includes("/event/")) {
     return null;
   }
 

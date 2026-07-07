@@ -1,3 +1,5 @@
+import { shortMiddle } from "./format";
+
 export function isEndEpochTxRef(value) {
   return String(value || "").startsWith("SC_END_EPOCH_TX");
 }
@@ -20,5 +22,5 @@ export function explorerTickOrTxLabel(value, formatter = null) {
 export function shortExplorerTickOrTxLabel(value, formatter = null) {
   const label = explorerTickOrTxLabel(value, formatter);
   if (!isEndEpochTxRef(value) || label.length <= 13) return label;
-  return `${label.slice(0, 5)}...${label.slice(-5)}`;
+  return shortMiddle(label);
 }

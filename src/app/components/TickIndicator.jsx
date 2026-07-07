@@ -5,24 +5,50 @@ import { getNetworkTick, PUBLIC_TICK_TOLERANCE } from './qubic/util/bobApi';
 import { useConfig } from '../contexts/ConfigContext';
 import { useQuotteryContext } from '../contexts/QuotteryContext';
 
-const TickIndicator = () => {
+async function fetchBobStatus(bobUrl) {
+    try {
+        const res = await fetch(`${bobUrl}/status`);
+        if (!res.ok) return null;
+        return await res.json();
+    } catch {
+        return null;
+    }
+}
+
+function extractEpoch(status) {
+    const epoch = Number(
+        status?.currentProcessingEpoch
+        ?? status?.status?.currentProcessingEpoch
+        ?? status?.data?.currentProcessingEpoch
+        ?? status?.result?.currentProcessingEpoch
+        ?? 0
+    );
+    return Number.isFinite(epoch) && epoch > 0 ? epoch : null;
+}
+
+const TickIndicator = ({ topBar = false }) => {
     const theme = useTheme();
     const { bobUrl, isConnected, devMode } = useConfig();
     const { tickRate, adaptiveOffset } = useQuotteryContext();
     const [bobTick, setBobTick] = useState(null);
     const [publicTick, setPublicTick] = useState(null);
+    const [epoch, setEpoch] = useState(null);
     const [tickSource, setTickSource] = useState('unknown');
     const [networkStatus, setNetworkStatus] = useState('unknown');
 
     const refresh = useCallback(async () => {
         if (!isConnected || !bobUrl) return;
 
-        const tickInfo = await getNetworkTick(bobUrl);
+        const [tickInfo, status] = await Promise.all([
+            getNetworkTick(bobUrl),
+            fetchBobStatus(bobUrl),
+        ]);
         const bt = tickInfo.bobTick;
         const pt = tickInfo.publicTick;
 
         setBobTick(bt || null);
         setPublicTick(pt || null);
+        setEpoch(extractEpoch(status));
         setTickSource(tickInfo.source);
 
         if (devMode) {
@@ -67,33 +93,42 @@ const TickIndicator = () => {
     const dash = '-';
 
     const tooltipContent = devMode
-        ? `Bob tick: ${bobTick ? formatQubicAmount(bobTick) : dash} | ${tickRate.toFixed(1)} t/s, offset +${adaptiveOffset} (dev mode)`
-        : `Bob: ${bobTick ? formatQubicAmount(bobTick) : dash} | Public: ${publicTick ? formatQubicAmount(publicTick) : dash} | source: ${tickSource} | ${tickRate.toFixed(1)} t/s, offset +${adaptiveOffset}`;
+        ? `Epoch: ${epoch || dash} | Bob tick: ${bobTick ? formatQubicAmount(bobTick) : dash} | ${tickRate.toFixed(1)} t/s, offset +${adaptiveOffset} (dev mode)`
+        : `Epoch: ${epoch || dash} | Bob: ${bobTick ? formatQubicAmount(bobTick) : dash} | Public: ${publicTick ? formatQubicAmount(publicTick) : dash} | source: ${tickSource} | ${tickRate.toFixed(1)} t/s, offset +${adaptiveOffset}`;
 
     return (
         <Tooltip title={tooltipContent} arrow>
             <Box sx={{
-                display: 'flex', alignItems: 'center', gap: 0.75,
-                px: { xs: 1, sm: 1.5 }, py: 0.5, borderRadius: 1,
-                maxWidth: { xs: 118, sm: 'none' },
-                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+                display: 'flex', alignItems: 'center', gap: topBar ? { xs: 0.8, sm: 1.1 } : 0.75,
+                px: topBar ? 0 : { xs: 1, sm: 1.5 }, py: topBar ? 0 : 0.5, borderRadius: 1,
+                maxWidth: topBar ? 'none' : { xs: 118, sm: 'none' },
+                bgcolor: topBar ? 'transparent' : theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
                 cursor: 'default', userSelect: 'none',
             }}>
+                <Typography variant="caption" sx={{
+                    display: { xs: 'none', sm: 'inline-flex' },
+                    color: theme.palette.text.secondary,
+                    fontWeight: 700,
+                    fontSize: topBar ? '0.72rem' : '0.65rem',
+                    whiteSpace: 'nowrap',
+                }}>
+                    Epoch: <Box component="span" sx={{ color: theme.palette.text.primary, ml: 0.35 }}>{epoch || dash}</Box>
+                </Typography>
                 <Box sx={{
-                    width: 8, height: 8, borderRadius: '50%',
+                    width: topBar ? 7 : 8, height: topBar ? 7 : 8, borderRadius: '50%',
                     bgcolor: dotColor,
                     boxShadow: `0 0 6px ${dotColor}`,
                 }} />
                 <Typography variant="caption" sx={{
                     fontFamily: 'monospace',
-                    fontWeight: 600,
-                    color: theme.palette.text.secondary,
-                    fontSize: { xs: '0.68rem', sm: '0.75rem' },
+                    fontWeight: topBar ? 700 : 600,
+                    color: topBar ? theme.palette.text.primary : theme.palette.text.secondary,
+                    fontSize: topBar ? { xs: '0.68rem', sm: '0.74rem' } : { xs: '0.68rem', sm: '0.75rem' },
                     whiteSpace: 'nowrap',
                 }}>
-                    {tickSource === 'public' && publicTick ? formatQubicAmount(publicTick) : (bobTick ? formatQubicAmount(bobTick) : dash)}
+                    Tick: {tickSource === 'public' && publicTick ? formatQubicAmount(publicTick) : (bobTick ? formatQubicAmount(bobTick) : dash)}
                 </Typography>
-                <Typography variant="caption" sx={{ display: { xs: 'none', md: 'block' }, color: dotColor, fontWeight: 600, fontSize: '0.65rem', whiteSpace: 'nowrap' }}>
+                <Typography variant="caption" sx={{ display: { xs: 'none', md: 'block' }, color: dotColor, fontWeight: 700, fontSize: topBar ? '0.68rem' : '0.65rem', whiteSpace: 'nowrap' }}>
                     {statusLabels[networkStatus]}
                 </Typography>
             </Box>

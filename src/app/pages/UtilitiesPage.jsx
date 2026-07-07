@@ -2,10 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Box,
     Typography,
-    Container,
     Button,
     Stack,
-    Divider,
     TextField,
     Card,
     CardContent,
@@ -51,6 +49,7 @@ import {
 import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import usePageTitle from "../hooks/usePageTitle";
+import { MetricGrid, PageHeader, PageShell } from "../components/ui";
 
 const TRANSFER_QUBIC_FEE = 100;
 const CLAIM_REWARD_QUBIC_FEE = 1000000;
@@ -165,6 +164,29 @@ const managementRightsFee = (sourceContract, destinationContract) => {
     return Math.max(sourceFee, destinationFee, qxAcquireFee);
 };
 
+const utilityInputSx = (theme) => ({
+    "& .MuiOutlinedInput-root": {
+        borderRadius: 1.25,
+        bgcolor: theme.palette.surface[2],
+        "& .MuiOutlinedInput-notchedOutline": {
+            borderColor: theme.palette.border.soft,
+        },
+        "&:hover .MuiOutlinedInput-notchedOutline": {
+            borderColor: theme.palette.border.default,
+        },
+        "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+            borderColor: theme.palette.primary.main,
+        },
+    },
+    "& .MuiInputLabel-root": {
+        color: theme.palette.text.secondary,
+        fontWeight: 700,
+    },
+    "& .MuiFormHelperText-root": {
+        mx: 0,
+    },
+});
+
 const ActionCard = ({
     icon,
     title,
@@ -175,25 +197,73 @@ const ActionCard = ({
     submitLabel,
     connected,
     disabled = false,
+    tone = "primary",
 }) => (
-    <Card variant="outlined" sx={{ borderColor: "divider" }}>
-        <CardContent>
+    <Card
+        variant="outlined"
+        sx={(theme) => {
+            const toneColor = tone === "success"
+                ? theme.palette.market.yes
+                : tone === "warning"
+                    ? theme.palette.warning.main
+                    : theme.palette.primary.main;
+            return {
+                height: "100%",
+                borderRadius: 1.5,
+                borderColor: theme.palette.border.soft,
+                bgcolor: theme.palette.surface[1],
+                boxShadow: "none",
+                overflow: "hidden",
+                position: "relative",
+                "&::before": {
+                    content: '""',
+                    position: "absolute",
+                    inset: "0 auto 0 0",
+                    width: 2,
+                    bgcolor: toneColor,
+                    opacity: 0.8,
+                },
+            };
+        }}
+    >
+        <CardContent sx={{ p: { xs: 1.75, sm: 2 }, "&:last-child": { pb: { xs: 1.75, sm: 2 } } }}>
             <Stack spacing={2}>
-                <Box display="flex" alignItems="center" gap={1}>
-                    {icon}
-                    <Box>
-                        <Typography variant="h6">{title}</Typography>
-                        <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
+                <Box display="flex" alignItems="flex-start" gap={1.5}>
+                    <Box
+                        sx={(theme) => ({
+                            width: 38,
+                            height: 38,
+                            borderRadius: 1.25,
+                            border: `1px solid ${theme.palette.border.soft}`,
+                            bgcolor: theme.palette.surface[2],
+                            color: tone === "success" ? theme.palette.market.yes : tone === "warning" ? theme.palette.warning.main : theme.palette.primary.main,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            "& svg": { fontSize: 21 },
+                        })}
+                    >
+                        {icon}
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="h6" sx={{ fontSize: "1rem", fontWeight: 900, lineHeight: 1.2 }}>
+                            {title}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, lineHeight: 1.45 }}>
+                            {subtitle}
+                        </Typography>
                     </Box>
                 </Box>
-                <Divider />
+                <Box sx={(theme) => ({ borderTop: `1px solid ${theme.palette.border.soft}` })} />
                 {children}
                 <Button
                     variant="contained"
                     onClick={onSubmit}
                     disabled={!connected || submitting || disabled}
                     fullWidth
-                    size="large"
+                    size="medium"
+                    sx={{ minHeight: 44, borderRadius: 1, textTransform: "none", fontWeight: 900 }}
                 >
                     {submitting ? "Signing..." : submitLabel}
                 </Button>
@@ -240,6 +310,15 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                 sx={{
                     mx: 1,
                     mb: 0.25,
+                    color: "primary.main",
+                    "& .MuiSlider-rail": { opacity: 0.28 },
+                    "& .MuiSlider-track": { border: 0 },
+                    "& .MuiSlider-thumb": {
+                        width: 16,
+                        height: 16,
+                        border: "2px solid currentColor",
+                        bgcolor: "background.default",
+                    },
                 }}
             />
             <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
@@ -252,7 +331,12 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                         color={percent === 100 ? "primary" : "default"}
                         onClick={() => setPreset(percent)}
                         disabled={isDisabled}
-                        sx={{ minWidth: 56 }}
+                        sx={(theme) => ({
+                            minWidth: 56,
+                            borderRadius: 1,
+                            fontWeight: 800,
+                            borderColor: theme.palette.border.soft,
+                        })}
                     />
                 ))}
             </Stack>
@@ -265,6 +349,7 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                 placeholder={max ? `Max ${formatQubicAmount(max)} ${unit}` : "Unavailable"}
                 inputProps={{ inputMode: "numeric", pattern: "[0-9,]*" }}
                 disabled={isDisabled}
+                sx={utilityInputSx}
             />
         </Stack>
     );
@@ -285,6 +370,7 @@ const ReceiverIdentityField = ({ value, onChange }) => {
             inputProps={{ maxLength: 60 }}
             error={hasValue && !isValid}
             helperText={hasValue && !isValid ? "Use exactly 60 uppercase Latin letters." : " "}
+            sx={utilityInputSx}
             InputProps={{
                 endAdornment: (
                     <InputAdornment position="end">
@@ -302,7 +388,7 @@ const ReceiverIdentityField = ({ value, onChange }) => {
     );
 };
 
-function MiscPage() {
+function UtilitiesPage() {
     usePageTitle("Utilities");
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
     const {
@@ -378,6 +464,15 @@ function MiscPage() {
 
     useEffect(() => {
         setPendingClaimEventIds(readPendingClaimIds(walletPublicIdentity));
+    }, [walletPublicIdentity]);
+
+    const clearPendingClaimEventId = useCallback((eventId) => {
+        if (!walletPublicIdentity || eventId === null || eventId === undefined) return;
+        setPendingClaimEventIds((currentIds) => {
+            const nextIds = currentIds.filter((currentId) => String(currentId) !== String(eventId));
+            if (nextIds.length !== currentIds.length) writePendingClaimIds(walletPublicIdentity, nextIds);
+            return nextIds;
+        });
     }, [walletPublicIdentity]);
 
     useEffect(() => {
@@ -660,7 +755,7 @@ function MiscPage() {
 
         const { currentTick, scheduledTick, tickRate, offset } = tickInfo;
         console.debug(
-            `[Misc] ${description}: rate=${tickRate.toFixed(2)} t/s, offset=${offset}, scheduledTick=${scheduledTick}`
+            `[Utilities] ${description}: rate=${tickRate.toFixed(2)} t/s, offset=${offset}, scheduledTick=${scheduledTick}`
         );
 
         const txAmount = amount ?? (basicInfo.antiSpamAmount || 0);
@@ -729,7 +824,10 @@ function MiscPage() {
                 payload,
                 `Claim reward for event ${eid}`,
                 null,
-                { eventId: eid }
+                {
+                    eventId: eid,
+                    onFailure: () => clearPendingClaimEventId(eid),
+                }
             );
             if (res?.txHash) {
                 const eventId = String(eid);
@@ -898,18 +996,50 @@ function MiscPage() {
         }
     };
 
-    return (
-        <Container maxWidth="md" sx={{ pt: 12, pb: 6 }}>
-            <Typography variant="h4" fontWeight={700} gutterBottom>
-                Utilities
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-                Claim rewards, transfer GARTH or QTRYGOV tokens, and manage share rights.
-            </Typography>
+    const utilityStats = [
+        { label: "Wallet", value: connected ? "Connected" : "Disconnected" },
+        { label: "GARTH", value: balance === null || balance === undefined ? "-" : formatQubicAmount(balance) },
+        { label: "QTRYGOV", value: qtryGovBalance === null || qtryGovBalance === undefined ? "-" : formatQubicAmount(qtryGovBalance) },
+        { label: "Claimable", value: claimOptionsLoading ? "Loading" : String(claimOptions.length) },
+    ];
 
-            <Stack spacing={3}>
+    return (
+        <PageShell top={{ xs: 10, md: 12 }} bottom={7}>
+            <PageHeader
+                eyebrow="Wallet operations"
+                title="Utilities"
+                description="Claim rewards, transfer GARTH or QTRYGOV, and manage GARTH share rights."
+                icon={<AccountBalanceIcon />}
+                actions={!connected && (
+                    <Button
+                        variant="contained"
+                        onClick={toggleConnectModal}
+                        sx={{ minHeight: 44, borderRadius: 1, textTransform: "none", fontWeight: 900, alignSelf: { md: "center" } }}
+                    >
+                        Connect Wallet
+                    </Button>
+                )}
+            />
+
+            <MetricGrid
+                metrics={utilityStats.map((stat) => ({
+                    ...stat,
+                    tone: stat.label === "Wallet" && connected ? "cyan" : "default",
+                }))}
+                sx={{ mb: 2.5 }}
+                compact
+            />
+
+            <Box
+                sx={{
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", lg: "repeat(2, minmax(0, 1fr))" },
+                    gap: 2,
+                    alignItems: "start",
+                }}
+            >
                 <ActionCard
-                    icon={<RedeemIcon color="primary" />}
+                    icon={<RedeemIcon />}
                     title="Claim Reward"
                     subtitle="Claim your payout from a finalized event."
                     onSubmit={handleClaimReward}
@@ -917,6 +1047,7 @@ function MiscPage() {
                     submitLabel="Claim Reward"
                     connected={connected}
                     disabled={!claimEventId || claimOptionsLoading}
+                    tone="success"
                 >
                     <TextField
                         select
@@ -936,6 +1067,7 @@ function MiscPage() {
                         InputProps={{
                             endAdornment: claimOptionsLoading ? <CircularProgress size={18} /> : null,
                         }}
+                        sx={utilityInputSx}
                     >
                         {claimOptions.map((option) => (
                             <MenuItem key={option.eventId} value={String(option.eventId)} sx={{ whiteSpace: "normal" }}>
@@ -949,13 +1081,13 @@ function MiscPage() {
                         ))}
                     </TextField>
                     <Typography variant="caption" color="text.secondary">
-                        * Claim requires a 1M QU deposit. It is returned automatically if the claim succeeds.
+                        Claim requires a 1M QU deposit. It is returned automatically if the claim succeeds.
                     </Typography>
                     {claimOptionsError && <Alert severity="warning">{claimOptionsError}</Alert>}
                 </ActionCard>
 
                 <ActionCard
-                    icon={<SendIcon color="primary" />}
+                    icon={<SendIcon />}
                     title="Transfer GARTH"
                     subtitle="Send GARTH (QUSD) tokens to another identity via the Quottery contract."
                     onSubmit={handleTransferGarth}
@@ -963,6 +1095,7 @@ function MiscPage() {
                     submitLabel="Transfer GARTH"
                     connected={connected}
                     disabled={!hasTransferFee(quBalance) || !isValidReceiverIdentity(garthReceiver) || !toPositiveInt(garthAmount) || !balance || balance <= 0}
+                    tone="primary"
                 >
                     {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
                     <ReceiverIdentityField
@@ -980,7 +1113,7 @@ function MiscPage() {
                 </ActionCard>
 
                 <ActionCard
-                    icon={<AccountBalanceIcon color="primary" />}
+                    icon={<AccountBalanceIcon />}
                     title="Transfer QTRYGOV"
                     subtitle="Send QTRYGOV governance shares to another identity."
                     onSubmit={handleTransferGov}
@@ -988,6 +1121,7 @@ function MiscPage() {
                     submitLabel="Transfer QTRYGOV"
                     connected={connected}
                     disabled={!hasTransferFee(quBalance) || !isValidReceiverIdentity(govReceiver) || !toPositiveInt(govAmount) || !qtryGovBalance || qtryGovBalance <= 0}
+                    tone="warning"
                 >
                     {feeWarning && <Alert severity="warning">{feeWarning}</Alert>}
                     <ReceiverIdentityField
@@ -1005,7 +1139,7 @@ function MiscPage() {
                 </ActionCard>
 
                 <ActionCard
-                    icon={<SwapHorizIcon color="primary" />}
+                    icon={<SwapHorizIcon />}
                     title="Transfer Share Management Rights"
                     subtitle="Move GARTH management rights from the current managing contract to another contract."
                     onSubmit={handleTransferShareMgmt}
@@ -1022,6 +1156,7 @@ function MiscPage() {
                         smrAvailable <= 0 ||
                         !!smrFeeWarning
                     }
+                    tone="primary"
                 >
                     {smartContractsError && <Alert severity="warning">{smartContractsError}</Alert>}
                     {smrFeeWarning && <Alert severity="warning">{smrFeeWarning}</Alert>}
@@ -1040,6 +1175,7 @@ function MiscPage() {
                                     ? "No GARTH managed by a supported contract was found for this wallet."
                                     : " "
                         }
+                        sx={utilityInputSx}
                     >
                         {smrSourceContracts.map((contract) => (
                             <MenuItem key={contract.contractIndex} value={String(contract.contractIndex)}>
@@ -1065,6 +1201,7 @@ function MiscPage() {
                                 ? "No compatible destination contract found."
                                 : " "
                         }
+                        sx={utilityInputSx}
                     >
                         {filteredSmrDestinationContracts.map((contract) => (
                             <MenuItem key={contract.contractIndex} value={String(contract.contractIndex)}>
@@ -1081,9 +1218,9 @@ function MiscPage() {
                         disabled={!connected || smrAvailableLoading}
                     />
                 </ActionCard>
-            </Stack>
-        </Container>
+            </Box>
+        </PageShell>
     );
 }
 
-export default MiscPage;
+export default UtilitiesPage;

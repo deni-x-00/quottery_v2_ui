@@ -1,6 +1,6 @@
 // src/contexts/SnackbarContext.jsx
 import React, { createContext, useContext, useState, useCallback } from "react";
-import CustomSnackbar from "../components/qubic/ui/CustomSnackbar";
+import { Toast } from "../components/ui";
 
 const SnackbarContext = createContext(null);
 
@@ -32,7 +32,7 @@ export const SnackbarProvider = ({ children }) => {
 
       {/* Render all active snackbars, stacked */}
       {snackbars.map((snack, index) => (
-        <CustomSnackbar
+        <Toast
           key={snack.id}
           open={true}
           message={snack.message}

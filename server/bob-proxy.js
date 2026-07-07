@@ -17,6 +17,11 @@ const PUBLIC_EVENT_VOLUME_REFRESH_LIMIT = Number(process.env.PUBLIC_EVENT_VOLUME
 const SOURCE_CACHE_MS = Number(process.env.SOURCE_CACHE_MS || 3000);
 const STATUS_CACHE_MS = Number(process.env.STATUS_CACHE_MS || 3000);
 const BOB_STATUS_TIMEOUT_MS = Number(process.env.BOB_STATUS_TIMEOUT_MS || 2500);
+const BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS = Number(
+  process.env.BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS
+  || process.env.BOB_QUERY_TIMEOUT_MS
+  || 7000
+);
 const PUBLIC_TICK_TOLERANCE = Number(process.env.PUBLIC_TICK_TOLERANCE || 15);
 const SC_INDEX = 2;
 const FUNC_GET_ORDERS = 3;
@@ -310,7 +315,7 @@ function postJsonToUrl(urlString, payload) {
   });
 }
 
-function bobPostJsonToTarget(target, pathname, payload, maxRetries = 10) {
+function bobPostJsonToTarget(target, pathname, payload, maxRetries = 10, timeoutMs = Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000)) {
   const upstreamUrl = new URL(pathname, target.url);
   const body = Buffer.from(JSON.stringify(payload));
 
@@ -327,7 +332,7 @@ function bobPostJsonToTarget(target, pathname, payload, maxRetries = 10) {
           'content-type': 'application/json',
           'content-length': body.length,
         },
-        timeout: Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000),
+        timeout: timeoutMs,
       };
 
       const upstreamReq = target.transport.request(options, (upstreamRes) => {
@@ -372,12 +377,12 @@ function bobPostJsonToTarget(target, pathname, payload, maxRetries = 10) {
   });
 }
 
-async function bobPostJson(pathname, payload, maxRetries = 10, preferredTargetIndex = null) {
+async function bobPostJson(pathname, payload, maxRetries = 10, preferredTargetIndex = null, timeoutMs = Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000)) {
   const errors = [];
 
   for (const target of getBobTargetOrder(preferredTargetIndex)) {
     try {
-      return await bobPostJsonToTarget(target, pathname, payload, maxRetries);
+      return await bobPostJsonToTarget(target, pathname, payload, maxRetries, timeoutMs);
     } catch (error) {
       errors.push(`${target.label}: ${error.message}`);
       console.warn(`[bob-proxy] Bob POST ${pathname} failed via ${target.label}:`, error.message);
@@ -546,22 +551,14 @@ async function querySmartContract(funcNumber, inputHex = '') {
         data: inputHex,
       },
       10,
-      sourceInfo.bobTargetIndex
+      sourceInfo.bobTargetIndex,
+      BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS
     );
 
     if (!resp?.data) return Buffer.alloc(0);
     return Buffer.from(resp.data, 'hex');
   } catch (error) {
-    sourceCache = {
-      at: Date.now(),
-      source: 'public',
-      bobTargetIndex: sourceInfo.bobTargetIndex,
-      tickInfo: {
-        ...(sourceCache.tickInfo || {}),
-        bobError: error.message,
-      },
-    };
-    console.warn('[event-volumes] All Bob querySmartContract attempts failed; switching event volume source to public RPC:', error.message);
+    console.warn('[event-volumes] All Bob querySmartContract attempts failed; using public RPC for this call:', error.message);
     return querySmartContractViaPublicRpc(funcNumber, inputHex);
   }
 }
@@ -858,7 +855,7 @@ async function resolveBobStatusResponse() {
   return pickStatusResponse(bestStatus.data);
 }
 
-function proxyRequestToBobTarget(target, req, body, upstreamPath, search, headers) {
+function proxyRequestToBobTarget(target, req, body, upstreamPath, search, headers, timeoutMs = Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000)) {
   const upstreamUrl = new URL(`${upstreamPath}${search}`, target.url);
   const requestHeaders = { ...headers };
   if (body.length > 0) {
@@ -875,7 +872,7 @@ function proxyRequestToBobTarget(target, req, body, upstreamPath, search, header
       method: req.method,
       path: `${upstreamUrl.pathname}${upstreamUrl.search}`,
       headers: requestHeaders,
-      timeout: Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000),
+      timeout: timeoutMs,
     }, (upstreamRes) => {
       const chunks = [];
       upstreamRes.on('data', (chunk) => chunks.push(chunk));
@@ -939,6 +936,10 @@ async function proxyToBob(req, res) {
   const preferredIndex = sourceCache.source === 'bob' ? sourceCache.bobTargetIndex : null;
   const targetOrder = getBobTargetOrder(preferredIndex);
   const lastTargetIndex = targetOrder[targetOrder.length - 1]?.index;
+  const isQuerySmartContract = req.method === 'POST' && upstreamPath === '/querySmartContract';
+  const timeoutMs = isQuerySmartContract
+    ? BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS
+    : Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000);
 
   for (const target of targetOrder) {
     try {
@@ -948,7 +949,8 @@ async function proxyToBob(req, res) {
         body,
         upstreamPath,
         requestUrl.search,
-        headers
+        headers,
+        timeoutMs
       );
 
       if (shouldTryNextBob(response) && target.index !== lastTargetIndex) {

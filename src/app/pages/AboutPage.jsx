@@ -6,7 +6,6 @@ import {
     Card,
     CardContent,
     Chip,
-    Container,
     Divider,
     Grid,
     Link as MuiLink,
@@ -19,6 +18,7 @@ import {
     Typography,
     useTheme,
 } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import AutoGraphIcon from "@mui/icons-material/AutoGraph";
 import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import BalanceIcon from "@mui/icons-material/Balance";
@@ -35,19 +35,18 @@ import SecurityIcon from "@mui/icons-material/Security";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import TokenIcon from "@mui/icons-material/Token";
 import usePageTitle from "../hooks/usePageTitle";
+import { PAGE_GUTTER_X, PAGE_MAX_WIDTH } from "../components/ui";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 
 const getAccentTextColor = (theme) => (
-    theme.palette.mode === "dark"
-        ? theme.palette.primary.main
-        : "#157684"
+    theme.palette.primary.main
 );
 
 const overviewCards = [
     {
         icon: <HubIcon />,
         title: "Peer-to-peer prediction markets",
-        body: "Quottery lets people trade outcome shares directly with one another. There is no house, hidden edge, or counterparty sitting in the middle.",
+        body: "Quottery lets people trade outcome shares directly with one another through a transparent on-chain order book.",
     },
     {
         icon: <AutoGraphIcon />,
@@ -195,11 +194,11 @@ const SectionHeader = ({ eyebrow, title, body }) => {
         <Box sx={{ mb: { xs: 2.5, md: 3 } }}>
             <Typography
                 variant="overline"
-                sx={{ color: accentTextColor, fontWeight: 800, letterSpacing: 0 }}
+                sx={{ color: accentTextColor, fontSize: "0.72rem", fontWeight: 900, letterSpacing: "0.14em", lineHeight: 1.4 }}
             >
                 {eyebrow}
             </Typography>
-            <Typography variant="h4" component="h2" fontWeight={800} sx={{ mb: 1 }}>
+            <Typography variant="h3" component="h2" sx={{ mb: 1, mt: 0.5 }}>
                 {title}
             </Typography>
             {body && (
@@ -214,17 +213,39 @@ const SectionHeader = ({ eyebrow, title, body }) => {
 function AboutPage() {
     usePageTitle("About");
     const theme = useTheme();
-    const heroBackground = theme.palette.mode === "dark"
-        ? "rgba(97, 240, 254, 0.08)"
-        : theme.palette.background.paper;
-    const heroPanelBackground = theme.palette.mode === "dark"
-        ? theme.palette.background.paper
-        : theme.palette.background.default;
+    const heroBackground = `radial-gradient(circle at 82% 12%, ${alpha(theme.palette.primary.main, 0.09)}, transparent 36%), ${theme.palette.background.default}`;
+    const heroPanelBackground = theme.palette.surface[1];
     const accentTextColor = getAccentTextColor(theme);
     const surfaceCardSx = {
-        bgcolor: "background.paper",
-        borderColor: "divider",
-        borderRadius: 2,
+        bgcolor: theme.palette.surface[1],
+        borderColor: theme.palette.border.soft,
+        borderRadius: 1.5,
+        boxShadow: "none",
+        transition: "border-color 150ms ease, background-color 150ms ease, transform 150ms ease",
+        "&:hover": {
+            borderColor: theme.palette.border.default,
+            bgcolor: theme.palette.surface[2],
+            transform: "translateY(-1px)",
+        },
+    };
+    const panelSx = {
+        border: `1px solid ${theme.palette.border.soft}`,
+        borderRadius: 1.5,
+        bgcolor: theme.palette.surface[1],
+        boxShadow: "none",
+    };
+    const iconTileSx = {
+        width: 38,
+        height: 38,
+        borderRadius: 1.25,
+        border: `1px solid ${theme.palette.border.soft}`,
+        bgcolor: theme.palette.surface[2],
+        color: "primary.main",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        "& svg": { fontSize: 21 },
     };
 
     return (
@@ -232,12 +253,12 @@ function AboutPage() {
             <Box
                 component="section"
                 sx={{
-                    borderBottom: `1px solid ${theme.palette.divider}`,
+                    borderBottom: `1px solid ${theme.palette.border.soft}`,
                     bgcolor: heroBackground,
                     mb: { xs: 5, md: 7 },
                 }}
             >
-                <Container maxWidth="lg" sx={{ py: { xs: 6, md: 8 } }}>
+                <Box sx={{ width: "100%", maxWidth: PAGE_MAX_WIDTH, mx: "auto", px: PAGE_GUTTER_X, py: { xs: 6, md: 8 } }}>
                     <Grid container spacing={{ xs: 4, md: 6 }} alignItems="center">
                         <Grid item xs={12} md={7}>
                             <Stack spacing={2.5}>
@@ -248,9 +269,10 @@ function AboutPage() {
                                     variant="outlined"
                                     sx={{
                                         alignSelf: "flex-start",
-                                        borderColor: accentTextColor,
+                                        borderColor: alpha(theme.palette.primary.main, 0.32),
                                         color: accentTextColor,
-                                        fontWeight: 700,
+                                        bgcolor: alpha(theme.palette.primary.main, 0.07),
+                                        fontWeight: 800,
                                         "& .MuiChip-icon": { color: accentTextColor },
                                     }}
                                 />
@@ -262,7 +284,7 @@ function AboutPage() {
                                         fontWeight: 900,
                                     }}
                                 >
-                                    Quottery is a decentralized prediction market.
+                                    Trade the outcome on Qubic.
                                 </Typography>
                                 <Typography
                                     color="text.secondary"
@@ -272,7 +294,7 @@ function AboutPage() {
                                         maxWidth: 720,
                                     }}
                                 >
-                                    Trade Yes or No outcome shares on real-world events through an on-chain order book.
+                                    Trade YES or NO outcome shares on real-world events through an on-chain order book.
                                     The smart contract handles matching, settlement, and payouts transparently.
                                 </Typography>
                             </Stack>
@@ -282,9 +304,10 @@ function AboutPage() {
                                 elevation={0}
                                 sx={{
                                     p: { xs: 2.5, md: 3 },
-                                    border: `1px solid ${theme.palette.divider}`,
-                                    borderRadius: 2,
+                                    border: `1px solid ${theme.palette.border.soft}`,
+                                    borderRadius: 1.5,
                                     bgcolor: heroPanelBackground,
+                                    boxShadow: "none",
                                 }}
                             >
                                 <Stack spacing={2}>
@@ -299,20 +322,29 @@ function AboutPage() {
                                             tokens per complete Yes + No share pair
                                         </Typography>
                                     </Box>
-                                    <Divider />
+                                    <Divider sx={{ borderColor: theme.palette.border.soft }} />
                                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                                        <Chip label="No house" size="small" />
-                                        <Chip label="No counterparty risk" size="small" />
-                                        <Chip label="Verifiable settlement" size="small" />
+                                        {["Peer-to-peer", "On-chain escrow", "Verifiable settlement"].map((item) => (
+                                            <Chip
+                                                key={item}
+                                                label={item}
+                                                size="small"
+                                                sx={{
+                                                    border: `1px solid ${theme.palette.border.soft}`,
+                                                    bgcolor: theme.palette.surface[2],
+                                                    fontWeight: 800,
+                                                }}
+                                            />
+                                        ))}
                                     </Stack>
                                 </Stack>
                             </Paper>
                         </Grid>
                     </Grid>
-                </Container>
+                </Box>
             </Box>
 
-            <Container maxWidth="lg">
+            <Box sx={{ width: "100%", maxWidth: PAGE_MAX_WIDTH, mx: "auto", px: PAGE_GUTTER_X }}>
                 <Stack spacing={{ xs: 6, md: 8 }}>
                     <Grid container spacing={2.5}>
                         {overviewCards.map((card) => (
@@ -320,8 +352,8 @@ function AboutPage() {
                                 <Card variant="outlined" sx={{ ...surfaceCardSx, width: "100%" }}>
                                     <CardContent>
                                         <Stack spacing={1.5}>
-                                            <Box sx={{ color: accentTextColor }}>{card.icon}</Box>
-                                            <Typography variant="h6" fontWeight={800}>
+                                            <Box sx={iconTileSx}>{card.icon}</Box>
+                                            <Typography variant="h6" sx={{ fontWeight: 900 }}>
                                                 {card.title}
                                             </Typography>
                                             <Typography color="text.secondary" sx={{ lineHeight: 1.65 }}>
@@ -347,14 +379,14 @@ function AboutPage() {
                                         <CardContent>
                                             <Stack spacing={1.5}>
                                                 <Box display="flex" alignItems="center" gap={1.25}>
-                                                    <Box sx={{ color: accentTextColor, display: "flex" }}>
+                                                    <Box sx={iconTileSx}>
                                                         {step.icon}
                                                     </Box>
                                                     <Typography variant="caption" sx={{ color: accentTextColor }} fontWeight={900}>
                                                         {String(index + 1).padStart(2, "0")}
                                                     </Typography>
                                                 </Box>
-                                                <Typography variant="h6" fontWeight={800}>
+                                                <Typography variant="h6" sx={{ fontWeight: 900 }}>
                                                     {step.title}
                                                 </Typography>
                                                 <Typography color="text.secondary" sx={{ lineHeight: 1.65 }}>
@@ -371,9 +403,7 @@ function AboutPage() {
                             sx={{
                                 mt: 2,
                                 p: { xs: 2.5, md: 3 },
-                                border: `1px solid ${theme.palette.divider}`,
-                                borderRadius: 2,
-                                bgcolor: "background.paper",
+                                ...panelSx,
                             }}
                         >
                             <Grid container spacing={2.5} alignItems="center">
@@ -381,7 +411,7 @@ function AboutPage() {
                                     <Stack spacing={1}>
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <RocketLaunchIcon color="primary" />
-                                            <Typography variant="h6" fontWeight={800}>
+                                            <Typography variant="h6" sx={{ fontWeight: 900 }}>
                                                 GARTH entry points
                                             </Typography>
                                         </Box>
@@ -402,9 +432,9 @@ function AboutPage() {
                                             <MuiLink component={RouterLink} to="/utilities" underline="hover">
                                                 Utilities
                                             </MuiLink>
-                                            , the markets on the{" "}
-                                            <MuiLink component={RouterLink} to="/" underline="hover">
-                                                main trading page
+                                            , the{" "}
+                                            <MuiLink component={RouterLink} to="/markets" underline="hover">
+                                                markets page
                                             </MuiLink>{" "}
                                             are ready to use.
                                         </Typography>
@@ -414,11 +444,11 @@ function AboutPage() {
                                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                                         <Button
                                             component={RouterLink}
-                                            to="/"
+                                            to="/markets"
                                             variant="outlined"
                                             size="small"
                                             startIcon={<AccountBalanceWalletIcon fontSize="small" />}
-                                            sx={{ borderRadius: 999, px: 1.5 }}
+                                            sx={{ px: 1.5 }}
                                         >
                                             Connect wallet
                                         </Button>
@@ -428,7 +458,7 @@ function AboutPage() {
                                             size="small"
                                             startIcon={<TokenIcon fontSize="small" />}
                                             title="Gate, MEXC, Bitget, etc."
-                                            sx={{ borderRadius: 999, px: 1.5, cursor: "default" }}
+                                            sx={{ px: 1.5, cursor: "default" }}
                                         >
                                             Buy QUBIC
                                         </Button>
@@ -439,7 +469,7 @@ function AboutPage() {
                                             variant="outlined"
                                             size="small"
                                             startIcon={<CurrencyExchangeIcon fontSize="small" />}
-                                            sx={{ borderRadius: 999, px: 1.5 }}
+                                            sx={{ px: 1.5 }}
                                         >
                                             Buy GARTH
                                         </Button>
@@ -449,7 +479,7 @@ function AboutPage() {
                                             variant="outlined"
                                             size="small"
                                             startIcon={<SwapHorizIcon fontSize="small" />}
-                                            sx={{ borderRadius: 999, px: 1.5 }}
+                                            sx={{ px: 1.5 }}
                                         >
                                             Deposit to contract
                                         </Button>
@@ -459,9 +489,9 @@ function AboutPage() {
                                             variant="contained"
                                             size="small"
                                             startIcon={<TrendingUpIcon fontSize="small" />}
-                                            sx={{ borderRadius: 999, px: 1.5 }}
+                                            sx={{ px: 1.5 }}
                                         >
-                                            Trade events
+                                            Trade markets
                                         </Button>
                                     </Stack>
                                 </Grid>
@@ -477,7 +507,16 @@ function AboutPage() {
                         />
                         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                             {predictionExamples.map((item) => (
-                                <Chip key={item} label={item} variant="outlined" />
+                                <Chip
+                                    key={item}
+                                    label={item}
+                                    variant="outlined"
+                                    sx={{
+                                        borderColor: theme.palette.border.default,
+                                        bgcolor: theme.palette.surface[1],
+                                        fontWeight: 800,
+                                    }}
+                                />
                             ))}
                         </Stack>
                     </Box>
@@ -494,15 +533,13 @@ function AboutPage() {
                                     elevation={0}
                                     sx={{
                                         p: 3,
-                                        border: `1px solid ${theme.palette.divider}`,
-                                        borderRadius: 2,
-                                        bgcolor: "background.paper",
+                                        ...panelSx,
                                     }}
                                 >
                                     <Stack spacing={2}>
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <PaymentsIcon color="primary" />
-                                            <Typography variant="h6" fontWeight={800}>
+                                            <Typography variant="h6" sx={{ fontWeight: 900 }}>
                                                 Trading currency
                                             </Typography>
                                         </Box>
@@ -519,7 +556,7 @@ function AboutPage() {
                                         <Grid item xs={12} sm={6} key={row.title}>
                                             <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                                 <CardContent>
-                                                    <Typography fontWeight={800} sx={{ mb: 0.75 }}>
+                                                    <Typography sx={{ mb: 0.75, fontWeight: 900 }}>
                                                         {row.title}
                                                     </Typography>
                                                     <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
@@ -549,7 +586,7 @@ function AboutPage() {
                                                 <Typography variant="caption" sx={{ color: accentTextColor }} fontWeight={900}>
                                                     STEP {index + 1}
                                                 </Typography>
-                                                <Typography fontWeight={800}>{step.title}</Typography>
+                                                <Typography sx={{ fontWeight: 900 }}>{step.title}</Typography>
                                                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
                                                     {step.body}
                                                 </Typography>
@@ -576,7 +613,7 @@ function AboutPage() {
                                                 <CheckCircleOutlineIcon fontSize="small" />
                                             </ListItemIcon>
                                             <ListItemText
-                                                primary={<Typography fontWeight={800}>{row.label}</Typography>}
+                                                primary={<Typography sx={{ fontWeight: 900 }}>{row.label}</Typography>}
                                                 secondary={row.body}
                                             />
                                         </ListItem>
@@ -588,15 +625,13 @@ function AboutPage() {
                                     elevation={0}
                                     sx={{
                                         p: 3,
-                                        border: `1px solid ${theme.palette.divider}`,
-                                        borderRadius: 2,
-                                        bgcolor: "background.paper",
+                                        ...panelSx,
                                     }}
                                 >
                                     <Stack spacing={1.5}>
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <BalanceIcon color="primary" />
-                                            <Typography variant="h6" fontWeight={800}>
+                                            <Typography variant="h6" sx={{ fontWeight: 900 }}>
                                                 Market maker discounts
                                             </Typography>
                                         </Box>
@@ -620,9 +655,7 @@ function AboutPage() {
                             elevation={0}
                             sx={{
                                 p: { xs: 2.5, md: 3 },
-                                border: `1px solid ${theme.palette.divider}`,
-                                borderRadius: 2,
-                                bgcolor: "background.paper",
+                                ...panelSx,
                             }}
                         >
                             <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
@@ -645,11 +678,11 @@ function AboutPage() {
                                     <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                         <CardContent>
                                             <Stack direction="row" spacing={2} alignItems="flex-start">
-                                                <Box sx={{ color: accentTextColor, pt: 0.25 }}>
+                                                <Box sx={iconTileSx}>
                                                     {role.icon}
                                                 </Box>
                                                 <Box>
-                                                    <Typography fontWeight={800} sx={{ mb: 0.75 }}>
+                                                    <Typography sx={{ mb: 0.75, fontWeight: 900 }}>
                                                         {role.title}
                                                     </Typography>
                                                     <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.65 }}>
@@ -664,7 +697,7 @@ function AboutPage() {
                         </Grid>
                     </Box>
                 </Stack>
-            </Container>
+            </Box>
         </Box>
     );
 }

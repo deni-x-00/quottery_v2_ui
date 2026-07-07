@@ -2,6 +2,14 @@ import { MetaMaskLogo } from './MetaMaskLogo.jsx';
 import { MetaMaskFlaskLogo } from './MetaMaskFlaskLogo.jsx';
 
 import { Button, Typography } from '@mui/material';
+
+const connectButtonSx = {
+  minHeight: 44,
+  borderRadius: 1,
+  textTransform: 'none',
+  fontWeight: 900,
+};
+
 export const InstallButton = () => {
   return (
     <Button
@@ -10,7 +18,7 @@ export const InstallButton = () => {
       size="large"
       onClick={() => (window.location.href = 'https://metamask.io/')}
       startIcon={<MetaMaskLogo />}
-      sx={{ fontWeight: 600 }}
+      sx={connectButtonSx}
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">
@@ -28,7 +36,7 @@ export const ConnectButton = (props) => {
       size="large"
       onClick={props.onClick}
       startIcon={props.isFlask ? <MetaMaskFlaskLogo /> : <MetaMaskLogo />}
-      sx={{ fontWeight: 600 }}
+      sx={connectButtonSx}
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">
@@ -46,7 +54,7 @@ export const ReconnectButton = (props) => {
       size="large"
       onClick={props.onClick}
       startIcon={<MetaMaskLogo />}
-      sx={{ fontWeight: 600 }}
+      sx={connectButtonSx}
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">
@@ -76,7 +84,7 @@ export const HeaderButtons = ({ state, onConnectClick }) => {
       size="large"
       disabled
       startIcon={<MetaMaskLogo />}
-      sx={{ fontWeight: 600 }}
+      sx={connectButtonSx}
       fullWidth
     >
       <Typography variant="button" fontWeight="bold">

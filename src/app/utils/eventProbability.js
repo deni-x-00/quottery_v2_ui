@@ -1,3 +1,5 @@
+import { formatPercent } from "./format";
+
 export const WHOLE_SHARE_PRICE = 100000;
 
 const normalizeOrderPrice = (entry, flipPrice = false) => {
@@ -61,8 +63,5 @@ export const formatChancePercent = (probability) => {
   const percent = Number(probability?.percent);
   if (!Number.isFinite(percent)) return null;
   const clamped = Math.max(0, Math.min(100, percent));
-  return `${clamped.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })}%`;
+  return formatPercent(clamped);
 };

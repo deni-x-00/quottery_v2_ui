@@ -14,75 +14,69 @@ const DISCORD_URL = 'https://discord.gg/5WNEHjEFpf';
 const TERMS_URL = 'https://qubic.org/terms-of-service';
 const PRIVACY_URL = 'https://qubic.org/privacy-policy';
 
+const heroStats = [
+  { label: 'Whole share', value: '100,000' },
+  { label: 'Trading asset', value: 'GARTH' },
+  { label: 'Settlement', value: 'On-chain' },
+];
+
 const pillars = [
   {
     icon: <HubIcon />,
-    title: 'Peer-to-peer markets',
-    text: 'Trade Yes or No outcome shares directly through the smart contract order book.',
+    title: 'Peer-to-peer order book',
+    text: 'Trade YES or NO outcome shares through smart-contract bids, asks, matches, and settlement.',
   },
   {
     icon: <BalanceIcon />,
-    title: 'No house edge',
-    text: 'Orders match between users. Funds and shares are locked by contract rules, not by a central counterparty.',
+    title: 'Transparent mechanics',
+    text: 'Prices, volume, open orders, positions, transfers, and payouts are indexed from Qubic data.',
   },
   {
     icon: <GavelIcon />,
-    title: 'Dispute path',
-    text: 'After the operator publishes a result, users can challenge it and Qubic computors vote on the outcome.',
+    title: 'Resolution path',
+    text: 'Operators publish outcomes, users can dispute within the protocol window, and final claims settle on-chain.',
   },
 ];
 
 const qubicPoints = [
   {
-    label: 'Smart contract',
-    text: 'Market rules, order flows, settlement, and claims run through Qubic contract logic.',
+    label: 'Smart contract execution',
+    text: 'Market creation, order matching, finalization, claims, and governance actions run through Qubic contract logic.',
   },
   {
-    label: 'Computor verification',
-    text: 'Disputed outcomes can be resolved by Qubic computors instead of a single source.',
+    label: 'Index-backed interface',
+    text: 'The app reads decoded events from the database so markets, portfolios, and archives stay fast to inspect.',
   },
   {
-    label: 'Asset compatibility',
-    text: 'The app is designed around Qubic wallet and asset-management flows.',
+    label: 'Wallet-native flows',
+    text: 'Trading, reward claiming, transfers, and governance actions stay tied to the connected Qubic identity.',
   },
 ];
 
 const faqItems = [
   {
     question: 'What is Quottery?',
-    answer: 'Quottery is a peer-to-peer prediction market platform on Qubic. Under the interface, it runs as a smart-contract order book where users trade Yes or No shares for events with clear outcomes.',
+    answer: 'Quottery is a Qubic-native peer-to-peer prediction market. Users trade YES and NO outcome shares on events with clear resolution rules.',
   },
   {
     question: 'How does trading work?',
-    answer: 'The contract keeps bid and ask orders for both outcomes. It supports normal buy/sell matches, minting opposite-side shares when two buyers meet, and merging opposite-side sells when two holders exit.',
+    answer: 'The contract keeps bid and ask orders for both outcomes. It supports direct matches, opposite-side share creation, and exits through sell-side liquidity.',
   },
   {
-    question: 'What is the payout?',
-    answer: 'The contract uses a whole share price of 100,000. Example: if a YES share costs 10,000 and a NO share costs 90,000, the total equals 100,000. After finalization, the winning share can always be claimed for the full 100,000, while the losing share expires worthless.',
+    question: 'How is price displayed?',
+    answer: 'The contract uses a whole share price of 100,000. A price of 45,000 is displayed as 45%, and the opposite side is priced against the same 100,000 invariant.',
   },
   {
     question: 'What asset is used for trading?',
-    answer: 'The current contract configuration uses GARTH as the managed trading asset. The code keeps it under the QUSD field as a temporary replacement until native QUSD is available.',
+    answer: 'The current contract configuration uses GARTH as the managed trading asset. The code still maps it through the historical QUSD field until native QUSD is available.',
   },
   {
     question: 'Who creates and resolves events?',
-    answer: 'The Game Operator creates events and publishes results after the event end date. Publishing a result requires a dispute deposit of 1B QUs. If there is no dispute during the dispute window of 1,000 ticks, the event can then be finalized.',
-  },
-  {
-    question: 'What happens in a dispute?',
-    answer: 'To dispute, a user calls the Dispute action for the event and posts the same 1B QUs dispute deposit before finalization. Qubic computors vote Yes or No. If the Game Operator result was wrong, the operator loses its deposit, correct computors receive their share, and the disputer receives the winner share of the deposit pot. If the Game Operator result was correct, the disputer loses its deposit, correct computors receive their share, and the Game Operator receives the winner share.',
+    answer: 'The Game Operator creates events and publishes results after the event end date. Publishing requires the protocol dispute deposit, then finalization can happen after the dispute window.',
   },
   {
     question: 'When are fees charged?',
-    answer: 'Fees are charged only on value paid out by the contract, such as matched sells and winning rewards. Order placement, cancellation, and refunds are not subject to fees. The current protocol fee on these payouts is 5%. If governance changes it, this page should be updated.',
-  },
-  {
-    question: 'Is there governance?',
-    answer: 'Yes. QTRYGOV holders control protocol parameters such as operation fee, shareholder fee, burn fee, dispute deposit, daily event fee, and Game Operator address. The contract has 676 QTRYGOV tokens. Matching proposals are weighted by held tokens, and a proposal can apply when it reaches the 451 vote threshold.',
-  },
-  {
-    question: 'What is the anti-spam cost?',
-    answer: 'The contract currently uses an anti-spam amount of 11 QUs. Actions such as adding or cancelling orders must include 11 QUs. If more is sent, the extra amount is refunded by the contract; if less is sent, the action is rejected.',
+    answer: 'Fees are charged on value paid out by the contract, such as matched sells and winning rewards. Order placement, cancellation, and returned funds are not subject to the operation fee.',
   },
 ];
 
@@ -95,67 +89,78 @@ function MainLanding() {
           <span>Quottery</span>
         </a>
         <nav className="mainLanding__nav" aria-label="Primary navigation">
+          <a href="#markets">Markets</a>
           <a href="#protocol">Protocol</a>
           <a href="#faq">FAQ</a>
-          <a href={APP_URL}>Open app</a>
+          <a className="mainLanding__navCta" href={APP_URL}>Open app</a>
         </nav>
       </header>
 
       <section className="mainLanding__hero">
         <div className="mainLanding__copy">
-          <p className="mainLanding__eyebrow">Prediction market on QUBIC</p>
-          <h1>Quottery</h1>
+          <p className="mainLanding__eyebrow">
+            <span aria-hidden="true" />
+            Qubic-native prediction markets
+          </p>
+          <h1>
+            Trade the <span>outcome</span>
+          </h1>
           <p className="mainLanding__lead">
-            Peer-to-peer prediction market platform. Predict anything with a
-            clear outcome. No house. No middleman. Just code.
+            Quottery is a peer-to-peer market for trading YES and NO outcomes
+            with transparent order books, indexed portfolios, and on-chain
+            settlement.
           </p>
           <div className="mainLanding__actions">
             <a className="mainLanding__button mainLanding__button--primary" href={APP_URL}>
-              Open app <ArrowOutwardIcon fontSize="small" />
+              Explore Markets <ArrowOutwardIcon fontSize="small" />
             </a>
-            <a className="mainLanding__button mainLanding__button--ghost" href="#faq">
-              Read FAQ
+            <a className="mainLanding__button mainLanding__button--ghost" href="#protocol">
+              View Protocol
             </a>
           </div>
+          <dl className="mainLanding__heroStats" aria-label="Protocol facts">
+            {heroStats.map((stat) => (
+              <div key={stat.label}>
+                <dt>{stat.label}</dt>
+                <dd>{stat.value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
 
-        <aside className="mainLanding__market" aria-label="Market mechanics preview">
-          <div className="mainLanding__marketHeader">
-            <span>Outcome market</span>
-            <strong>YES / NO</strong>
+        <aside className="mainLanding__market" id="markets" aria-label="Market preview">
+          <div className="mainLanding__marketTop">
+            <span>Featured market</span>
+            <strong>Open</strong>
           </div>
-          <div className="mainLanding__question">
-            Will the event resolve YES?
+          <div className="mainLanding__marketQuestion">
+            Will QUBIC close above $1111/bQUBIC on May 31, 2026?
           </div>
-          <div className="mainLanding__split">
-            <span className="mainLanding__yes">YES 64%</span>
-            <span className="mainLanding__no">NO 36%</span>
+          <div className="mainLanding__outcomes" aria-label="Outcome prices">
+            <div className="mainLanding__outcome mainLanding__outcome--yes">
+              <span>YES</span>
+              <strong>57.5%</strong>
+            </div>
+            <div className="mainLanding__outcome mainLanding__outcome--no">
+              <span>NO</span>
+              <strong>42.5%</strong>
+            </div>
           </div>
-          <dl className="mainLanding__stats">
-            <div>
-              <dt>Whole share</dt>
-              <dd>100,000</dd>
-            </div>
-            <div>
-              <dt>Trading asset</dt>
-              <dd>GARTH</dd>
-            </div>
-            <div>
-              <dt>Settlement</dt>
-              <dd>On-chain</dd>
-            </div>
-            <div>
-              <dt>Dispute window</dt>
-              <dd>1,000 ticks</dd>
-            </div>
-          </dl>
+          <div className="mainLanding__depth" aria-hidden="true">
+            <span style={{ width: '58%' }} />
+            <span style={{ width: '42%' }} />
+          </div>
+          <div className="mainLanding__marketMeta">
+            <span>Traded volume <strong>12M</strong></span>
+            <span>Open orders <strong>1.7M</strong></span>
+          </div>
         </aside>
       </section>
 
       <section className="mainLanding__section" id="protocol">
         <div className="mainLanding__sectionTitle">
           <p>Protocol</p>
-          <h2>Simple interface, explicit contract rules</h2>
+          <h2>Clear market mechanics, visible at every step</h2>
         </div>
         <div className="mainLanding__pillars">
           {pillars.map((item) => (
@@ -171,14 +176,13 @@ function MainLanding() {
       <section className="mainLanding__qubic" id="qubic">
         <div className="mainLanding__qubicHeader">
           <p>Built on Qubic</p>
-          <h2>Quottery and Qubic: a perfect match</h2>
+          <h2>On-chain settlement with an indexed interface</h2>
         </div>
         <div className="mainLanding__qubicCopy">
           <p>
-            Quottery is powered by the Qubic protocol. Its smart-contract order
-            book handles market creation, order matching, settlement, disputes,
-            and governance while staying compatible with Qubic-native wallet and
-            asset flows.
+            Quottery combines Qubic smart-contract execution with a live indexer
+            for readable market history, portfolio state, trades, transfers,
+            archives, and rewards.
           </p>
           <a href="https://qubic.org" target="_blank" rel="noreferrer">
             Learn Qubic <ArrowOutwardIcon fontSize="small" />
@@ -213,11 +217,8 @@ function MainLanding() {
       </section>
 
       <section className="mainLanding__cta">
-        <h2>Start Winning Today</h2>
-        <p>
-          Explore decentralized prediction markets with on-chain settlement,
-          transparent rules, and Qubic-native execution.
-        </p>
+        <p>Start with live markets</p>
+        <h2>Explore active outcome markets on Qubic</h2>
         <a className="mainLanding__button mainLanding__button--primary" href={APP_URL}>
           Open Quottery <ArrowOutwardIcon fontSize="small" />
         </a>
@@ -229,7 +230,7 @@ function MainLanding() {
             <img src={quotteryLogo} alt="" />
             <strong>Quottery</strong>
           </div>
-          <span>powered by qubic</span>
+          <span>powered by Qubic</span>
         </div>
         <div className="mainLanding__socials" aria-label="Social links">
           <a href={X_URL} target="_blank" rel="noreferrer" aria-label="Quottery on X">

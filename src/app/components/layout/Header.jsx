@@ -1,279 +1,456 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from "react";
 import {
-  AppBar, Toolbar, Box, IconButton, Container, useTheme,
-  useScrollTrigger, Button, Typography, Menu, MenuItem, useMediaQuery,
-} from '@mui/material';
-import { Link } from 'react-router-dom';
-import ConnectLink from '../qubic/connect/ConnectLink';
-import { useThemeContext } from '../../contexts/ThemeContext';
-import { useConfig } from '../../contexts/ConfigContext';
-import logoLight from '../../../assets/logo/logo-text-on-light.svg';
-import logoDark from '../../../assets/logo/logo-text-on-dark.svg';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import { useQuotteryContext } from '../../contexts/QuotteryContext';
-import { useBalanceNotifier } from '../../hooks/useBalanceNotifier';
-import TickIndicator from '../TickIndicator';
-import PriceTicker from '../PriceTicker';
+  AppBar,
+  Box,
+  Button,
+  Grow,
+  IconButton,
+  Menu,
+  MenuItem,
+  Toolbar,
+  Tooltip,
+  Typography,
+  alpha,
+  useMediaQuery,
+  useScrollTrigger,
+  useTheme,
+} from "@mui/material";
+import { Link, useLocation } from "react-router-dom";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import MenuIcon from "@mui/icons-material/Menu";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import ConnectLink from "../qubic/connect/ConnectLink";
+import PriceTicker from "../PriceTicker";
+import TickIndicator from "../TickIndicator";
+import { useConfig } from "../../contexts/ConfigContext";
+import { useQuotteryContext } from "../../contexts/QuotteryContext";
+import { useThemeContext } from "../../contexts/ThemeContext";
+import { useBalanceNotifier } from "../../hooks/useBalanceNotifier";
+import { PAGE_GUTTER_X, PAGE_MAX_WIDTH } from "../ui/layout";
+import quotteryLogo from "../../../assets/quottery.svg";
+
+const primaryNav = [
+  { label: "Home", to: "/" },
+  { label: "Markets", to: "/markets" },
+  { label: "Leaderboard", to: "/leaderboard" },
+];
+
+const secondaryNav = [
+  { label: "About", to: "/about" },
+  { label: "Governance", to: "/governance" },
+  { label: "Utilities", to: "/utilities" },
+];
+
+const headerContainerSx = {
+  width: "100%",
+  maxWidth: PAGE_MAX_WIDTH,
+  mx: "auto",
+  px: PAGE_GUTTER_X,
+};
+
+function QuotteryMark() {
+  return (
+    <Box
+      component="img"
+      src={quotteryLogo}
+      alt=""
+      aria-hidden="true"
+      sx={{
+        width: 30,
+        height: 30,
+        display: "block",
+        objectFit: "contain",
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
+function isActiveRoute(pathname, to) {
+  if (to === "/") return pathname === "/";
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
 
 const Header = () => {
   const theme = useTheme();
-  const isDesktopNav = useMediaQuery(theme.breakpoints.up('md'));
+  const location = useLocation();
+  const isDesktopNav = useMediaQuery(theme.breakpoints.up("md"));
   const { isDarkMode, toggleTheme } = useThemeContext();
   const { isConnected } = useConfig();
   const { walletPublicIdentity, fetchBalance } = useQuotteryContext();
   const { refreshBalanceWithNotifications } = useBalanceNotifier();
-  const [refreshing, setRefreshing] = useState(false);
   const [moreAnchorEl, setMoreAnchorEl] = useState(null);
+  const [mobileAnchorEl, setMobileAnchorEl] = useState(null);
   const moreOpenTimerRef = useRef(null);
   const moreCloseTimerRef = useRef(null);
+
+  const scrollTrigger = useScrollTrigger({ disableHysteresis: true, threshold: 24 });
+  const navItems = isConnected
+    ? [...primaryNav, { label: "Portfolio", to: "/portfolio" }]
+    : primaryNav;
+  const mobileItems = [...navItems, ...secondaryNav];
 
   useEffect(() => {
     let intervalId;
     const pollBalance = async () => {
-      if (!walletPublicIdentity || typeof fetchBalance !== 'function') return;
+      if (!walletPublicIdentity || typeof fetchBalance !== "function") return;
       await refreshBalanceWithNotifications();
     };
-    if (walletPublicIdentity && typeof fetchBalance === 'function') {
+    if (walletPublicIdentity && typeof fetchBalance === "function") {
       intervalId = setInterval(pollBalance, 60000);
     }
-    return () => { if (intervalId) clearInterval(intervalId); };
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [walletPublicIdentity, fetchBalance, refreshBalanceWithNotifications]);
 
-  const handleRefreshBalance = async () => {
-    if (refreshing) return;
-    try { setRefreshing(true); await refreshBalanceWithNotifications(); }
-    finally { setRefreshing(false); }
-  };
   const clearMoreOpenTimer = () => {
     if (moreOpenTimerRef.current) {
       clearTimeout(moreOpenTimerRef.current);
       moreOpenTimerRef.current = null;
     }
   };
+
   const clearMoreCloseTimer = () => {
     if (moreCloseTimerRef.current) {
       clearTimeout(moreCloseTimerRef.current);
       moreCloseTimerRef.current = null;
     }
   };
+
   const handleMoreOpen = (event) => {
     clearMoreOpenTimer();
     clearMoreCloseTimer();
     setMoreAnchorEl(event.currentTarget);
   };
+
   const handleMoreClose = () => {
     clearMoreOpenTimer();
     clearMoreCloseTimer();
     setMoreAnchorEl(null);
   };
+
   const scheduleMoreOpen = (event) => {
     if (!isDesktopNav) return;
     const anchor = event.currentTarget;
     clearMoreCloseTimer();
     clearMoreOpenTimer();
-    moreOpenTimerRef.current = setTimeout(() => setMoreAnchorEl(anchor), 120);
+    moreOpenTimerRef.current = setTimeout(() => setMoreAnchorEl(anchor), 90);
   };
+
   const scheduleMoreClose = () => {
     if (!isDesktopNav) return;
     clearMoreOpenTimer();
     clearMoreCloseTimer();
-    moreCloseTimerRef.current = setTimeout(() => setMoreAnchorEl(null), 400);
-  };
-  const handleMoreClick = (event) => {
-    if (moreAnchorEl) handleMoreClose();
-    else handleMoreOpen(event);
+    moreCloseTimerRef.current = setTimeout(() => setMoreAnchorEl(null), 620);
   };
 
-  useEffect(() => () => {
-    clearMoreOpenTimer();
-    clearMoreCloseTimer();
+  useEffect(() => {
+    return () => {
+      clearMoreOpenTimer();
+      clearMoreCloseTimer();
+    };
   }, []);
 
-  const scrollTrigger = useScrollTrigger({ disableHysteresis: true, threshold: 100 });
-  const navButtonSx = { flexShrink: 0, minWidth: 'max-content', px: { xs: 1, sm: 1.25 } };
-  const navTextSx = { fontSize: { xs: '0.78rem', sm: '0.9rem', md: '1rem' }, fontWeight: 600, whiteSpace: 'nowrap' };
-  const moreButton = (
-      <Button
-          color='inherit'
-          size='small'
-          onClick={handleMoreClick}
-          onMouseEnter={isDesktopNav ? scheduleMoreOpen : undefined}
-          onMouseLeave={isDesktopNav ? scheduleMoreClose : undefined}
-          onFocus={isDesktopNav ? handleMoreOpen : undefined}
-          sx={navButtonSx}
-      >
-        <Typography color="text.secondary" sx={navTextSx}>More</Typography>
-      </Button>
-  );
+  const navButtonSx = (active = false) => ({
+    minHeight: 34,
+    px: 1.35,
+    borderRadius: 1,
+    border: `1px solid ${active ? theme.palette.primary.main : "transparent"}`,
+    color: active ? theme.palette.primary.main : theme.palette.text.secondary,
+    bgcolor: active ? alpha(theme.palette.primary.main, 0.13) : "transparent",
+    fontSize: "0.82rem",
+    fontWeight: 800,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    "&:hover": {
+      color: active ? theme.palette.primary.main : theme.palette.text.primary,
+      borderColor: active ? theme.palette.primary.main : theme.palette.border.default,
+      bgcolor: active ? alpha(theme.palette.primary.main, 0.18) : theme.palette.surface[1],
+    },
+  });
+
+  const iconButtonSx = {
+    width: 36,
+    height: 36,
+    border: `1px solid ${theme.palette.border.soft}`,
+    color: theme.palette.text.secondary,
+    bgcolor: theme.palette.surface[1],
+    "&:hover": {
+      color: theme.palette.text.primary,
+      borderColor: theme.palette.border.default,
+      bgcolor: theme.palette.surface[2],
+    },
+  };
+
   const moreMenu = (
-      <Menu
-          anchorEl={moreAnchorEl}
-          open={Boolean(moreAnchorEl)}
-          onClose={handleMoreClose}
-          disableScrollLock
-          keepMounted
-          transitionDuration={180}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-          MenuListProps={{
-            onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
-            onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
+    <Menu
+      anchorEl={moreAnchorEl}
+      open={Boolean(moreAnchorEl)}
+      onClose={handleMoreClose}
+      disableScrollLock
+      keepMounted
+      TransitionComponent={Grow}
+      transitionDuration={{ enter: 180, exit: 140 }}
+      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      transformOrigin={{ vertical: "top", horizontal: "right" }}
+      MenuListProps={{
+        onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
+        onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
+        sx: { py: 0.75 },
+      }}
+      PaperProps={{
+        onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
+        onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
+        sx: {
+          mt: 0.8,
+          minWidth: 176,
+          bgcolor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.border.default}`,
+          borderRadius: 1.5,
+          boxShadow: "0 20px 44px rgba(0,0,0,0.44)",
+          overflow: "visible",
+          "&::before": {
+            content: '""',
+            position: "absolute",
+            top: -10,
+            left: 0,
+            right: 0,
+            height: 10,
+          },
+          "& .MuiMenu-list": {
+            overflow: "hidden",
+            borderRadius: 1.5,
+          },
+        },
+      }}
+    >
+      {secondaryNav.map((item) => (
+        <MenuItem
+          key={item.to}
+          component={Link}
+          to={item.to}
+          onClick={handleMoreClose}
+          selected={isActiveRoute(location.pathname, item.to)}
+          sx={{
+            minHeight: 40,
+            fontWeight: 800,
+            color: "text.secondary",
+            "&.Mui-selected": {
+              color: "primary.main",
+              bgcolor: alpha(theme.palette.primary.main, 0.12),
+            },
+            "&:hover": {
+              color: "text.primary",
+              bgcolor: theme.palette.surface[2],
+            },
           }}
-          PaperProps={{
-            onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
-            onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
-          }}
-      >
-        <MenuItem component={Link} to='/about' onClick={handleMoreClose}>About</MenuItem>
-        <MenuItem component={Link} to='/governance' onClick={handleMoreClose}>Governance</MenuItem>
-        <MenuItem component={Link} to='/utilities' onClick={handleMoreClose}>Utilities</MenuItem>
-      </Menu>
+        >
+          {item.label}
+        </MenuItem>
+      ))}
+    </Menu>
+  );
+
+  const mobileMenu = (
+    <Menu
+      anchorEl={mobileAnchorEl}
+      open={Boolean(mobileAnchorEl)}
+      onClose={() => setMobileAnchorEl(null)}
+      disableScrollLock
+      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      transformOrigin={{ vertical: "top", horizontal: "right" }}
+      PaperProps={{
+        sx: {
+          mt: 1,
+          width: 220,
+          bgcolor: theme.palette.background.paper,
+          border: `1px solid ${theme.palette.border.default}`,
+          borderRadius: 1.5,
+        },
+      }}
+    >
+      {mobileItems.map((item) => (
+        <MenuItem
+          key={item.to}
+          component={Link}
+          to={item.to}
+          selected={isActiveRoute(location.pathname, item.to)}
+          onClick={() => setMobileAnchorEl(null)}
+          sx={{ minHeight: 42, fontWeight: 800 }}
+        >
+          {item.label}
+        </MenuItem>
+      ))}
+    </Menu>
   );
 
   return (
-      <>
-        <AppBar sx={{
-          background: theme.palette.background.paper,
-          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-          boxShadow: scrollTrigger ? '0 8px 32px rgba(0,0,0,0.12)' : 'none',
-          position: 'sticky', top: 0, left: 0, width: '100%', zIndex: theme.zIndex.appBar,
-        }}>
-          <Container maxWidth='xxl' sx={{ px: { xs: 1.5, sm: 2, md: 3 } }}>
-            <Toolbar disableGutters sx={{
-              display: 'flex',
-              flexDirection: { xs: 'column', md: 'row' },
-              justifyContent: 'space-between',
-              alignItems: 'stretch',
-              gap: { xs: 0.75, md: 2 },
-              minHeight: { xs: isConnected ? 104 : 60, md: 72 },
-              py: { xs: 0.75, md: 0 },
-              px: { xs: 0, md: 2, lg: 4 },
-            }}>
-              <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: { xs: 'space-between', md: 'flex-start' },
-                gap: { xs: 1, sm: 2 },
-                minWidth: 0,
-              }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, minWidth: 0 }}>
-                <IconButton component={Link} to='/' edge='start' color='inherit' disableRipple
-                            sx={{ p: 0, flexShrink: 0, '&:hover': { backgroundColor: 'transparent' } }}>
-                  <Box component='img' src={isDarkMode ? logoDark : logoLight} alt='logo'
-                       sx={{ height: { xs: 28, sm: 36, md: 40 }, maxWidth: { xs: 150, sm: 220 }, display: 'block' }} />
-                </IconButton>
-                <TickIndicator />
-                {isDesktopNav && <PriceTicker />}
-                </Box>
-                <Box sx={{
-                  display: { xs: 'flex', md: 'none' },
-                  alignItems: 'center',
-                  gap: 0.5,
-                  flexShrink: 0,
-                }}>
-                  {isConnected && (
-                      <>
-                        <IconButton onClick={handleRefreshBalance} color='inherit' size='small' disabled={refreshing}>
-                          <RefreshIcon fontSize='small'
-                                       sx={refreshing ? {
-                                         animation: 'spin 0.8s linear infinite',
-                                         '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
-                                       } : undefined} />
-                        </IconButton>
-                        <ConnectLink />
-                      </>
-                  )}
-                  <IconButton
-                      aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
-                      color='inherit'
-                      onClick={toggleTheme}
-                      size='small'
-                      sx={{
-                        border: `1px solid ${theme.palette.divider}`,
-                        color: theme.palette.text.secondary,
-                        bgcolor: theme.palette.background.default,
-                        transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
-                        '&:hover': {
-                          bgcolor: theme.palette.action.hover,
-                          color: theme.palette.text.primary,
-                        },
-                      }}
-                  >
-                    {isDarkMode ? <LightModeIcon fontSize='small' /> : <DarkModeIcon fontSize='small' />}
-                  </IconButton>
-                </Box>
-              </Box>
+    <AppBar
+      position="sticky"
+      elevation={0}
+      sx={{
+        top: 0,
+        zIndex: theme.zIndex.appBar,
+        bgcolor: alpha(theme.palette.background.default, scrollTrigger ? 0.92 : 0.86),
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        borderBottom: `1px solid ${scrollTrigger ? theme.palette.border.default : theme.palette.border.soft}`,
+        boxShadow: scrollTrigger ? "0 12px 36px rgba(0,0,0,0.22)" : "none",
+        transition: "background-color 150ms ease, border-color 150ms ease, box-shadow 150ms ease",
+      }}
+    >
+      <Box
+        sx={{
+          borderBottom: `1px solid ${theme.palette.border.soft}`,
+          bgcolor: alpha(theme.palette.background.default, 0.62),
+        }}
+      >
+        <Box sx={headerContainerSx}>
+          <Box
+            sx={{
+              minHeight: { xs: 30, md: 34 },
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: { xs: 1, md: 2 },
+              overflow: "hidden",
+            }}
+          >
+            <Box sx={{ minWidth: 0, overflow: "hidden" }}>
+              <PriceTicker showIcons={false} topBar />
+            </Box>
+            <Box sx={{ display: "flex", justifyContent: "flex-end", minWidth: 0, flexShrink: 0 }}>
+              <TickIndicator topBar />
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+      <Box sx={headerContainerSx}>
+        <Toolbar
+          disableGutters
+          sx={{
+            minHeight: { xs: 56, md: 60 },
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr auto", md: "auto 1fr auto" },
+            alignItems: "center",
+            gap: { xs: 1, md: 2 },
+          }}
+        >
+          <Box
+            component={Link}
+            to="/"
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 1,
+              minWidth: 0,
+              color: "text.primary",
+              textDecoration: "none",
+            }}
+          >
+            <QuotteryMark />
+            <Typography
+              component="span"
+              sx={{
+                display: { xs: "none", sm: "inline" },
+                fontSize: "1rem",
+                fontWeight: 800,
+                letterSpacing: 0,
+                lineHeight: 1,
+              }}
+            >
+              Quottery
+            </Typography>
+          </Box>
 
-              <Box sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: { xs: 'flex-start', md: 'flex-end' },
-                gap: { xs: 0.5, sm: 1, md: 2 },
-                minWidth: 0,
-                overflowX: { xs: 'auto', md: 'visible' },
-                overflowY: 'hidden',
-                pb: { xs: 0.25, md: 0 },
-                scrollbarWidth: 'none',
-                '&::-webkit-scrollbar': { display: 'none' },
-              }}>
-                {!isDesktopNav && <PriceTicker />}
-                <Button component={Link} to='/events' color='inherit' size='small' sx={navButtonSx}>
-                  <Typography color="text.secondary" sx={navTextSx}>Markets</Typography>
-                </Button>
-                <Button component={Link} to='/leaderboard' color='inherit' size='small' sx={navButtonSx}>
-                  <Typography color="text.secondary" sx={navTextSx}>Leaderboard</Typography>
-                </Button>
-                {isConnected && (
-                    <>
-                      <Button component={Link} to='/portfolio' color='inherit' size='small' sx={navButtonSx}>
-                        <Typography color="text.secondary" sx={navTextSx}>Portfolio</Typography>
-                      </Button>
-                      {moreButton}
-                      {moreMenu}
-                      <IconButton onClick={handleRefreshBalance} color='inherit' size='small' disabled={refreshing} sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
-                        <RefreshIcon fontSize='small'
-                                     sx={refreshing ? {
-                                       animation: 'spin 0.8s linear infinite',
-                                       '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } },
-                                     } : undefined} />
-                      </IconButton>
-                      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-                        <ConnectLink />
-                      </Box>
-                    </>
-                )}
-                {!isConnected && (
-                    <>
-                      {moreButton}
-                      {moreMenu}
-                    </>
-                )}
-                <IconButton
-                    aria-label={`Switch to ${isDarkMode ? 'light' : 'dark'} mode`}
-                    color='inherit'
-                    onClick={toggleTheme}
-                    size='small'
+          <Box
+            component="nav"
+            aria-label="Main navigation"
+            sx={{
+              display: { xs: "none", md: "flex" },
+              justifyContent: "center",
+              alignItems: "center",
+              gap: 0.5,
+              minWidth: 0,
+            }}
+          >
+            {navItems.map((item) => (
+              <Button
+                key={item.to}
+                component={Link}
+                to={item.to}
+                size="small"
+                sx={navButtonSx(isActiveRoute(location.pathname, item.to))}
+              >
+                {item.label}
+              </Button>
+            ))}
+            <Box
+              onMouseEnter={scheduleMoreOpen}
+              onMouseLeave={scheduleMoreClose}
+              sx={{ position: "relative", display: "inline-flex", py: 0.75, my: -0.75 }}
+            >
+              <Button
+                size="small"
+                onClick={(event) => (moreAnchorEl ? handleMoreClose() : handleMoreOpen(event))}
+                onFocus={handleMoreOpen}
+                aria-haspopup="menu"
+                aria-expanded={Boolean(moreAnchorEl) ? "true" : undefined}
+                endIcon={
+                  <MoreHorizIcon
                     sx={{
-                      display: { xs: 'none', md: 'inline-flex' },
-                      border: `1px solid ${theme.palette.divider}`,
-                      color: theme.palette.text.secondary,
-                      bgcolor: theme.palette.background.default,
-                      transition: 'background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease',
-                      '&:hover': {
-                        bgcolor: theme.palette.action.hover,
-                        color: theme.palette.text.primary,
-                      },
+                      fontSize: 18,
+                      transition: "transform 180ms ease, opacity 180ms ease",
+                      transform: moreAnchorEl ? "translateY(1px)" : "translateY(0)",
+                      opacity: moreAnchorEl ? 1 : 0.8,
                     }}
-                >
-                  {isDarkMode ? <LightModeIcon fontSize='small' /> : <DarkModeIcon fontSize='small' />}
-                </IconButton>
-              </Box>
-            </Toolbar>
-          </Container>
-        </AppBar>
-      </>
+                  />
+                }
+                sx={navButtonSx(secondaryNav.some((item) => isActiveRoute(location.pathname, item.to)) || Boolean(moreAnchorEl))}
+              >
+                More
+              </Button>
+            </Box>
+            {moreMenu}
+          </Box>
+
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "flex-end",
+              alignItems: "center",
+              gap: { xs: 0.75, md: 1 },
+              minWidth: 0,
+            }}
+          >
+            <Box sx={{ display: { xs: "none", sm: "block" } }}>
+              <ConnectLink />
+            </Box>
+            <Tooltip title={`Switch to ${isDarkMode ? "light" : "dark"} mode`} arrow>
+              <IconButton
+                aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
+                onClick={toggleTheme}
+                size="small"
+                sx={{ ...iconButtonSx, display: { xs: "none", md: "inline-flex" } }}
+              >
+                {isDarkMode ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+            <IconButton
+              aria-label="Open navigation"
+              onClick={(event) => setMobileAnchorEl(event.currentTarget)}
+              size="small"
+              sx={{ ...iconButtonSx, display: { xs: "inline-flex", md: "none" } }}
+            >
+              <MenuIcon fontSize="small" />
+            </IconButton>
+            {mobileMenu}
+          </Box>
+        </Toolbar>
+      </Box>
+    </AppBar>
   );
 };
 

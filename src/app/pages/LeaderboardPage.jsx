@@ -6,18 +6,12 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   IconButton,
   InputAdornment,
   Pagination,
   Paper,
   Stack,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Tabs,
   TextField,
   Tooltip,
@@ -29,9 +23,11 @@ import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
+import { useIdentitySearch, useLeaderboard } from "../hooks/data";
 import usePageTitle from "../hooks/usePageTitle";
+import { formatNumeric, formatSignedAmount, normalizeIdentity, shortIdentity } from "../utils/format";
+import { ActionIconButton, DataTable, MetricGrid, PageHeader, PageShell } from "../components/ui";
 
-const API_BASE = process.env.REACT_APP_QUOTTERY_API_BASE || "";
 const METRICS = {
   PNL: "pnl",
   VOLUME: "volume",
@@ -39,114 +35,20 @@ const METRICS = {
 const PAGE_SIZE = 50;
 const SEARCH_RESET_REASON = "reset";
 const IDENTITY_RE = /^[A-Z]{56,60}$/;
-const POSITIVE_COLOR = "#39c979";
-const NEGATIVE_COLOR = "#ef6674";
-
-function apiUrl(path) {
-  return `${API_BASE}${path}`;
-}
-
-function normalizeIdentity(value) {
-  return String(value || "").trim().toUpperCase();
-}
-
-function formatNumeric(value, maxFractionDigits = 2) {
-  if (value === null || value === undefined || value === "") return "-";
-  const raw = String(value);
-  const sign = raw.startsWith("-") ? "-" : "";
-  const unsigned = sign ? raw.slice(1) : raw;
-  const [integerPart, fractionPart = ""] = unsigned.split(".");
-  const integer = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
-  const fraction = fractionPart.slice(0, maxFractionDigits).replace(/0+$/g, "");
-  return `${sign}${integer}${fraction ? `.${fraction}` : ""}`;
-}
-
-function formatSignedAmount(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num) || num === 0) return "0";
-  return `${num > 0 ? "+" : "-"}${formatNumeric(Math.abs(num))}`;
-}
-
-function shortIdentity(value) {
-  if (!value) return "-";
-  const text = String(value);
-  return text.length > 13 ? `${text.slice(0, 5)}...${text.slice(-5)}` : text;
-}
 
 const LeaderboardPage = () => {
   usePageTitle("Leaderboard");
   const theme = useTheme();
   const navigate = useNavigate();
   const [metric, setMetric] = useState(METRICS.PNL);
-  const [leaders, setLeaders] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const [searchOptions, setSearchOptions] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-
-  const loadLeaderboard = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      const response = await fetch(apiUrl(`/api/quottery/leaderboard?metric=${metric}&limit=1000`));
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(body?.details || body?.error || `Request failed with ${response.status}`);
-      }
-      setLeaders(body.leaders || []);
-    } catch (err) {
-      setLeaders([]);
-      setError(err.message || "Failed to load leaderboard");
-    } finally {
-      setLoading(false);
-    }
-  }, [metric]);
-
-  useEffect(() => {
-    loadLeaderboard();
-  }, [loadLeaderboard]);
-
-  useEffect(() => {
-    const normalized = normalizeIdentity(search);
-    if (!normalized) {
-      setSearchOptions([]);
-      setSearchLoading(false);
-      return undefined;
-    }
-
-    let cancelled = false;
-    const timer = setTimeout(async () => {
-      setSearchLoading(true);
-      try {
-        const response = await fetch(apiUrl(`/api/quottery/search?q=${encodeURIComponent(normalized)}&limit=8`));
-        const body = await response.json().catch(() => ({}));
-        const remoteOptions = response.ok ? (body.results || []) : [];
-        const byIdentity = new Map();
-
-        if (IDENTITY_RE.test(normalized)) {
-          byIdentity.set(normalized, { identity: normalized, source: "typed" });
-        }
-        for (const option of remoteOptions) {
-          if (option?.identity) byIdentity.set(option.identity, option);
-        }
-
-        if (!cancelled) setSearchOptions(Array.from(byIdentity.values()));
-      } catch {
-        if (!cancelled) {
-          setSearchOptions(IDENTITY_RE.test(normalized) ? [{ identity: normalized, source: "typed" }] : []);
-        }
-      } finally {
-        if (!cancelled) setSearchLoading(false);
-      }
-    }, 180);
-
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [search]);
+  const { leaders, loading, error, refetch: loadLeaderboard } = useLeaderboard(metric);
+  const {
+    options: searchOptions,
+    loading: searchLoading,
+    setOptions: setSearchOptions,
+  } = useIdentitySearch(search, { identityRegex: IDENTITY_RE });
 
   const openPortfolio = useCallback((identityValue) => {
     const identity = normalizeIdentity(identityValue);
@@ -154,7 +56,7 @@ const LeaderboardPage = () => {
     navigate(`/portfolio/${identity}`);
     setSearch("");
     setSearchOptions([]);
-  }, [navigate]);
+  }, [navigate, setSearchOptions]);
 
   const handleSearch = (event) => {
     event.preventDefault();
@@ -167,18 +69,18 @@ const LeaderboardPage = () => {
     const topVolume = leaders.reduce((best, row) => Math.max(best, Number(row.traded_volume || 0)), 0);
     return { totalAccounts, topPnl, topVolume };
   }, [leaders]);
-
   const panelSx = {
     p: { xs: 1.5, sm: 2 },
-    borderRadius: 2,
-    border: `1px solid ${alpha(theme.palette.text.primary, 0.14)}`,
-    bgcolor: "background.paper",
+    borderRadius: 1.5,
+    border: `1px solid ${theme.palette.border.soft}`,
+    bgcolor: theme.palette.surface[1],
+    boxShadow: "none",
   };
 
   const renderPnl = (value) => {
     if (value === null || value === undefined || value === "") return "-";
     const num = Number(value || 0);
-    const color = num > 0 ? POSITIVE_COLOR : num < 0 ? NEGATIVE_COLOR : "text.secondary";
+    const color = num > 0 ? theme.palette.success.main : num < 0 ? theme.palette.error.main : "text.secondary";
     return (
       <Typography
         component="span"
@@ -194,6 +96,11 @@ const LeaderboardPage = () => {
       </Typography>
     );
   };
+  const leaderboardMetrics = [
+    { label: "Accounts", value: formatNumeric(topStats.totalAccounts) },
+    { label: "Top realized PnL", value: renderPnl(topStats.topPnl) },
+    { label: "Top traded volume", value: formatNumeric(topStats.topVolume) },
+  ];
   const pageCount = Math.max(1, Math.ceil(leaders.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pagedLeaders = leaders.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -224,22 +131,58 @@ const LeaderboardPage = () => {
     );
   };
 
-  return (
-    <Box sx={{ maxWidth: 1180, mx: "auto", mt: 10, px: 2, mb: 8 }}>
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }} sx={{ mb: 2 }}>
-        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
-          <LeaderboardIcon color="primary" />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="h4" sx={{ lineHeight: 1.2 }}>
-              Leaderboard
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Ranked by realized PnL or traded volume
-            </Typography>
-          </Box>
+  const leaderboardColumns = [
+    {
+      key: "rank",
+      label: "#",
+      numeric: true,
+      render: (row, index) => row.rank || ((safePage - 1) * PAGE_SIZE) + index + 1,
+    },
+    {
+      key: "identity",
+      label: "Address",
+      minWidth: 180,
+      render: (row) => (
+        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => navigate(`/portfolio/${row.identity}`)}
+            sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 900 }}
+          >
+            {shortIdentity(row.identity)}
+          </Button>
+          <Tooltip title="Open address in explorer">
+            <IconButton
+              size="small"
+              component="a"
+              href={`https://explorer.qubic.org/network/address/${row.identity}`}
+              target="_blank"
+              rel="noreferrer"
+              sx={{ width: 24, height: 24 }}
+            >
+              <OpenInNewIcon sx={{ fontSize: 15 }} />
+            </IconButton>
+          </Tooltip>
         </Stack>
+      ),
+    },
+    { key: "realized_pnl", label: "Realized PnL", render: (row) => renderPnl(row.realized_pnl) },
+    { key: "traded_volume", label: "Traded volume", numeric: true, cellSx: { fontWeight: 800 }, render: (row) => formatNumeric(row.traded_volume) },
+    { key: "trade_count", label: "Trades", numeric: true, render: (row) => formatNumeric(row.trade_count) },
+    { key: "transfer_count", label: "Transfers", numeric: true, render: (row) => formatNumeric(row.transfer_count) },
+    { key: "last_seen_tick", label: "Last seen tick", numeric: true, render: (row) => renderTick(row.last_seen_tick, row.last_seen_tick_ref) },
+  ];
 
-        <Box component="form" onSubmit={handleSearch} sx={{ display: "flex", gap: 1, minWidth: { xs: 0, md: 500 } }}>
+  return (
+    <PageShell>
+      <PageHeader
+        eyebrow="Accounts"
+        title="Leaderboard"
+        description="Ranked by realized PnL or traded volume"
+        icon={<LeaderboardIcon />}
+        actions={(
+          <Box component="form" onSubmit={handleSearch} sx={{ display: "flex", gap: 1, minWidth: { xs: 0, md: 520 } }}>
           <Autocomplete
             freeSolo
             fullWidth
@@ -284,62 +227,65 @@ const LeaderboardPage = () => {
                   startAdornment: (
                     <>
                       <InputAdornment position="start">
-                        <SearchIcon fontSize="small" />
+                        <SearchIcon fontSize="small" sx={{ color: "text.secondary" }} />
                       </InputAdornment>
                       {params.InputProps.startAdornment}
                     </>
                   ),
+                  sx: {
+                    minHeight: 42,
+                    borderRadius: 1.25,
+                    bgcolor: theme.palette.surface[2],
+                    "& .MuiOutlinedInput-notchedOutline": {
+                      borderColor: theme.palette.border.soft,
+                    },
+                    "&:hover .MuiOutlinedInput-notchedOutline": {
+                      borderColor: theme.palette.border.default,
+                    },
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                      borderColor: theme.palette.primary.main,
+                    },
+                  },
                 }}
               />
             )}
           />
           <Stack direction="row" spacing={1} alignItems="center">
-            <Tooltip title="Open portfolio">
-              <span>
-                <IconButton type="submit" color="primary" disabled={!normalizeIdentity(search)} sx={{ border: `1px solid ${theme.palette.divider}` }}>
+            <ActionIconButton
+                  label="Open portfolio"
+                  tooltip="Open portfolio"
+                  type="submit"
+                  color="primary"
+                  disabled={!normalizeIdentity(search)}
+            >
                   <SearchIcon fontSize="small" />
-                </IconButton>
-              </span>
-            </Tooltip>
+            </ActionIconButton>
           {loading && <Chip label="Refreshing" size="small" variant="outlined" />}
-          <Tooltip title="Refresh">
-            <span>
-              <IconButton onClick={loadLeaderboard} disabled={loading} sx={{ border: `1px solid ${theme.palette.divider}` }}>
+          <ActionIconButton
+                label="Refresh leaderboard"
+                tooltip="Refresh"
+                onClick={loadLeaderboard}
+                disabled={loading}
+          >
                 <RefreshIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
+          </ActionIconButton>
           </Stack>
-        </Box>
-      </Stack>
+          </Box>
+        )}
+      />
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 1.5 }}>
           {error}
         </Alert>
       )}
 
       <Paper elevation={0} sx={{ ...panelSx, mb: 2 }}>
-        <Stack direction="row" spacing={3} useFlexGap sx={{ alignItems: "center", overflowX: "auto", scrollbarWidth: "none", "&::-webkit-scrollbar": { display: "none" } }}>
-          <Box sx={{ minWidth: 132, textAlign: "center" }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-              Accounts
-            </Typography>
-            <Typography sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{formatNumeric(topStats.totalAccounts)}</Typography>
-          </Box>
-          <Box sx={{ minWidth: 160, textAlign: "center" }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-              Top realized PnL
-            </Typography>
-            {renderPnl(topStats.topPnl)}
-          </Box>
-          <Box sx={{ minWidth: 160, textAlign: "center" }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-              Top traded volume
-            </Typography>
-            <Typography sx={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{formatNumeric(topStats.topVolume)}</Typography>
-          </Box>
-        </Stack>
+        <MetricGrid
+          metrics={leaderboardMetrics}
+          columns={{ xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" }}
+          compact
+        />
       </Paper>
 
       <Paper elevation={0} sx={panelSx}>
@@ -348,23 +294,23 @@ const LeaderboardPage = () => {
           onChange={(event, nextMetric) => setMetric(nextMetric)}
           sx={{
             alignSelf: "flex-start",
-            minHeight: 38,
-            border: `1px solid ${theme.palette.divider}`,
-            borderRadius: 2,
+            minHeight: 40,
+            border: `1px solid ${theme.palette.border.default}`,
+            borderRadius: 1.5,
             overflow: "hidden",
             width: "fit-content",
             mb: 1.5,
             "& .MuiTabs-indicator": { display: "none" },
             "& .MuiTab-root": {
-              minHeight: 38,
+              minHeight: 40,
               px: 2.5,
               textTransform: "none",
-              fontWeight: 700,
-              borderRight: `1px solid ${theme.palette.divider}`,
+              fontWeight: 900,
+              borderRight: `1px solid ${theme.palette.border.default}`,
               "&:last-of-type": { borderRight: 0 },
             },
             "& .Mui-selected": {
-              bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.1),
+              bgcolor: alpha(theme.palette.primary.main, 0.18),
             },
           }}
         >
@@ -373,84 +319,22 @@ const LeaderboardPage = () => {
         </Tabs>
 
         {loading && !leaders.length ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
-            <CircularProgress />
-          </Box>
-        ) : leaders.length === 0 ? (
-          <Box sx={{ py: 5, textAlign: "center", color: "text.secondary" }}>
-            <Typography>No indexed accounts found.</Typography>
-          </Box>
+          <DataTable
+            columns={leaderboardColumns}
+            rows={[]}
+            loading
+            skeletonRows={8}
+            minWidth={920}
+          />
         ) : (
-          <Box sx={{ overflowX: "auto" }}>
-            <Table size="small" sx={{ minWidth: 920, width: "100%" }}>
-              <TableHead>
-                <TableRow>
-                  {["#", "Address", "Realized PnL", "Traded volume", "Trades", "Transfers", "Last seen tick"].map((label) => (
-                    <TableCell
-                      key={label}
-                      align="center"
-                      sx={{
-                        fontWeight: 700,
-                        color: "text.secondary",
-                        borderBottom: `1px solid ${alpha(theme.palette.text.primary, 0.12)}`,
-                        whiteSpace: "nowrap",
-                        py: 0.9,
-                        px: 1,
-                      }}
-                    >
-                      {label}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {pagedLeaders.map((row, index) => (
-                  <TableRow
-                    key={row.identity}
-                    sx={{ bgcolor: index % 2 === 1 ? alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.035 : 0.025) : "transparent" }}
-                  >
-                    <TableCell align="center" sx={{ borderBottom: 0, py: 0.75, px: 1, fontWeight: 800 }}>{row.rank || ((safePage - 1) * PAGE_SIZE) + index + 1}</TableCell>
-                    <TableCell align="center" sx={{ borderBottom: 0, py: 0.75, px: 1 }}>
-                      <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
-                        <Button
-                          size="small"
-                          variant="text"
-                          onClick={() => navigate(`/portfolio/${row.identity}`)}
-                          sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 800 }}
-                        >
-                          {shortIdentity(row.identity)}
-                        </Button>
-                        <Tooltip title="Open address in explorer">
-                          <IconButton
-                            size="small"
-                            component="a"
-                            href={`https://explorer.qubic.org/network/address/${row.identity}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            sx={{ width: 24, height: 24 }}
-                          >
-                            <OpenInNewIcon sx={{ fontSize: 15 }} />
-                          </IconButton>
-                        </Tooltip>
-                      </Stack>
-                    </TableCell>
-                    <TableCell align="center" sx={{ borderBottom: 0, py: 0.75, px: 1 }}>{renderPnl(row.realized_pnl)}</TableCell>
-                    <TableCell align="center" sx={{ borderBottom: 0, py: 0.75, px: 1, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-                      {formatNumeric(row.traded_volume)}
-                    </TableCell>
-                    <TableCell align="center" sx={{ borderBottom: 0, py: 0.75, px: 1, fontVariantNumeric: "tabular-nums" }}>
-                      {formatNumeric(row.trade_count)}
-                    </TableCell>
-                    <TableCell align="center" sx={{ borderBottom: 0, py: 0.75, px: 1, fontVariantNumeric: "tabular-nums" }}>
-                      {formatNumeric(row.transfer_count)}
-                    </TableCell>
-                    <TableCell align="center" sx={{ borderBottom: 0, py: 0.75, px: 1, fontVariantNumeric: "tabular-nums" }}>
-                      {renderTick(row.last_seen_tick, row.last_seen_tick_ref)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <>
+            <DataTable
+              columns={leaderboardColumns}
+              rows={pagedLeaders}
+              emptyText="No indexed accounts found."
+              minWidth={920}
+              getRowKey={(row) => row.identity}
+            />
             {leaders.length > PAGE_SIZE && (
               <Stack direction="row" justifyContent="center" sx={{ mt: 2 }}>
                 <Pagination
@@ -463,10 +347,10 @@ const LeaderboardPage = () => {
                 />
               </Stack>
             )}
-          </Box>
+          </>
         )}
       </Paper>
-    </Box>
+    </PageShell>
   );
 };
 

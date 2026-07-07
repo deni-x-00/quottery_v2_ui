@@ -5,18 +5,11 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Divider,
-  IconButton,
   Pagination,
   Paper,
   Stack,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Tabs,
   Tooltip,
   Typography,
@@ -34,6 +27,7 @@ import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import usePageTitle from "../hooks/usePageTitle";
+import { useIndexerStatus, usePortfolio } from "../hooks/data";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { broadcastTransaction, getBasicInfo } from "../components/qubic/util/bobApi";
 import { byteArrayToHexString } from "../components/qubic/util";
@@ -46,8 +40,18 @@ import {
   QTRY_USER_CLAIM_REWARD,
 } from "../components/qubic/util/quotteryTx";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl, shortExplorerTickOrTxLabel } from "../utils/explorerLinks";
+import {
+  formatAmount,
+  formatDateUtc,
+  formatPrice,
+  formatPriceWithPercent,
+  formatSignedAmount,
+  formatSignedPercent,
+  normalizeIdentity,
+  shortMiddle,
+} from "../utils/format";
+import { ActionIconButton, DataTable, LoadingSkeleton, MetricGrid, PageHeader, PageShell } from "../components/ui";
 
-const API_BASE = process.env.REACT_APP_QUOTTERY_API_BASE || "";
 const IDENTITY_RE = /^[A-Z]{56,60}$/;
 const MAIN_TABS = {
   POSITIONS: "positions",
@@ -60,92 +64,19 @@ const SUB_TABS = {
 };
 const PAGE_SIZE = 50;
 const CLAIM_REWARD_QUBIC_FEE = 1000000;
+const WHOLE_SHARE_PRICE = 100000;
 const PENDING_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
-const POSITIVE_COLOR = "#39c979";
-const NEGATIVE_COLOR = "#ef6674";
 const ORDER_STATUS_META = {
-  open: { label: "Open", color: "#5fb7ff", border: "#2f6f9f", bg: "rgba(95, 183, 255, 0.1)" },
-  partially_matched: { label: "Partially matched", color: "#b58cff", border: "#7049b8", bg: "rgba(181, 140, 255, 0.11)" },
-  pending: { label: "Pending", color: "#5fb7ff", border: "#2f6f9f", bg: "rgba(95, 183, 255, 0.1)" },
-  matched: { label: "Matched", color: "#38d69b", border: "#158765", bg: "rgba(56, 214, 155, 0.1)" },
-  missing_matched: { label: "Matched", color: "#38d69b", border: "#158765", bg: "rgba(56, 214, 155, 0.1)" },
-  removed_by_user: { label: "Canceled", color: "#d7aa4a", border: "#8f6a1d", bg: "rgba(215, 170, 74, 0.11)" },
-  removed_by_system: { label: "Returned", color: "#6eb7ff", border: "#2f6f9f", bg: "rgba(110, 183, 255, 0.11)" },
+  open: { label: "Open", color: "open" },
+  partially_matched: { label: "Partially matched", color: "closed" },
+  pending: { label: "Pending", color: "open" },
+  matched: { label: "Matched", color: "resolved" },
+  missing_matched: { label: "Matched", color: "resolved" },
+  removed_by_user: { label: "Canceled", color: "closed" },
+  removed_by_system: { label: "Returned", color: "open" },
 };
 
-function apiUrl(path) {
-  return `${API_BASE}${path}`;
-}
-
-function extractPublicLiveTick(status) {
-  const tick = Number(
-    status?.tick
-    ?? status?.tickInfo?.tick
-    ?? 0
-  );
-  return Number.isFinite(tick) && tick > 0 ? tick : null;
-}
-
-function normalizeIdentity(value) {
-  return String(value || "").trim().toUpperCase();
-}
-
-function formatDateUtc(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  const part = (next) => String(next).padStart(2, "0");
-  return `${part(date.getUTCMonth() + 1)}/${part(date.getUTCDate())}/${date.getUTCFullYear()}, ${part(date.getUTCHours())}:${part(date.getUTCMinutes())}:${part(date.getUTCSeconds())}`;
-}
-
-function formatNumeric(value, maxFractionDigits = 2) {
-  if (value === null || value === undefined || value === "") return "-";
-  const raw = String(value);
-  const sign = raw.startsWith("-") ? "-" : "";
-  const unsigned = sign ? raw.slice(1) : raw;
-  const [integerPart, fractionPart = ""] = unsigned.split(".");
-  const integer = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",") || "0";
-  const fraction = fractionPart.slice(0, maxFractionDigits).replace(/0+$/g, "");
-  return `${sign}${integer}${fraction ? `.${fraction}` : ""}`;
-}
-
-function formatAmount(value) {
-  return formatNumeric(value);
-}
-
-function formatSignedAmount(value) {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num) || num === 0) return "0";
-  return `${num > 0 ? "+" : "-"}${formatAmount(Math.abs(num))}`;
-}
-
-function formatSignedPercent(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return null;
-  if (num === 0) return "0%";
-  return `${num > 0 ? "+" : "-"}${formatNumeric(Math.abs(num))}%`;
-}
-
-function formatPrice(value) {
-  return formatNumeric(value);
-}
-
-function formatPricePercent(value) {
-  if (value === null || value === undefined || value === "") return "-";
-  const price = Number(value);
-  if (!Number.isFinite(price)) return "-";
-  const percent = price / 1000;
-  const minimumFractionDigits = percent > 0 && percent < 0.01 ? 3 : 0;
-  return `${percent.toLocaleString("en-US", {
-    minimumFractionDigits: Math.min(minimumFractionDigits, 2),
-    maximumFractionDigits: 2,
-  })}%`;
-}
-
-function formatPriceWithPercent(value) {
-  if (value === null || value === undefined || value === "") return "-";
-  return `${formatPrice(value)} (${formatPricePercent(value)})`;
-}
+const isValidIdentity = (identity) => IDENTITY_RE.test(identity);
 
 function integerString(value, fallback = "0") {
   if (value === null || value === undefined || value === "") return fallback;
@@ -190,11 +121,7 @@ function optionLabel(row) {
   return `Option ${row.option}`;
 }
 
-function shortLinkText(value) {
-  if (!value) return "-";
-  const text = String(value);
-  return text.length > 13 ? `${text.slice(0, 5)}...${text.slice(-5)}` : text;
-}
+const shortLinkText = shortMiddle;
 
 function statusColor(status) {
   if (status === "open" || status === "pending") return "info";
@@ -271,6 +198,45 @@ function positionPnlPercent(position) {
   return (Number(position?.realized_pnl || 0) / invested) * 100;
 }
 
+function rowSortTick(row) {
+  const candidates = [
+    row?.tick,
+    row?.closed_tick,
+    row?.updated_tick,
+    row?.created_tick,
+    row?.last_seen_tick,
+    row?.event_tick,
+  ];
+  for (const candidate of candidates) {
+    const tick = Number(candidate || 0);
+    if (Number.isFinite(tick) && tick > 0) return tick;
+  }
+  return 0;
+}
+
+function rowSortTime(row) {
+  const candidates = [
+    row?.tx_timestamp,
+    row?.closed_tx_timestamp,
+    row?.updated_at,
+    row?.created_tx_timestamp,
+    row?.created_at,
+  ];
+  for (const candidate of candidates) {
+    const time = Date.parse(candidate || "");
+    if (Number.isFinite(time)) return time;
+  }
+  return 0;
+}
+
+function newestRows(rows) {
+  return [...(rows || [])].sort((a, b) => (
+    rowSortTick(b) - rowSortTick(a)
+    || rowSortTime(b) - rowSortTime(a)
+    || Number(b?.event_id || 0) - Number(a?.event_id || 0)
+  ));
+}
+
 function groupByEvent(rows) {
   const groups = [];
   const byId = new Map();
@@ -301,88 +267,6 @@ function flattenEventGroups(rows) {
   );
 }
 
-function EmptyState({ children }) {
-  return (
-    <Box sx={{ py: 5, textAlign: "center", color: "text.secondary" }}>
-      <Typography>{children}</Typography>
-    </Box>
-  );
-}
-
-function Stat({ label, value }) {
-  return (
-    <Box sx={{ minWidth: { xs: 118, sm: 128 }, flex: "0 0 auto", textAlign: "center" }}>
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5, whiteSpace: "nowrap" }}>
-        {label}
-      </Typography>
-      <Typography variant="body1" sx={{ fontWeight: 700, whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>
-        {value}
-      </Typography>
-    </Box>
-  );
-}
-
-function DataTable({ columns, rows, emptyText, minWidth = 720 }) {
-  const theme = useTheme();
-  const borderColor = alpha(theme.palette.text.primary, 0.12);
-  const getAlign = (column) => column.align || (column.key === "description" ? "left" : "center");
-
-  if (!rows || rows.length === 0) return <EmptyState>{emptyText}</EmptyState>;
-
-  return (
-    <Box sx={{ overflowX: "auto" }}>
-      <Table size="small" sx={{ minWidth, width: "100%" }}>
-        <TableHead>
-          <TableRow>
-            {columns.map((column) => (
-              <TableCell
-                key={column.key}
-                align={getAlign(column)}
-                sx={{
-                  fontWeight: 700,
-                  color: "text.secondary",
-                  borderBottom: `1px solid ${borderColor}`,
-                  whiteSpace: "nowrap",
-                  minWidth: column.minWidth,
-                  py: 0.8,
-                  px: 1,
-                }}
-              >
-                {column.label}
-              </TableCell>
-            ))}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {rows.map((row, index) => (
-            <TableRow
-              key={row.order_event_uid || row.order_uid || row.trade_uid || row.transfer_uid || `${row.event_id}-${row.option}-${index}`}
-              sx={{ bgcolor: index % 2 === 1 ? alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.035 : 0.025) : "transparent" }}
-            >
-              {columns.map((column) => (
-                <TableCell
-                  key={column.key}
-                  align={getAlign(column)}
-                  sx={{
-                    borderTop: row.__groupStart && index > 0 ? `1px solid ${borderColor}` : 0,
-                    borderBottom: 0,
-                    whiteSpace: column.wrap ? "normal" : "nowrap",
-                    overflowWrap: column.wrap ? "anywhere" : "normal",
-                    py: 0.75,
-                    px: 1,
-                  }}
-                >
-                  {column.render ? column.render(row) : row[column.key] ?? "-"}
-                </TableCell>
-              ))}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </Box>
-  );
-}
-
 const ProfilePage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -402,66 +286,18 @@ const ProfilePage = () => {
 
   const [tab, setTab] = useState(MAIN_TABS.POSITIONS);
   const [subTab, setSubTab] = useState(SUB_TABS.ACTIVE);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [profile, setProfile] = useState(null);
-  const [indexerStatus, setIndexerStatus] = useState(null);
-  const [liveTick, setLiveTick] = useState(null);
   const [copiedAddress, setCopiedAddress] = useState(false);
   const [page, setPage] = useState(1);
   const [cancellingOrderUid, setCancellingOrderUid] = useState("");
   const [claimingEventId, setClaimingEventId] = useState("");
   const [pendingClaimEventIds, setPendingClaimEventIds] = useState([]);
-
-  const loadProfile = useCallback(async () => {
-    if (!activeIdentity || !IDENTITY_RE.test(activeIdentity)) {
-      setProfile(null);
-      setError("");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-    try {
-      const response = await fetch(apiUrl(`/api/quottery/accounts/${activeIdentity}?limit=1000`));
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(body?.details || body?.error || `Request failed with ${response.status}`);
-      }
-      setProfile(body);
-    } catch (err) {
-      setProfile(null);
-      setError(err.message || "Failed to load portfolio");
-    } finally {
-      setLoading(false);
-    }
-  }, [activeIdentity]);
-
-  useEffect(() => {
-    loadProfile();
-  }, [loadProfile]);
-
-  const loadIndexerStatus = useCallback(async () => {
-    try {
-      const [indexerResponse, bobResponse] = await Promise.all([
-        fetch(apiUrl("/api/quottery/indexer-status")),
-        fetch(apiUrl("/api/public-tick")),
-      ]);
-      const indexerBody = await indexerResponse.json().catch(() => ({}));
-      const bobBody = await bobResponse.json().catch(() => ({}));
-      setIndexerStatus(indexerResponse.ok ? indexerBody.status || null : null);
-      setLiveTick(bobResponse.ok ? extractPublicLiveTick(bobBody) : null);
-    } catch (err) {
-      setIndexerStatus(null);
-      setLiveTick(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadIndexerStatus();
-    const intervalId = window.setInterval(loadIndexerStatus, 30000);
-    return () => window.clearInterval(intervalId);
-  }, [loadIndexerStatus]);
+  const {
+    data: profile,
+    loading,
+    error,
+    refetch: loadProfile,
+  } = usePortfolio(activeIdentity, { validateIdentity: isValidIdentity });
+  const { indexerStatus, liveTick } = useIndexerStatus();
 
   useEffect(() => {
     setTab(MAIN_TABS.POSITIONS);
@@ -486,6 +322,15 @@ const ProfilePage = () => {
       return nextIds;
     });
   }, [activeIdentity, profile?.positions]);
+
+  const clearPendingClaimEventId = useCallback((eventId) => {
+    if (!activeIdentity || eventId === null || eventId === undefined) return;
+    setPendingClaimEventIds((currentIds) => {
+      const nextIds = currentIds.filter((currentId) => String(currentId) !== String(eventId));
+      if (nextIds.length !== currentIds.length) writePendingClaimIds(activeIdentity, nextIds);
+      return nextIds;
+    });
+  }, [activeIdentity]);
 
   const copyActiveIdentity = useCallback(async () => {
     if (!activeIdentity) return;
@@ -560,6 +405,7 @@ const ProfilePage = () => {
         inputType: QTRY_USER_CLAIM_REWARD,
         eventId,
         txAmount: CLAIM_REWARD_QUBIC_FEE,
+        onFailure: () => clearPendingClaimEventId(eventId),
       });
       setPendingClaimEventIds((currentIds) => {
         const nextIds = [...new Set([...currentIds, String(eventId)])];
@@ -577,6 +423,7 @@ const ProfilePage = () => {
     activeIdentity,
     bobUrl,
     claimingEventId,
+    clearPendingClaimEventId,
     connected,
     getScheduledTick,
     getSignedTx,
@@ -684,20 +531,21 @@ const ProfilePage = () => {
   ]);
   const panelSx = {
     p: { xs: 1.5, sm: 2 },
-    borderRadius: 2,
-    border: `1px solid ${alpha(theme.palette.text.primary, 0.14)}`,
-    bgcolor: "background.paper",
+    borderRadius: 1.5,
+    border: `1px solid ${theme.palette.border.soft}`,
+    bgcolor: theme.palette.surface[1],
+    boxShadow: "none",
   };
   const renderEventLink = (row) => (
     <Button
       size="small"
       variant="text"
       component="a"
-      href={`/event/${row.event_id}`}
+      href={`/market/${row.event_id}`}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        navigate(`/event/${row.event_id}`, { state: { from: `/portfolio/${activeIdentity}` } });
+        navigate(`/market/${row.event_id}`, { state: { from: `/portfolio/${activeIdentity}` } });
       }}
       sx={{
         minWidth: 0,
@@ -720,11 +568,11 @@ const ProfilePage = () => {
       size="small"
       variant="text"
       component="a"
-      href={`/events?view=archive&q=${encodeURIComponent(row.event_id || row.description || "")}`}
+      href={`/markets?view=archive&q=${encodeURIComponent(row.event_id || row.description || "")}`}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
         event.preventDefault();
-        navigate(`/events?view=archive&q=${encodeURIComponent(row.event_id || row.description || "")}`, { state: { from: `/portfolio/${activeIdentity}` } });
+        navigate(`/markets?view=archive&q=${encodeURIComponent(row.event_id || row.description || "")}`, { state: { from: `/portfolio/${activeIdentity}` } });
       }}
       sx={{
         minWidth: 0,
@@ -755,12 +603,13 @@ const ProfilePage = () => {
     const amount = Number(row.amount || 0);
     const avgPrice = Number(row.avg_entry_price || 0);
     if (!Number.isFinite(amount) || !Number.isFinite(avgPrice)) return "-";
-    return formatAmount(amount * avgPrice);
+    return formatAmount(amount * Math.max(WHOLE_SHARE_PRICE - avgPrice, 0));
   };
   const renderPnl = (value, percent = null) => {
     if (value === null || value === undefined || value === "") return "-";
     const num = Number(value || 0);
-    const color = num > 0 ? POSITIVE_COLOR : num < 0 ? NEGATIVE_COLOR : "text.secondary";
+    const color = num > 0 ? theme.palette.success.main : num < 0 ? theme.palette.error.main : "text.secondary";
+    const resolvedColor = color === "text.secondary" ? theme.palette.text.secondary : color;
     const percentText = formatSignedPercent(percent);
     return (
       <Typography
@@ -775,17 +624,23 @@ const ProfilePage = () => {
       >
         {formatSignedAmount(value)}
         {percentText && (
-          <Box component="span" sx={{ ml: 0.5, color: alpha(color === "text.secondary" ? theme.palette.text.secondary : color, 0.82), fontWeight: 650 }}>
+          <Box component="span" sx={{ ml: 0.5, color: alpha(resolvedColor, 0.82), fontWeight: 650 }}>
             ({percentText})
           </Box>
         )}
       </Typography>
     );
   };
+  const pnlTone = (value) => {
+    const num = Number(value || 0);
+    if (num > 0) return "yes";
+    if (num < 0) return "no";
+    return "muted";
+  };
   const renderStatus = (status) => {
     if (status === "win" || status === "lose") {
       const isWin = status === "win";
-      const color = isWin ? POSITIVE_COLOR : NEGATIVE_COLOR;
+      const color = isWin ? theme.palette.success.main : theme.palette.error.main;
       const Icon = isWin ? CheckCircleIcon : CancelIcon;
       return (
         <Stack direction="row" spacing={0.55} alignItems="center" justifyContent="center" sx={{ color }}>
@@ -799,6 +654,7 @@ const ProfilePage = () => {
 
     if (ORDER_STATUS_META[status]) {
       const meta = ORDER_STATUS_META[status];
+      const color = theme.palette.status?.[meta.color] || theme.palette.text.secondary;
       return (
         <Chip
           size="small"
@@ -806,9 +662,9 @@ const ProfilePage = () => {
           variant="outlined"
           sx={{
             height: 25,
-            color: meta.color,
-            bgcolor: meta.bg,
-            borderColor: meta.border,
+            color,
+            bgcolor: alpha(color, theme.palette.mode === "light" ? 0.12 : 0.1),
+            borderColor: alpha(color, theme.palette.mode === "light" ? 0.42 : 0.35),
             fontWeight: 720,
             letterSpacing: 0,
             "& .MuiChip-label": { px: 1 },
@@ -1052,10 +908,10 @@ const ProfilePage = () => {
   const orders = profile?.orders || [];
   const orderEvents = profile?.orderEvents || [];
   const transfers = profile?.transfers || [];
-  const activePositions = positions.filter(isActivePosition);
-  const closedPositions = positions.filter((row) => !isActivePosition(row));
-  const activeOrders = orders.filter(isActiveOrder);
-  const closedOrders = orderEvents.filter(isClosedOrderEvent).map(orderEventToClosedOrder);
+  const activePositions = newestRows(positions.filter(isActivePosition));
+  const closedPositions = newestRows(positions.filter((row) => !isActivePosition(row)));
+  const activeOrders = newestRows(orders.filter(isActiveOrder));
+  const closedOrders = newestRows(orderEvents.filter(isClosedOrderEvent).map(orderEventToClosedOrder));
 
   const baseRows = tab === MAIN_TABS.POSITIONS
     ? subTab === SUB_TABS.ACTIVE ? activePositions : closedPositions
@@ -1080,6 +936,24 @@ const ProfilePage = () => {
     : tab === MAIN_TABS.ORDERS
       ? `No ${subTab} orders found.`
       : "No transfers found.";
+  const accountMetricBaseSx = { minHeight: 96, display: "flex", flexDirection: "column", justifyContent: "center" };
+  const accountMetrics = [
+    {
+      label: "PnL",
+      value: account?.realized_pnl === null || account?.realized_pnl === undefined ? "-" : formatSignedAmount(account?.realized_pnl),
+      secondaryValue: formatSignedPercent(account?.pnl_percent) || undefined,
+      tone: pnlTone(account?.realized_pnl),
+      align: "center",
+      sx: accountMetricBaseSx,
+    },
+    { label: "Traded volume", value: formatAmount(account?.traded_volume), align: "center", sx: accountMetricBaseSx },
+    { label: "Open bid volume", value: formatAmount(account?.open_bid_volume), align: "center", sx: accountMetricBaseSx },
+    { label: "Open ask volume", value: formatAmount(account?.open_ask_volume), align: "center", sx: accountMetricBaseSx },
+    { label: "Trades", value: formatAmount(account?.trade_count), align: "center", sx: accountMetricBaseSx },
+    { label: "Transfers", value: formatAmount(account?.transfer_count), align: "center", sx: accountMetricBaseSx },
+    { label: "First seen tick", value: renderTickStat(account?.first_seen_tick, account?.first_seen_tick_ref), align: "center", sx: accountMetricBaseSx },
+    { label: "Last seen tick", value: renderTickStat(account?.last_seen_tick, account?.last_seen_tick_ref), align: "center", sx: accountMetricBaseSx },
+  ];
   const pageCount = Math.max(1, Math.ceil(currentRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
   const pagedRows = currentRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -1093,143 +967,145 @@ const ProfilePage = () => {
   }, [page, pageCount]);
 
   return (
-    <Box sx={{ maxWidth: 1280, mx: "auto", mt: 10, px: 2, mb: 8 }}>
-      <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }} sx={{ mb: 2 }}>
-        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
-          <AccountCircleIcon color="primary" />
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="h4" sx={{ lineHeight: 1.2 }}>
-              {isOwnProfile ? "My Portfolio" : "Portfolio"}
-            </Typography>
-            <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0, mt: 0.5 }}>
+    <PageShell>
+      <PageHeader
+        eyebrow={isOwnProfile ? "Connected wallet" : "Account"}
+        title={isOwnProfile ? "My Portfolio" : "Portfolio"}
+        icon={<AccountCircleIcon />}
+        actions={(
+          <ActionIconButton label="Refresh portfolio" tooltip="Refresh" onClick={loadProfile} disabled={loading || !activeIdentity}>
+            <RefreshIcon fontSize="small" />
+          </ActionIconButton>
+        )}
+      >
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          sx={{
+            minWidth: 0,
+            mt: 1.35,
+            maxWidth: "100%",
+            flexWrap: "wrap",
+          }}
+        >
               <Typography
                 color={activeIdentity ? "text.primary" : "text.secondary"}
                 sx={{
                   fontFamily: activeIdentity ? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" : "inherit",
-                  fontSize: activeIdentity ? { xs: "0.82rem", sm: "0.95rem" } : "0.9rem",
-                  fontWeight: activeIdentity ? 650 : 400,
-                  lineHeight: 1.45,
+                  fontSize: activeIdentity ? { xs: "0.82rem", sm: "0.95rem", md: "1.02rem" } : "0.9rem",
+                  fontWeight: activeIdentity ? 900 : 500,
+                  lineHeight: 1.35,
                   letterSpacing: 0,
                   overflowWrap: "anywhere",
                   wordBreak: "break-word",
-                  maxWidth: { xs: "100%", md: 760 },
+                  flex: "0 1 auto",
+                  minWidth: 0,
+                  maxWidth: { xs: "100%", md: "calc(100% - 96px)" },
                 }}
               >
                 {activeIdentity || "Connect wallet to open your portfolio"}
               </Typography>
               {activeIdentity && (
-                <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
-                  <Tooltip title={copiedAddress ? "Copied" : "Copy address"}>
-                    <IconButton
-                      size="small"
+                <Stack direction="row" spacing={0.65} alignItems="center" sx={{ flexShrink: 0 }}>
+                  <ActionIconButton
+                      label="Copy address"
+                      tooltip={copiedAddress ? "Copied" : "Copy address"}
                       onClick={copyActiveIdentity}
-                      sx={{ width: 30, height: 30, border: `1px solid ${alpha(theme.palette.text.primary, 0.14)}` }}
-                    >
+                      size={36}
+                  >
                       <ContentCopyIcon sx={{ fontSize: 16 }} />
-                    </IconButton>
-                  </Tooltip>
-                  <Tooltip title="Open address in explorer">
-                    <IconButton
-                      size="small"
+                  </ActionIconButton>
+                  <ActionIconButton
+                      label="Open address in explorer"
                       component="a"
                       href={`https://explorer.qubic.org/network/address/${activeIdentity}`}
                       target="_blank"
                       rel="noreferrer"
-                      sx={{ width: 30, height: 30, border: `1px solid ${alpha(theme.palette.text.primary, 0.14)}` }}
-                    >
+                      size={36}
+                  >
                       <OpenInNewIcon sx={{ fontSize: 16 }} />
-                    </IconButton>
-                  </Tooltip>
+                  </ActionIconButton>
                 </Stack>
               )}
-            </Stack>
-          </Box>
         </Stack>
-
-        <Box sx={{ display: "flex", justifyContent: { xs: "flex-start", md: "flex-end" } }}>
-          <Tooltip title="Refresh">
-            <span>
-              <IconButton onClick={loadProfile} disabled={loading || !activeIdentity} sx={{ border: `1px solid ${theme.palette.divider}` }}>
-                <RefreshIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </Tooltip>
-        </Box>
-      </Stack>
+      </PageHeader>
 
       {!activeIdentity && (
-        <Alert severity="info" sx={{ mb: 2 }}>
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.08), border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}` }}>
           Connect your wallet to open your portfolio, or search an identity from the leaderboard.
         </Alert>
       )}
 
       {activeIdentity && !IDENTITY_RE.test(activeIdentity) && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
+        <Alert severity="warning" sx={{ mb: 2, borderRadius: 1.5 }}>
           Invalid identity format.
         </Alert>
       )}
 
       {isOwnProfile && (
-        <Alert severity="info" sx={{ mb: 2, alignItems: "center" }}>
-          Transfers, reward claiming.{" "}
-          <Button
-            component={RouterLink}
-            to="/utilities"
-            size="small"
-            variant="text"
-            sx={{ minWidth: 0, p: 0, ml: 0.5, textTransform: "none", fontWeight: 800, verticalAlign: "baseline" }}
-          >
-            Go to Utilities
-          </Button>
-        </Alert>
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2,
+            px: { xs: 1.5, sm: 2 },
+            py: 1.35,
+            borderRadius: 1.5,
+            bgcolor: theme.palette.surface[1],
+            border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
+          }}
+        >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between">
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontWeight: 850, color: "text.primary", lineHeight: 1.25 }}>
+                Transfers, reward claiming, and wallet tools
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
+                Utilities contains the actions connected to this portfolio.
+              </Typography>
+            </Box>
+            <Button
+              component={RouterLink}
+              to="/utilities"
+              size="small"
+              variant="outlined"
+              sx={{ borderRadius: 1, minHeight: 34, px: 1.5, textTransform: "none", fontWeight: 900, flexShrink: 0 }}
+            >
+              Go to Utilities
+            </Button>
+          </Stack>
+        </Paper>
       )}
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 1.5 }}>
           {error}
         </Alert>
       )}
 
       <Paper elevation={0} sx={{ ...panelSx, mb: 2 }}>
         {loading && !profile ? (
-          <Box sx={{ display: "flex", justifyContent: "center", py: 5 }}>
-            <CircularProgress />
-          </Box>
+          <LoadingSkeleton variant="stats" columns={8} />
         ) : (
           <Stack spacing={2}>
-            <Stack
-              direction="row"
-              spacing={3}
-              useFlexGap
-              sx={{
-                alignItems: "center",
-                justifyContent: { xs: "flex-start", md: "center" },
-                overflowX: "auto",
-                mx: { xs: -1.5, sm: 0 },
-                px: { xs: 1.5, sm: 0 },
-                pb: { xs: 0.5, sm: 0 },
-                scrollbarWidth: "none",
-                "&::-webkit-scrollbar": { display: "none" },
+            <MetricGrid
+              metrics={accountMetrics}
+              columns={{
+                xs: "repeat(2, minmax(0, 1fr))",
+                md: "repeat(4, minmax(0, 1fr))",
               }}
-            >
-              <Stat label="PnL" value={renderPnl(account?.realized_pnl, account?.pnl_percent)} />
-              <Stat label="Traded volume" value={formatAmount(account?.traded_volume)} />
-              <Stat label="Open bid volume" value={formatAmount(account?.open_bid_volume)} />
-              <Stat label="Open ask volume" value={formatAmount(account?.open_ask_volume)} />
-              <Stat label="Trades" value={formatAmount(account?.trade_count)} />
-              <Stat label="Transfers" value={formatAmount(account?.transfer_count)} />
-              <Stat label="First seen tick" value={renderTickStat(account?.first_seen_tick, account?.first_seen_tick_ref)} />
-              <Stat label="Last seen tick" value={renderTickStat(account?.last_seen_tick, account?.last_seen_tick_ref)} />
-            </Stack>
+              gap={1.25}
+              compact
+            />
             {indexedTick && (
               <Box
                 sx={{
                   alignSelf: { xs: "stretch", md: "center" },
                   px: 1.25,
                   py: 0.65,
-                  borderRadius: 1,
+                  borderRadius: 1.25,
                   border: `1px solid ${indexerIsBehind ? alpha(theme.palette.warning.main, 0.35) : alpha(theme.palette.text.primary, 0.1)}`,
-                  bgcolor: indexerIsBehind ? alpha(theme.palette.warning.main, 0.08) : alpha(theme.palette.text.primary, 0.035),
+                  bgcolor: indexerIsBehind ? alpha(theme.palette.warning.main, 0.08) : theme.palette.surface[2],
                   color: "text.secondary",
                 }}
               >
@@ -1275,7 +1151,15 @@ const ProfilePage = () => {
               scrollButtons="auto"
               sx={{
                 minHeight: 42,
-                "& .MuiTab-root": { minHeight: 42, textTransform: "none", fontWeight: 700, fontSize: "1rem" },
+                borderBottom: `1px solid ${theme.palette.border.soft}`,
+                "& .MuiTab-root": {
+                  minHeight: 42,
+                  textTransform: "none",
+                  fontWeight: 900,
+                  fontSize: "1rem",
+                  alignItems: "flex-start",
+                  px: 2,
+                },
               }}
             >
               <Tab value={MAIN_TABS.POSITIONS} label="Positions" />
@@ -1291,21 +1175,21 @@ const ProfilePage = () => {
               onChange={(event, nextTab) => setSubTab(nextTab)}
               sx={{
                 alignSelf: "flex-start",
-                minHeight: 38,
-                border: `1px solid ${theme.palette.divider}`,
-                borderRadius: 2,
+                minHeight: 40,
+                border: `1px solid ${theme.palette.border.default}`,
+                borderRadius: 1.5,
                 overflow: "hidden",
                 "& .MuiTabs-indicator": { display: "none" },
                 "& .MuiTab-root": {
-                  minHeight: 38,
+                  minHeight: 40,
                   px: 2.5,
                   textTransform: "none",
-                  fontWeight: 700,
-                  borderRight: `1px solid ${theme.palette.divider}`,
+                  fontWeight: 900,
+                  borderRight: `1px solid ${theme.palette.border.default}`,
                   "&:last-of-type": { borderRight: 0 },
                 },
                 "& .Mui-selected": {
-                  bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.18 : 0.1),
+                  bgcolor: alpha(theme.palette.primary.main, 0.18),
                 },
               }}
             >
@@ -1320,9 +1204,15 @@ const ProfilePage = () => {
             </Tabs>
           )}
         </Stack>
-        <Divider sx={{ my: 1.5 }} />
+        <Divider sx={{ my: 1.5, borderColor: theme.palette.border.soft }} />
 
-        <DataTable columns={currentColumns} rows={pagedRows} emptyText={emptyText} minWidth={currentMinWidth} />
+        <DataTable
+          columns={currentColumns}
+          rows={pagedRows}
+          emptyText={emptyText}
+          minWidth={currentMinWidth}
+          getRowKey={(row, index) => row.order_event_uid || row.order_uid || row.trade_uid || row.transfer_uid || `${row.event_id}-${row.option}-${index}`}
+        />
         {currentRows.length > PAGE_SIZE && (
           <Stack direction="row" justifyContent="center" sx={{ mt: 2 }}>
             <Pagination
@@ -1336,7 +1226,7 @@ const ProfilePage = () => {
           </Stack>
         )}
       </Paper>
-    </Box>
+    </PageShell>
   );
 };
 

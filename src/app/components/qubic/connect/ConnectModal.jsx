@@ -19,6 +19,7 @@ import {
   Stack,
   Chip,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -113,6 +114,29 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
     setTxTickSettings,
   } = useQuotteryContext();
   const approvalTicks = Math.max(15, Math.ceil((tickRate || 2) * (txTickSettings?.approvalSeconds || 15)));
+  const panelSx = {
+    p: { xs: 1.5, sm: 2 },
+    borderRadius: 1.5,
+    border: `1px solid ${theme.palette.border.soft}`,
+    backgroundColor: theme.palette.surface[1],
+  };
+  const iconTileSx = {
+    width: 42,
+    height: 42,
+    borderRadius: 1.25,
+    display: 'grid',
+    placeItems: 'center',
+    color: theme.palette.primary.main,
+    border: `1px solid ${alpha(theme.palette.primary.main, 0.28)}`,
+    backgroundColor: alpha(theme.palette.primary.main, 0.08),
+    flexShrink: 0,
+  };
+  const modalButtonSx = {
+    minHeight: 44,
+    borderRadius: 1,
+    textTransform: 'none',
+    fontWeight: 900,
+  };
 
   const generateURI = async () => {
     setQrCode('');
@@ -241,32 +265,57 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
           fullScreen={isMobile}
           fullWidth
           maxWidth={selectedMode === 'account-select' ? 'sm' : 'xs'}
-          BackdropProps={{ sx: { backdropFilter: 'blur(8px)' } }}
+          BackdropProps={{ sx: { backdropFilter: 'blur(14px)', backgroundColor: alpha(theme.palette.background.default, 0.68) } }}
           PaperProps={{
-            sx: { elevation: 'none !important', p: isMobile ? 0 : 1, py: isMobile ? 1 : 0, backgroundColor: theme.palette.background.card },
-            elevation: 2,
+            sx: {
+              elevation: 'none !important',
+              p: 0,
+              overflow: 'hidden',
+              borderRadius: isMobile ? 0 : 2,
+              backgroundColor: theme.palette.background.paper,
+              border: isMobile ? 'none' : `1px solid ${theme.palette.border.default}`,
+              boxShadow: '0 28px 80px rgba(0,0,0,0.55)',
+            },
+            elevation: 0,
           }}
       >
-        <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: '0.4rem', backgroundColor: theme.palette.primary.main }} />
+        <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 2, backgroundColor: theme.palette.primary.main }} />
 
-        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+        <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pt: { xs: 2.25, sm: 2.5 }, pb: 1, px: { xs: 2, sm: 2.5 } }}>
           <Box display='flex' alignItems='center' gap={1}>
-            <PhonelinkIcon fontSize='small' sx={{ color: theme.palette.text.primary }} />
-            <Typography variant='h6' color={theme.palette.text.primary} sx={{ fontWeight: 600 }}>
-              qubic <span style={{ color: theme.palette.primary.main }}>connect</span>
-            </Typography>
+            <Box sx={{ ...iconTileSx, width: 34, height: 34 }}>
+              <PhonelinkIcon fontSize='small' />
+            </Box>
+            <Box>
+              <Typography variant='h6' color='text.primary' sx={{ fontWeight: 900, lineHeight: 1.1 }}>
+                Connect Wallet
+              </Typography>
+              <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 700 }}>
+                Qubic account access
+              </Typography>
+            </Box>
           </Box>
-          <IconButton onClick={handleClose} size='small'><CloseIcon /></IconButton>
+          <IconButton
+              onClick={handleClose}
+              size='small'
+              sx={{
+                border: `1px solid ${theme.palette.border.soft}`,
+                color: 'text.secondary',
+                '&:hover': { color: 'text.primary', borderColor: theme.palette.border.default, backgroundColor: theme.palette.surface[2] },
+              }}
+          >
+            <CloseIcon fontSize='small' />
+          </IconButton>
         </DialogTitle>
 
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, px: { xs: 2, sm: 2.5 }, pb: { xs: 2.5, sm: 3 } }}>
           {selectedMode === 'none' && (
               <Fade in={selectedMode === 'none'} timeout={300}>
                 <Box display='flex' flexDirection='column' gap={2}>
                   {connected && (
                       <>
-                        <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${theme.palette.divider}`, backgroundColor: theme.palette.background.paper }}>
-                          <Typography variant='overline' color='text.secondary'>Identity</Typography>
+                        <Box sx={panelSx}>
+                          <Typography variant='overline' color='text.secondary' sx={{ fontWeight: 900 }}>Identity</Typography>
                           <Box display='flex' alignItems='center' gap={0.75}>
                             <Typography variant='body2' sx={{ wordBreak: 'break-all', fontFamily: 'monospace', flex: 1 }}>
                               {walletPublicIdentity || '-'}
@@ -291,7 +340,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                                   startIcon={<SwapHorizIcon />}
                                   onClick={openAccountSelector}
                                   disabled={accountsLoading}
-                                  sx={{ mt: 1.5 }}
+                                  sx={{ ...modalButtonSx, mt: 1.5 }}
                               >
                                 Switch Account
                               </Button>
@@ -316,10 +365,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                         </Box>
                         <Box
                             sx={{
-                              p: 2,
-                              borderRadius: 1,
-                              border: `1px solid ${theme.palette.divider}`,
-                              backgroundColor: theme.palette.background.paper,
+                              ...panelSx,
                             }}
                         >
                           <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={1.5}>
@@ -391,30 +437,32 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                         <Divider />
                         <Button variant='outlined' color='primary' size='large'
                                 startIcon={<AccountBalanceWalletIcon />}
-                                onClick={() => disconnect()} fullWidth sx={{ mt: 1 }}>
+                                onClick={() => disconnect()} fullWidth sx={{ ...modalButtonSx, mt: 0.5 }}>
                           <Typography variant='button' fontWeight='bold'>Disconnect Wallet</Typography>
                         </Button>
                       </>
                   )}
                   {!connected && (
                       <>
-                        <Box textAlign='center' mb={2}>
-                          <AccountBalanceWalletIcon sx={{ fontSize: 48 }} />
-                          <Typography variant='body1' color='text.secondary' mt={1}>
+                        <Box sx={{ ...panelSx, textAlign: 'center' }}>
+                          <Box sx={{ ...iconTileSx, mx: 'auto', width: 52, height: 52 }}>
+                            <AccountBalanceWalletIcon />
+                          </Box>
+                          <Typography variant='body1' color='text.secondary' mt={1.5} sx={{ fontWeight: 700 }}>
                             Choose your preferred connection method
                           </Typography>
                         </Box>
                         <Button variant='outlined' color='primary' size='large'
                                 startIcon={<MetaMaskLogo style={{ width: 24, height: 24 }} />}
                                 onClick={() => setSelectedMode('metamask')}
-                                disabled={isMobile} fullWidth sx={{ mb: 1 }}>
-                          <Typography variant='button' fontWeight='bold'>METAMASK</Typography>
+                                disabled={isMobile} fullWidth sx={{ ...modalButtonSx }}>
+                          <Typography variant='button' fontWeight='bold'>MetaMask</Typography>
                         </Button>
                         <Button variant='outlined' color='primary' size='large'
                                 startIcon={<img src={WalletConnectLogo} alt='Wallet Connect Logo' style={{ width: 24, height: 24 }} />}
                                 onClick={() => { generateURI(); setSelectedMode('walletconnect'); }}
-                                fullWidth sx={{ mb: 2 }}>
-                          <Typography variant='button' fontWeight='bold'>WALLET CONNECT</Typography>
+                                fullWidth sx={modalButtonSx}>
+                          <Typography variant='button' fontWeight='bold'>WalletConnect</Typography>
                         </Button>
                       </>
                   )}
@@ -430,24 +478,10 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                         display: 'flex',
                         alignItems: 'center',
                         gap: 1.5,
-                        p: 1.5,
-                        borderRadius: 1,
-                        border: `1px solid ${theme.palette.divider}`,
-                        backgroundColor: theme.palette.background.paper,
+                        ...panelSx,
                       }}
                   >
-                    <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: 1,
-                          display: 'grid',
-                          placeItems: 'center',
-                          color: 'primary.main',
-                          border: `1px solid ${theme.palette.primary.main}`,
-                          flexShrink: 0,
-                        }}
-                    >
+                    <Box sx={iconTileSx}>
                       <AccountBalanceWalletIcon fontSize='small' />
                     </Box>
                     <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -459,9 +493,14 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                             <Chip
                                 size='small'
                                 label='WalletConnect'
-                                color='primary'
                                 variant='outlined'
-                                sx={{ height: 22, flexShrink: 0 }}
+                                sx={{
+                                  height: 22,
+                                  flexShrink: 0,
+                                  borderColor: alpha(theme.palette.primary.main, 0.35),
+                                  color: 'primary.main',
+                                  fontWeight: 800,
+                                }}
                             />
                         )}
                       </Stack>
@@ -488,6 +527,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                             onClick={() => loadWalletConnectAccounts()}
                             disabled={accountsLoading}
                             aria-label='Refresh accounts'
+                            sx={{ border: `1px solid ${theme.palette.border.soft}` }}
                         >
                           <RefreshIcon fontSize='small' />
                         </IconButton>
@@ -508,13 +548,13 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                   <Box display='flex' gap={1.5} justifyContent='flex-end' flexWrap='wrap'>
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={cancelAccountSelection}
-                            sx={{ fontWeight: 600 }}>
+                            sx={modalButtonSx}>
                       Cancel
                     </Button>
                     <Button variant='contained' color='primary' size='large'
                             onClick={selectWalletConnectAccount}
                             disabled={accountsLoading || accounts.length === 0}
-                            sx={{ fontWeight: 600 }}>
+                            sx={modalButtonSx}>
                       Select Account
                     </Button>
                   </Box>
@@ -524,14 +564,19 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
 
           {selectedMode === 'metamask' && (
               <Grow in={selectedMode === 'metamask'} timeout={300}>
-                <Box>
-                  <Typography variant='body1' mb={3} textAlign='center' color='text.secondary'>
-                    Connect your MetaMask wallet. You need to have MetaMask installed and unlocked.
-                  </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ ...panelSx, textAlign: 'center' }}>
+                    <Box sx={{ ...iconTileSx, mx: 'auto', width: 52, height: 52 }}>
+                      <MetaMaskLogo style={{ width: 28, height: 28 }} />
+                    </Box>
+                    <Typography variant='body1' mt={1.5} color='text.secondary' sx={{ fontWeight: 700 }}>
+                      Connect your MetaMask wallet. MetaMask must be installed and unlocked.
+                    </Typography>
+                  </Box>
                   <Box display='flex' flexDirection='column' gap={2}>
                     <HeaderButtons state={state} onConnectClick={() => { mmSnapConnect(); setSelectedMode('none'); onClose(); }} />
                     <Button variant='outlined' color='secondary' size='large'
-                            onClick={() => setSelectedMode('none')} sx={{ fontWeight: 600 }}>
+                            onClick={() => setSelectedMode('none')} sx={modalButtonSx}>
                       Cancel
                     </Button>
                   </Box>
@@ -541,15 +586,48 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
 
           {selectedMode === 'walletconnect' && (
               <Grow in={selectedMode === 'walletconnect'} timeout={300}>
-                <Box>
-                  <Typography variant='body1' mb={3} textAlign='center' color='text.secondary'>
-                    Connect your Qubic Wallet. You need to have Qubic Wallet installed and unlocked.
-                  </Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ ...panelSx, textAlign: 'center' }}>
+                    <Stack direction='row' spacing={1} justifyContent='center' alignItems='center' sx={{ mb: 1 }}>
+                      <Box sx={{ ...iconTileSx, width: 36, height: 36 }}>
+                        <img src={WalletConnectLogo} alt='WalletConnect' style={{ width: 20, height: 20 }} />
+                      </Box>
+                      <Typography variant='h6' sx={{ fontWeight: 900 }}>
+                        WalletConnect
+                      </Typography>
+                    </Stack>
+                    <Typography variant='body2' color='text.secondary' sx={{ fontWeight: 700 }}>
+                      Scan with Qubic Wallet or open the pairing link on this device.
+                    </Typography>
+                  </Box>
                   <Box display='flex' flexDirection='column' gap={2}>
-                    <Box display='flex' flexDirection='column' alignItems='center' justifyContent='center'
-                         sx={{ minWidth: 216, minHeight: 216 }}>
+                    <Box
+                        display='flex'
+                        flexDirection='column'
+                        alignItems='center'
+                        justifyContent='center'
+                        sx={{
+                          minWidth: 216,
+                          minHeight: 216,
+                          p: 2,
+                          borderRadius: 2,
+                          border: `1px solid ${theme.palette.border.default}`,
+                          backgroundColor: theme.palette.surface[1],
+                          boxShadow: `inset 0 0 0 1px ${alpha(theme.palette.primary.main, 0.06)}`,
+                        }}
+                    >
                       {qrCode ? (
-                          <img src={qrCode} alt='Wallet Connect QR Code' style={{ width: 216, height: 216 }} />
+                          <Box
+                              sx={{
+                                p: 1,
+                                borderRadius: 1.5,
+                                backgroundColor: '#fff',
+                                lineHeight: 0,
+                                boxShadow: '0 12px 36px rgba(0,0,0,0.22)',
+                              }}
+                          >
+                            <img src={qrCode} alt='Wallet Connect QR Code' style={{ width: 216, height: 216, display: 'block' }} />
+                          </Box>
                       ) : qrError ? (
                           <Typography variant='body2' color='error' textAlign='center'>
                             {qrError}
@@ -557,7 +635,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                       ) : (
                           <Box sx={{
                             width: 32, height: 32,
-                            border: `2px solid ${theme.palette.text.primary}`,
+                            border: `2px solid ${theme.palette.primary.main}`,
                             borderTop: `2px solid transparent`,
                             borderRadius: '50%',
                             animation: 'spin 1s linear infinite',
@@ -568,17 +646,17 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                     <Button variant='outlined' color='primary' size='large'
                             startIcon={<OpenInNewIcon />}
                             onClick={openQubicWallet}
-                            disabled={!connectionURI} sx={{ fontWeight: 600 }}>
+                            disabled={!connectionURI} sx={modalButtonSx}>
                       Open in Qubic Wallet
                     </Button>
                     <Button variant='outlined' color='primary' size='large'
                             startIcon={<ContentCopyIcon />}
                             onClick={() => copyText(connectionURI)}
-                            disabled={!connectionURI} sx={{ fontWeight: 600 }}>
+                            disabled={!connectionURI} sx={modalButtonSx}>
                       Copy WalletConnect URL
                     </Button>
                     <Button variant='outlined' color='secondary' size='large'
-                            onClick={() => setSelectedMode('none')} sx={{ fontWeight: 600 }}>
+                            onClick={() => setSelectedMode('none')} sx={modalButtonSx}>
                       Cancel
                     </Button>
                   </Box>

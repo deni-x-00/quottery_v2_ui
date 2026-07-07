@@ -93,9 +93,9 @@ const AccountSelector = ({
               sx={{
                 width: '100%',
                 minHeight: 76,
-                borderRadius: 1,
-                border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
-                backgroundColor: isSelected ? theme.palette.action.selected : theme.palette.background.default,
+                borderRadius: 1.25,
+                border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.border.soft}`,
+                backgroundColor: isSelected ? theme.palette.surface[3] : theme.palette.surface[1],
                 px: 1.5,
                 py: 1.25,
                 display: 'flex',
@@ -107,7 +107,7 @@ const AccountSelector = ({
                 boxShadow: isSelected ? `inset 3px 0 0 ${theme.palette.primary.main}` : 'none',
                 '&:hover': {
                   borderColor: theme.palette.primary.main,
-                  backgroundColor: theme.palette.action.hover,
+                  backgroundColor: theme.palette.surface[2],
                 },
               }}
               role='option'
@@ -121,7 +121,8 @@ const AccountSelector = ({
                   display: 'grid',
                   placeItems: 'center',
                   flexShrink: 0,
-                  border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
+                  border: `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.border.soft}`,
+                  backgroundColor: isSelected ? theme.palette.surface[2] : 'transparent',
                   color: isSelected ? 'primary.main' : 'text.secondary',
                   fontWeight: 700,
                   fontSize: 13,
@@ -188,8 +189,8 @@ const AccountSelector = ({
             px: 1.25,
             py: 0.75,
             borderRadius: 1,
-            border: `1px solid ${theme.palette.divider}`,
-            backgroundColor: theme.palette.background.paper,
+            border: `1px solid ${theme.palette.border.soft}`,
+            backgroundColor: theme.palette.surface[1],
           }}
         >
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.2 }}>

@@ -29,9 +29,9 @@ const SearchFilter = ({
   return (
     <Box
       component={motion.div}
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      transition={{ duration: 0.2 }}
       sx={{ width: "100%" }}
     >
       <TextField
@@ -43,7 +43,7 @@ const SearchFilter = ({
         InputProps={{
           startAdornment: (
             <InputAdornment position='start'>
-              <SearchIcon sx={{ mr: 1 }} />
+              <SearchIcon sx={{ mr: 1, color: "text.secondary", fontSize: 20 }} />
             </InputAdornment>
           ),
           endAdornment: searchTerm && (
@@ -65,10 +65,26 @@ const SearchFilter = ({
             </InputAdornment>
           ),
           sx: {
-            borderRadius: 3,
+            minHeight: 46,
+            borderRadius: 1.25,
+            bgcolor: theme.palette.surface?.[2] || theme.palette.background.paper,
+            fontWeight: 650,
             "& .MuiOutlinedInput-notchedOutline": {
-              borderColor: theme.palette.divider,
-              borderWidth: 2,
+              borderColor: theme.palette.border?.soft || theme.palette.divider,
+              borderWidth: 1,
+            },
+            "&:hover .MuiOutlinedInput-notchedOutline": {
+              borderColor: theme.palette.border?.default || theme.palette.divider,
+            },
+            "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+              borderColor: theme.palette.primary.main,
+            },
+            "& .MuiInputBase-input": {
+              py: 1.25,
+              fontWeight: 650,
+            },
+            "& input": {
+            fontWeight: 650,
             },
           },
         }}

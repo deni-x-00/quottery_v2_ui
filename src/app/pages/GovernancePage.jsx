@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
 import {
-    Box, Typography, Container, Paper, Grid, IconButton, Tooltip, Stack, Divider, Button, Alert,
+    Box, Typography, Paper, Grid, IconButton, Tooltip, Stack, Divider, Button, Alert,
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -14,6 +14,7 @@ import { useSnackbar } from "../contexts/SnackbarContext";
 import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import usePageTitle from "../hooks/usePageTitle";
+import { ActionIconButton, LoadingSkeleton, MetricGrid, PageHeader, PageShell } from "../components/ui";
 import { copyText } from "../utils";
 import { byteArrayToHexString, formatQubicAmount } from "../components/qubic/util";
 import {
@@ -75,25 +76,19 @@ function GovernancePage() {
 
     useEffect(() => { loadData(); }, [loadData]);
 
-    const cardBorderColor = theme.palette.mode === "dark"
-        ? "rgba(255,255,255,0.18)"
-        : "rgba(255,255,255,0.82)";
-    const cellBorderColor = alpha(theme.palette.text.primary, 0.12);
     const panelSx = {
-        p: 3,
-        borderRadius: 2,
-        border: `1px solid ${cardBorderColor}`,
-        bgcolor: theme.palette.background.paper,
-        boxShadow: theme.palette.mode === "dark"
-            ? "0 10px 28px rgba(0,0,0,0.55)"
-            : "0 14px 34px rgba(25,118,210,0.12)",
+        p: { xs: 1.75, sm: 2 },
+        borderRadius: 1.5,
+        border: `1px solid ${theme.palette.border.soft}`,
+        bgcolor: theme.palette.surface[1],
+        boxShadow: "none",
     };
     const paramCellSx = {
         minHeight: 72,
         p: 1.5,
-        borderRadius: 1,
-        border: `1px solid ${cellBorderColor}`,
-        bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.055 : 0.035),
+        borderRadius: 1.25,
+        border: `1px solid ${theme.palette.border.soft}`,
+        bgcolor: theme.palette.surface[2],
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
@@ -103,10 +98,10 @@ function GovernancePage() {
 
     const renderGovParam = (label, value, unit = '') => (
         <Box sx={paramCellSx}>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                 {label}
             </Typography>
-            <Typography variant="body2" fontWeight={700} sx={{ mt: 0.35 }}>
+            <Typography className="stat" variant="body2" fontWeight={900} sx={{ mt: 0.45 }}>
                 {typeof value === 'number' ? formatQubicAmount(value) : value}{unit}
             </Typography>
         </Box>
@@ -121,10 +116,10 @@ function GovernancePage() {
 
     const renderGovPercentParam = (label, value) => (
         <Box sx={paramCellSx}>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}>
                 {label}
             </Typography>
-            <Typography variant="body2" fontWeight={700} sx={{ mt: 0.35 }}>
+            <Typography className="stat" variant="body2" fontWeight={900} sx={{ mt: 0.45 }}>
                 {formatGovPercent(value)}
             </Typography>
         </Box>
@@ -133,18 +128,23 @@ function GovernancePage() {
     const renderProposalVoteStatus = (totalVotes) => {
         const votes = Number(totalVotes || 0);
         const remaining = Math.max(0, GOV_ACCEPTANCE_THRESHOLD - votes);
+        const progress = Math.min(100, (votes / GOV_ACCEPTANCE_THRESHOLD) * 100);
 
         return (
             <Box textAlign="center" sx={{
+                minWidth: 190,
                 px: 1.5,
                 py: 1,
-                borderRadius: 1,
-                border: `1px solid ${cellBorderColor}`,
-                bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === "dark" ? 0.055 : 0.035),
+                borderRadius: 1.25,
+                border: `1px solid ${theme.palette.border.soft}`,
+                bgcolor: theme.palette.surface[2],
             }}>
-                <Typography variant="body2" color="text.secondary">
+                <Typography className="stat" variant="body2" sx={{ fontWeight: 900 }}>
                     Votes: {formatQubicAmount(votes)} / {formatQubicAmount(GOV_TOTAL_VOTES)}
                 </Typography>
+                <Box sx={{ mt: 0.85, height: 4, borderRadius: 999, bgcolor: theme.palette.surface[3], overflow: "hidden" }}>
+                    <Box sx={{ width: `${progress}%`, height: "100%", bgcolor: remaining > 0 ? theme.palette.primary.main : theme.palette.market.yes }} />
+                </Box>
                 <Typography variant="caption" color={remaining > 0 ? "text.secondary" : "success.main"}>
                     {remaining > 0
                         ? `${formatQubicAmount(remaining)} more to pass`
@@ -226,25 +226,48 @@ function GovernancePage() {
 
     const hasGovTokens = connected && qtryGovBalance !== null && Number(qtryGovBalance) > 0;
     const hasNoGovTokens = connected && qtryGovBalance !== null && Number(qtryGovBalance) <= 0;
+    const govStats = [
+        { label: "QTRYGOV Supply", value: formatQubicAmount(GOV_TOTAL_VOTES) },
+        { label: "Passing Threshold", value: formatQubicAmount(GOV_ACCEPTANCE_THRESHOLD) },
+        { label: "Unique Proposals", value: loading ? "Loading" : formatQubicAmount(uniqueProposalCount) },
+        { label: "Your QTRYGOV", value: connected ? (qtryGovBalance !== null ? formatQubicAmount(qtryGovBalance) : "Unavailable") : "-" },
+    ];
 
     return (
-        <Container maxWidth="md" sx={{ mt: 12, mb: 8 }}>
-            <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
-                <Box display="flex" alignItems="center" gap={1}>
-                    <GavelIcon color="primary" />
-                    <Typography variant="h4">Governance</Typography>
-                </Box>
-                <Tooltip title="Refresh">
-                    <IconButton onClick={loadData} disabled={loading} size="small">
+        <PageShell top={{ xs: 10, md: 12 }}>
+            <PageHeader
+                eyebrow="Protocol voting"
+                title="Governance"
+                description="QTRYGOV holders vote on fees, dispute deposits, event costs, and the Game Operator address."
+                icon={<GavelIcon />}
+                actions={(
+                    <ActionIconButton label="Refresh governance data" onClick={loadData} disabled={loading}>
                         <RefreshIcon fontSize="small" />
-                    </IconButton>
-                </Tooltip>
-            </Box>
+                    </ActionIconButton>
+                )}
+            />
+
+            <MetricGrid metrics={govStats} sx={{ mb: 2.5 }} compact />
 
             {/* Current Gov Params */}
             {basicInfo && (
-                <Paper elevation={0} sx={{ ...panelSx, mb: 4 }}>
-                    <Typography variant="h6" gutterBottom>Current Parameters</Typography>
+                <Paper elevation={0} sx={{ ...panelSx, mb: 3 }}>
+                    <Stack
+                        direction={{ xs: "column", sm: "row" }}
+                        spacing={1}
+                        justifyContent="space-between"
+                        alignItems={{ xs: "flex-start", sm: "center" }}
+                        sx={{ mb: 1.5 }}
+                    >
+                        <Box>
+                            <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                                Current Parameters
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Active protocol values currently returned by the contract.
+                            </Typography>
+                        </Box>
+                    </Stack>
                     <Grid container spacing={1.25}>
                         <Grid item xs={12} sm={6} md={4}>
                             {renderGovPercentParam("Shareholder Fee", basicInfo.shareholderFee)}
@@ -267,7 +290,11 @@ function GovernancePage() {
                     </Grid>
                     <Box sx={{ mt: 1.5 }}>
                         <Box sx={{ ...paramCellSx, minHeight: 92, width: "100%" }}>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                            <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}
+                            >
                                 Game Operator
                             </Typography>
                             <Box display="flex" alignItems="center" justifyContent="center" gap={0.75} sx={{ mt: 0.5, maxWidth: "100%" }}>
@@ -276,7 +303,7 @@ function GovernancePage() {
                                     sx={{
                                         fontFamily: "monospace",
                                         fontSize: "0.9rem",
-                                        fontWeight: 700,
+                                        fontWeight: 800,
                                         wordBreak: "break-all",
                                         textAlign: "center",
                                     }}
@@ -289,7 +316,7 @@ function GovernancePage() {
                                             size="small"
                                             onClick={() => copyText(basicInfo.gameOperator)}
                                             aria-label="Copy Game Operator"
-                                            sx={{ flexShrink: 0 }}
+                                            sx={{ flexShrink: 0, color: "text.secondary" }}
                                         >
                                             <ContentCopyIcon fontSize="small" />
                                         </IconButton>
@@ -302,16 +329,21 @@ function GovernancePage() {
             )}
 
             {loading && (
-                <Typography color="text.secondary" textAlign="center" py={4}>Loading governance data...</Typography>
+                <LoadingSkeleton variant="panel" rows={4} columns={3} />
             )}
 
             {!loading && error && (
-                <Typography color="error" textAlign="center" py={4}>{error}</Typography>
+                <Alert severity="error" sx={{ borderRadius: 1.5, mb: 2 }}>
+                    {error}
+                </Alert>
             )}
 
             {!loading && !error && proposals.length === 0 && (
-                <Paper elevation={0} sx={{ ...panelSx, p: 4, textAlign: 'center' }}>
-                    <Typography color="text.secondary">No active proposals found.</Typography>
+                <Paper elevation={0} sx={{ ...panelSx, p: 4, textAlign: "center" }}>
+                    <Typography sx={{ fontWeight: 900 }}>No active proposals</Typography>
+                    <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+                        Governance proposals will appear here when enough QTRYGOV holders align on parameters.
+                    </Typography>
                 </Paper>
             )}
 
@@ -320,7 +352,7 @@ function GovernancePage() {
                     <Box sx={{ mb: 1.5 }}>
                         <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2}>
                             <Box>
-                                <Typography variant="h5">Top Proposals</Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 900 }}>Top Proposals</Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     Unique proposals in current epoch: {uniqueProposalCount}
                                 </Typography>
@@ -332,20 +364,58 @@ function GovernancePage() {
                             )}
                         </Box>
                         {hasNoGovTokens && (
-                            <Alert severity="info" sx={{ mt: 1.5 }}>
+                            <Alert
+                                severity="info"
+                                sx={{
+                                    mt: 1.5,
+                                    borderRadius: 1.5,
+                                    border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}`,
+                                    bgcolor: alpha(theme.palette.primary.main, 0.07),
+                                }}
+                            >
                                 Voting is available only for QTRYGOV holders.
                             </Alert>
                         )}
                     </Box>
                     <Stack spacing={2}>
                         {proposals.map((proposal) => (
-                            <Paper key={proposal.rank} elevation={0} sx={panelSx}>
-                                <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                                    <Typography variant="h6">Proposal #{proposal.rank}</Typography>
+                            <Paper
+                                key={proposal.rank}
+                                elevation={0}
+                                sx={{
+                                    ...panelSx,
+                                    position: "relative",
+                                    overflow: "hidden",
+                                    "&::before": {
+                                        content: '""',
+                                        position: "absolute",
+                                        top: 0,
+                                        left: 0,
+                                        width: 3,
+                                        height: "100%",
+                                        bgcolor: "secondary.main",
+                                    },
+                                }}
+                            >
+                                <Stack
+                                    direction={{ xs: "column", sm: "row" }}
+                                    spacing={1.5}
+                                    justifyContent="space-between"
+                                    alignItems={{ xs: "stretch", sm: "center" }}
+                                    mb={1}
+                                >
+                                    <Box sx={{ pl: 0.75 }}>
+                                        <Typography variant="h6" sx={{ fontWeight: 900 }}>
+                                            Proposal #{proposal.rank}
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary">
+                                            Full parameter set proposed for the next epoch.
+                                        </Typography>
+                                    </Box>
                                     {renderProposalVoteStatus(proposal.totalVotes)}
-                                </Box>
+                                </Stack>
 
-                                <Divider sx={{ my: 1 }} />
+                                <Divider sx={{ my: 1.25, borderColor: theme.palette.border.soft }} />
                                 <Grid container spacing={1.25}>
                                     <Grid item xs={12} sm={6} md={4}>
                                         {renderGovPercentParam("Shareholder Fee", proposal.govParams.shareholderFee)}
@@ -364,8 +434,12 @@ function GovernancePage() {
                                     </Grid>
                                 </Grid>
                                 {proposal.govParams.operationId && (
-                                    <Box sx={{ mt: 1.5 }}>
-                                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                                    <Box sx={{ ...paramCellSx, mt: 1.5, alignItems: "flex-start", textAlign: "left" }}>
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                            sx={{ display: "block", mb: 0.5, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}
+                                        >
                                             Proposed Operator
                                         </Typography>
                                         <Box display="flex" alignItems="center" gap={0.75}>
@@ -374,7 +448,7 @@ function GovernancePage() {
                                                 sx={{
                                                     fontFamily: "monospace",
                                                     fontSize: "0.9rem",
-                                                    fontWeight: 600,
+                                                    fontWeight: 800,
                                                     wordBreak: "break-all",
                                                 }}
                                             >
@@ -385,6 +459,7 @@ function GovernancePage() {
                                                     size="small"
                                                     onClick={() => copyText(proposal.govParams.operationId)}
                                                     aria-label="Copy Proposed Operator"
+                                                    sx={{ color: "text.secondary" }}
                                                 >
                                                     <ContentCopyIcon fontSize="small" />
                                                 </IconButton>
@@ -398,6 +473,7 @@ function GovernancePage() {
                                         startIcon={<HowToVoteIcon />}
                                         onClick={() => handleVote(proposal)}
                                         disabled={!hasGovTokens || votingRank !== null}
+                                        sx={{ minWidth: 120 }}
                                     >
                                         {votingRank === proposal.rank ? "Signing..." : "Vote"}
                                     </Button>
@@ -412,7 +488,7 @@ function GovernancePage() {
                     </Stack>
                 </>
             )}
-        </Container>
+        </PageShell>
     );
 }
 

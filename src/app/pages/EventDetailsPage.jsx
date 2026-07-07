@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useState, useCallback } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
     Accordion,
@@ -6,13 +6,10 @@ import {
     AccordionSummary,
     Box,
     Button,
-    Container,
-    Divider,
     Grid,
     IconButton,
     Paper,
     Typography,
-    useMediaQuery,
     Stack,
     ToggleButtonGroup,
     ToggleButton,
@@ -34,7 +31,6 @@ import {
     Refresh as RefreshIcon,
 } from "@mui/icons-material";
 import { useTheme, alpha } from "@mui/material/styles";
-import AnimatedBars from "../components/qubic/ui/AnimateBars";
 import ConfirmTxModal from "../components/qubic/connect/ConfirmTxModal";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext";
@@ -42,29 +38,21 @@ import { useConfig } from "../contexts/ConfigContext";
 import { useSnackbar } from "../contexts/SnackbarContext";
 import {
     formatQubicAmount,
-    byteArrayToHexString,
 } from "../components/qubic/util";
-import { fetchEventDetail } from "../components/qubic/util/eventApi";
-import { broadcastTransaction, getBasicInfo } from "../components/qubic/util/bobApi";
-import { excludedEventIds } from "../components/qubic/util/commons";
-import {
-    buildQuotteryTx,
-    packOrderPayload,
-    packEventIdPayload,
-    QTRY_ADD_BID_ORDER,
-    QTRY_ADD_ASK_ORDER,
-    QTRY_DISPUTE,
-} from "../components/qubic/util/quotteryTx";
-import { getPositionAmount, isEventClosed, validateOrderPreflight } from "../components/qubic/util/tradeValidation";
+import { getPositionAmount, isEventClosed } from "../components/qubic/util/tradeValidation";
 
 import gcLogo from "../../assets/gc.png";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
+import { useEventOrderbook, useEventTradeActions, useQubicEventDetail } from "../hooks/data";
 import { useTxTracker } from "../hooks/useTxTracker";
 import TradeAmountSlider from "../components/TradeAmountSlider";
 import TradePriceSelector from "../components/TradePriceSelector";
 import EventHeader from "../components/EventHeader";
 import EventRules from "../components/EventRules";
+import { EmptyState, LoadingSkeleton, PageShell } from "../components/ui";
+import { StatusBadge } from "../components/ui";
 import { calculateOptionProbability } from "../utils/eventProbability";
+import { formatPercent, formatPrice, formatPricePercent } from "../utils/format";
 import usePageTitle from "../hooks/usePageTitle";
 const thumbnails = require.context("../../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
@@ -75,20 +63,11 @@ const resolveThumbnail = (name) => {
     }
 };
 
-const formatBroadcastError = (error) => {
-    const message = String(error?.message || error || "");
-    if (/Tick value is Expired/i.test(message)) {
-        return "Tick value is Expired. Try again.";
-    }
-    return `Failed to broadcast transaction: ${message || "Transaction broadcast failed"}`;
-};
-
 function EventDetailsPage() {
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
     const theme = useTheme();
-    const isMobile = useMediaQuery("(max-width:600px)");
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
     const {
         walletPublicIdentity,
@@ -105,8 +84,6 @@ function EventDetailsPage() {
         fetchOrderbook
     } = useQuotteryContext();
     const { bobUrl } = useConfig();
-    const [event, setEvent] = useState(null);
-    const [loading, setLoading] = useState(true);
     const { showSnackbar } = useSnackbar();
     const { scheduleBalanceRefresh } = useBalanceNotifier();
     const { trackTx } = useTxTracker();
@@ -114,7 +91,32 @@ function EventDetailsPage() {
     const [selectedOption, setSelectedOption] = useState(0);
     const [detailsExpanded, setDetailsExpanded] = useState(false);
     const [aiContextExpanded, setAiContextExpanded] = useState(false);
-    const [submitting, setSubmitting] = useState(false);
+    const backTarget = location.state?.from || "/markets";
+    const handleBack = useCallback(() => {
+        navigate(backTarget);
+    }, [backTarget, navigate]);
+    const handleInvalidEventId = useCallback(() => {
+        navigate(backTarget);
+    }, [backTarget, navigate]);
+    const { event, loading } = useQubicEventDetail(id, bobUrl, {
+        onInvalidId: handleInvalidEventId,
+    });
+    const { placeOrder, dispute, submitting } = useEventTradeActions({
+        connected,
+        toggleConnectModal,
+        walletPublicIdentity,
+        walletPublicKeyBytes,
+        balance,
+        quBalance,
+        fetchQuBalance,
+        eventPositions,
+        getScheduledTick,
+        getSignedTx,
+        bobUrl,
+        showSnackbar,
+        trackTx,
+        scheduleBalanceRefresh,
+    });
     usePageTitle(event?.desc || (id ? `Event #${id}` : "Event"));
 
     // Trading box state
@@ -124,10 +126,6 @@ function EventDetailsPage() {
     const [tradePrice, setTradePrice] = useState(50000); // price out of 100k
     const [tradeAmountInput, setTradeAmountInput] = useState("");
     const [tradePriceInput, setTradePriceInput] = useState("50000");
-    const backTarget = location.state?.from || "/events";
-    const handleBack = useCallback(() => {
-        navigate(backTarget);
-    }, [backTarget, navigate]);
 
     // Cost estimation: shares × price (in GARTH)
     const tradeCoins = Number(tradeAmount || 0) * Number(tradePrice || 0);
@@ -158,10 +156,9 @@ function EventDetailsPage() {
     const option0Percent = Number.isFinite(Number(option0Probability?.percent))
         ? Math.max(0, Math.min(100, Number(option0Probability.percent)))
         : null;
-    const formatChanceText = (value) => `${value.toLocaleString("en-US", { maximumFractionDigits: 2 })}%`;
     const optionChanceTexts = option0Percent === null
         ? null
-        : [formatChanceText(option0Percent), formatChanceText(100 - option0Percent)];
+        : [formatPercent(option0Percent), formatPercent(100 - option0Percent)];
     const optionColor = (option) => (option === 0 ? theme.palette.success : theme.palette.error);
     const optionToggleSx = (option) => {
         const palette = optionColor(option);
@@ -210,21 +207,6 @@ function EventDetailsPage() {
         };
     };
 
-    const formatBookPrice = useCallback((value) => {
-        const price = Number(value);
-        if (!Number.isFinite(price)) return "-";
-        return formatQubicAmount(price);
-    }, []);
-
-    const formatBookPercent = useCallback((value) => {
-        const price = Number(value);
-        if (!Number.isFinite(price)) return "-";
-        return `${(price / 1000).toLocaleString("en-US", {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2,
-        })}%`;
-    }, []);
-
     const renderOrderBookSide = useCallback(
         (entries, side) => {
             const isBidSide = side === "bids";
@@ -260,7 +242,7 @@ function EventDetailsPage() {
                     sx={{
                         display: "grid",
                         gridTemplateColumns: { xs: "56px minmax(0, 1fr)", sm: "84px minmax(0, 1fr)" },
-                        borderBottom: `1px solid ${theme.palette.divider}`,
+                        borderBottom: `1px solid ${theme.palette.border.soft}`,
                     }}
                 >
                     <Box
@@ -325,7 +307,7 @@ function EventDetailsPage() {
                                             fontWeight: 800,
                                         }}
                                     >
-                                        {formatBookPrice(row.price)}
+                                        {formatPrice(row.price)}
                                     </Typography>
                                     <Typography
                                         align="center"
@@ -360,7 +342,7 @@ function EventDetailsPage() {
                 </Box>
             );
         },
-        [formatBookPrice, theme]
+        [theme]
     );
 
     const renderOrderBookPanel = useCallback(() => {
@@ -388,7 +370,7 @@ function EventDetailsPage() {
                         gap: 0,
                         px: { xs: 0, sm: 0 },
                         py: 1,
-                        borderBottom: `1px solid ${theme.palette.divider}`,
+                        borderBottom: `1px solid ${theme.palette.border.soft}`,
                     }}
                 >
                     <Typography sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
@@ -427,326 +409,66 @@ function EventDetailsPage() {
                             alignItems: "center",
                             px: 0,
                             py: 0.75,
-                            borderTop: `1px solid ${theme.palette.divider}`,
-                            borderBottom: `1px solid ${theme.palette.divider}`,
+                            borderTop: `1px solid ${theme.palette.border.soft}`,
+                            borderBottom: `1px solid ${theme.palette.border.soft}`,
                         }}
                     >
                         <Box />
                         <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.74rem", fontWeight: 750 }}>
-                            Bid: {bestBid === undefined ? "-" : formatBookPrice(bestBid)}
+                            Bid: {bestBid === undefined ? "-" : formatPrice(bestBid)}
                         </Typography>
                         <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.76rem", fontWeight: 800 }}>
-                            Spread: {spread === null ? "-" : formatBookPercent(Math.max(0, spread))}
+                            Spread: {spread === null ? "-" : formatPricePercent(Math.max(0, spread))}
                         </Typography>
                         <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.74rem", fontWeight: 750 }}>
-                            Ask: {bestAsk === undefined ? "-" : formatBookPrice(bestAsk)}
+                            Ask: {bestAsk === undefined ? "-" : formatPrice(bestAsk)}
                         </Typography>
                     </Box>
                     {renderOrderBookSide(bids, "bids")}
                 </Box>
             </Box>
         );
-    }, [buildOrderSideEntries, formatBookPercent, formatBookPrice, obTab, orderbook, renderOrderBookSide, theme]);
+    }, [buildOrderSideEntries, obTab, orderbook, renderOrderBookSide, theme]);
 
-    const refreshData = useCallback(() => {
-        if (!event || event.eid === undefined || event.eid < 0) return;
-        fetchOrderbook(event.eid, () => false);
-    }, [event, fetchOrderbook]);
+    const { refreshData } = useEventOrderbook(event, fetchOrderbook);
 
-    const updateEventDetails = useCallback(async () => {
-        try {
-            setLoading(true);
-            if (!id || excludedEventIds.includes(parseInt(id))) {
-                setEvent(null);
-                navigate(backTarget);
-                return;
-            }
-            const eventId = parseInt(id);
-            const updatedEvent = await fetchEventDetail(bobUrl, eventId);
-            if (!updatedEvent) {
-                setEvent(null);
-                return;
-            }
-            setEvent(updatedEvent);
-        } catch (error) {
-            console.error("Error updating event details:", error);
-        } finally {
-            setLoading(false);
-        }
-    }, [id, bobUrl, backTarget, navigate]);
+    const handleTradeClick = useCallback(() => placeOrder({
+        event,
+        selectedOption,
+        tradeSide,
+        tradeAmount,
+        tradePrice,
+    }), [event, placeOrder, selectedOption, tradeAmount, tradePrice, tradeSide]);
 
-    // Fetch event details on mount
-    useEffect(() => {
-        updateEventDetails();
-    }, [updateEventDetails]);
-
-    // Fetch orderbook for current event
-    useEffect(() => {
-        if (!event || event.eid === undefined || event.eid < 0) return;
-        let cancelled = false;
-        const isCancelled = () => cancelled;
-        fetchOrderbook(event.eid, isCancelled);
-        return () => { cancelled = true; };
-    }, [event, fetchOrderbook]);
-
-    // Automatic refresh every 60s
-    useEffect(() => {
-        if (!event || event.eid === undefined || event.eid < 0) return;
-        const intervalId = setInterval(() => { refreshData(); }, 60000);
-        return () => clearInterval(intervalId);
-    }, [event, refreshData]);
-
-    const handleTradeClick = async () => {
-        if (submitting) return;
-        if (!connected) {
-            toggleConnectModal();
-            return;
-        }
-
-        if (tradeAmount <= 0) {
-            showSnackbar("Please enter a valid amount.", "error");
-            return;
-        }
-
-        if (tradePrice <= 0 || tradePrice >= 100000) {
-            showSnackbar("Price must be between 1 and 99,999.", "error");
-            return;
-        }
-
-        if (!walletPublicIdentity) {
-            showSnackbar("No wallet identity available.", "error");
-            return;
-        }
-
-        if (!walletPublicKeyBytes) {
-            showSnackbar("Wallet public key not found.", "error");
-            return;
-        }
-
-        if (!event || event.eid === undefined) {
-            showSnackbar("Invalid event. Cannot place order.", "error");
-            return;
-        }
-
-        const preflightError = validateOrderPreflight({
-            event,
-            eventPositions,
-            option: selectedOption,
-            side: tradeSide,
-            amount: tradeAmount,
-            price: tradePrice,
-            balance,
-        });
-        if (preflightError) {
-            showSnackbar(preflightError, "error");
-            return;
-        }
-
-        setSubmitting(true);
-        try {
-            // 1. Fetch current tick and basic info (for antiSpamAmount)
-            const [tickInfo, basicInfo] = await Promise.all([
-                getScheduledTick(),
-                getBasicInfo(bobUrl),
-            ]);
-
-            if (!tickInfo) {
-                showSnackbar("Failed to get current tick from network.", "error");
-                return;
-            }
-            if (!basicInfo) {
-                showSnackbar("Failed to get contract info.", "error");
-                return;
-            }
-
-            const { scheduledTick, tickRate: rate, offset } = tickInfo;
-            console.log(`[handleTradeClick] adaptive scheduling: rate=${rate.toFixed(2)} t/s, offset=${offset}, scheduledTick=${scheduledTick}`);
-            const antiSpamAmount = basicInfo.antiSpamAmount || 0;
-            const latestQuBalance = walletPublicIdentity
-                ? await fetchQuBalance(walletPublicIdentity)
-                : quBalance;
-
-            const fundedPreflightError = validateOrderPreflight({
-                event,
-                eventPositions,
-                option: selectedOption,
-                side: tradeSide,
-                amount: tradeAmount,
-                price: tradePrice,
-                balance,
-                quBalance: latestQuBalance,
-                antiSpamAmount,
-            });
-            if (fundedPreflightError) {
-                showSnackbar(fundedPreflightError, "error");
-                return;
-            }
-
-            // 2. Determine procedure number
-            const isBid = tradeSide === "buy";
-            const inputType = isBid ? QTRY_ADD_BID_ORDER : QTRY_ADD_ASK_ORDER;
-
-            // 3. Price is always user-set (probability out of 100,000)
-            const price = tradePrice;
-
-            // 4. Build payload: eventId(u64) + option(u64) + amount(u64) + price(u64) = 32 bytes
-            const payload = packOrderPayload(event.eid, selectedOption, tradeAmount, price);
-
-            // 5. Build full Qubic transaction packet
-            const packet = buildQuotteryTx(
-                walletPublicKeyBytes,
-                scheduledTick,
-                inputType,
-                antiSpamAmount,
-                payload
-            );
-
-            // 6. Sign via MetaMask Snap
-            showSnackbar("Sign your transaction in wallet.", "info");
-            const confirmed = await getSignedTx(packet);
-            if (!confirmed) return;
-
-            // 7. Broadcast
-            const txHex =
-                typeof confirmed.tx === "string"
-                    ? confirmed.tx
-                    : byteArrayToHexString(confirmed.tx);
-
-            const res = await broadcastTransaction(bobUrl, txHex);
-
-            if (res && !res.error) {
-                const optDesc = selectedOption === 0 ? event.option0Desc : event.option1Desc;
-                trackTx({
-                    txHash: res.txHash,
-                    scheduledTick,
-                    description: `${tradeSide === "buy" ? "Buy" : "Sell"} ${formatQubicAmount(tradeAmount)} "${optDesc}" @ ${formatQubicAmount(tradePrice)}`,
-                    inputType,
-                    type: "order",
-                    eventId: event.eid,
-                    option: selectedOption,
-                    side: tradeSide === "buy" ? "buy" : "sell",
-                    amount: tradeAmount,
-                    price: tradePrice,
-                });
-                scheduleBalanceRefresh(2000);
-            } else {
-                throw new Error(res?.error || "Transaction broadcast failed");
-            }
-
-            return confirmed;
-        } catch (error) {
-            showSnackbar(
-                formatBroadcastError(error),
-                "error"
-            );
-            throw error;
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const handleDispute = async () => {
-        if (!connected) { toggleConnectModal(); return; }
-        if (!walletPublicKeyBytes) {
-            showSnackbar("Wallet public key not found.", "error");
-            return;
-        }
-        if (!event || event.eid === undefined) {
-            showSnackbar("Invalid event.", "error");
-            return;
-        }
-        if (event.resultByGO === -1) {
-            showSnackbar("No result published yet — nothing to dispute.", "error");
-            return;
-        }
-
-        try {
-            const [tickInfo, basicInfo] = await Promise.all([
-                getScheduledTick(),
-                getBasicInfo(bobUrl),
-            ]);
-            if (!tickInfo || !basicInfo) {
-                showSnackbar("Failed to get network info.", "error");
-                return;
-            }
-
-            const { scheduledTick } = tickInfo;
-            const depositAmount = basicInfo.depositAmountForDispute || 0;
-
-            const payload = packEventIdPayload(event.eid);
-            const packet = buildQuotteryTx(
-                walletPublicKeyBytes,
-                scheduledTick,
-                QTRY_DISPUTE,
-                depositAmount,
-                payload
-            );
-
-            showSnackbar("Sign your transaction in wallet.", "info");
-            const confirmed = await getSignedTx(packet);
-            if (!confirmed) return;
-
-            const txHex = typeof confirmed.tx === "string"
-                ? confirmed.tx
-                : byteArrayToHexString(confirmed.tx);
-
-            const res = await broadcastTransaction(bobUrl, txHex);
-            if (res && !res.error) {
-                trackTx({
-                    txHash: res.txHash,
-                    scheduledTick,
-                    description: `Dispute event ${event.eid}`,
-                    inputType: QTRY_DISPUTE,
-                    eventId: event.eid,
-                    depositAmount,
-                    txAmount: depositAmount,
-                });
-            } else {
-                showSnackbar(`Dispute failed: ${res?.error || 'Unknown error'}`, "error");
-            }
-        } catch (err) {
-            showSnackbar(`Dispute error: ${err.message}`, "error");
-        }
-    };
+    const handleDispute = useCallback(() => dispute(event), [dispute, event]);
 
     // --- Main render ---
     if (loading) {
         return (
-            <Container
-                maxWidth={false}
-                sx={{
-                    maxWidth: { xs: "100%", sm: "calc(600px * 1.2)", md: "calc(900px * 1.2)" },
-                    mt: 12, mb: 4,
-                }}
-            >
-                <Box textAlign="center" justifyContent="center" my={50}>
-                    <AnimatedBars />
-                </Box>
-            </Container>
+            <PageShell top={12} bottom={4}>
+                <LoadingSkeleton variant="panel" rows={5} columns={3} />
+            </PageShell>
         );
     }
 
     if (!event || event.eid === undefined || event.eid < 0) {
         return (
-            <Container
-                maxWidth={false}
-                sx={{
-                    maxWidth: { xs: "100%", sm: "calc(600px * 1.2)", md: "calc(900px * 1.2)" },
-                    mt: 12, mb: 4, textAlign: "center",
-                }}
-            >
-                <Typography variant="h6" color="text.secondary">
-                    Event not found or invalid Event ID.
-                </Typography>
-                <Button
-                    variant="outlined"
-                    startIcon={<KeyboardReturnIcon />}
-                    sx={{ mt: 2 }}
-                    onClick={handleBack}
-                >
-                    Back to Markets
-                </Button>
-            </Container>
+            <PageShell top={12} bottom={4} sx={{ textAlign: "center" }}>
+                <EmptyState
+                    tone="warning"
+                    title="Event not found"
+                    description="This event is missing or the event ID is invalid."
+                    action={(
+                        <Button
+                            variant="outlined"
+                            startIcon={<KeyboardReturnIcon />}
+                            onClick={handleBack}
+                        >
+                            Back to Markets
+                        </Button>
+                    )}
+                />
+            </PageShell>
         );
     }
 
@@ -754,61 +476,93 @@ function EventDetailsPage() {
     const timerColor = eventEnded ? theme.palette.error.main : theme.palette.primary.main;
 
     return (
-        <Container
-            maxWidth={false}
-            sx={{
-                mt: 12, mb: 4, pb: 10,
-                maxWidth: { xs: "100%", sm: "calc(600px * 1.2)", md: "calc(900px * 1.2)" },
-            }}
-        >
+        <PageShell top={{ xs: 4, md: 6 }} bottom={4} sx={{ pb: 10 }}>
             <Paper
                 elevation={0}
                 sx={{
-                    p: isMobile ? 0 : 4,
-                    m: -1.6,
-                    borderRadius: 2,
-                    backgroundColor: theme.palette.background.default,
+                    p: 0,
+                    m: 0,
+                    borderRadius: 0,
+                    backgroundColor: "transparent",
+                    boxShadow: "none",
                     position: "relative",
                 }}
             >
                 <EventHeader event={event} onBack={handleBack} resolveThumbnail={resolveThumbnail} />
 
                 {/* Main layout: left (details) | right (trading box) */}
-                <Grid container spacing={2} alignItems="flex-start">
+                <Grid container spacing={{ xs: 2, md: 3 }} alignItems="flex-start">
                     <Grid item xs={12} md={8}>
                         {/* Close date and status */}
-                        <Box display="flex" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                        <Box
+                            sx={{
+                                display: "flex",
+                                alignItems: { xs: "flex-start", sm: "center" },
+                                justifyContent: "space-between",
+                                gap: 1.5,
+                                mb: 2,
+                                p: 1.5,
+                                borderRadius: 1.5,
+                                border: `1px solid ${theme.palette.border.soft}`,
+                                bgcolor: theme.palette.surface[1],
+                                flexDirection: { xs: "column", sm: "row" },
+                            }}
+                        >
                             <Box display="flex" alignItems="center" gap={1}>
                                 <HourglassBottomIcon sx={{ fontSize: "1.2rem", color: timerColor }} />
                                 <Typography variant="body2"
-                                            sx={{ fontSize: { xs: "0.9rem", sm: "1rem" }, color: timerColor, whiteSpace: "nowrap", fontWeight: 600 }}>
+                                            sx={{ fontSize: { xs: "0.86rem", sm: "0.94rem" }, color: timerColor, whiteSpace: "nowrap", fontWeight: 800 }}>
                                     {event.endDate}
                                 </Typography>
                             </Box>
-                            <Box display="flex" alignItems="center" gap={1}>
-                                <Typography variant="body2" sx={{ color: theme.palette.primary.main, fontWeight: 600 }}>
-                                    Result: {event.resultByGO === -1 ? 'Pending' : event.resultByGO === 0 ? event.option0Desc : event.option1Desc}
-                                </Typography>
+                            <Box display="flex" alignItems="center" gap={1} sx={{ flexWrap: "wrap" }}>
+                                <StatusBadge
+                                    status={event.resultByGO === -1 ? "pending" : "resolved"}
+                                    label={event.resultByGO === -1 ? "Pending" : `Result: ${event.resultByGO === 0 ? event.option0Desc : event.option1Desc}`}
+                                />
+                                <IconButton
+                                    aria-label="refresh order book"
+                                    size="small"
+                                    onClick={refreshData}
+                                    disabled={obLoading}
+                                    sx={{
+                                        width: 34,
+                                        height: 34,
+                                        border: `1px solid ${theme.palette.border.soft}`,
+                                        bgcolor: theme.palette.surface[2],
+                                        color: "text.secondary",
+                                        "&:hover": {
+                                            color: "text.primary",
+                                            borderColor: theme.palette.border.default,
+                                            bgcolor: theme.palette.surface[3],
+                                        },
+                                    }}
+                                >
+                                    <RefreshIcon fontSize="small" />
+                                </IconButton>
                             </Box>
-                        </Box>
-                        <Divider sx={{ mb: theme.spacing(0) }} />
-
-                        {/* Refresh icon */}
-                        <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 0.5, mt: 1 }}>
-                            <IconButton aria-label="refresh order book" size="small" onClick={refreshData} disabled={obLoading}>
-                                <RefreshIcon fontSize="small" sx={{ color: theme.palette.text.secondary }} />
-                            </IconButton>
                         </Box>
 
                         {/* ORDER BOOK ACCORDION */}
-                        <Box sx={{ borderRadius: 1, mb: 2, padding: 0 }}>
+                        <Box sx={{ borderRadius: 1.5, mb: 2, padding: 0 }}>
                             <Accordion
-                                sx={{ backgroundColor: theme.palette.background.default }}
+                                sx={{
+                                    backgroundColor: theme.palette.surface[1],
+                                    border: `1px solid ${theme.palette.border.soft}`,
+                                    borderRadius: "12px !important",
+                                    overflow: "hidden",
+                                    "&:before": { display: "none" },
+                                }}
                                 expanded={orderBookExpanded}
                                 onChange={() => setOrderBookExpanded((e) => !e)}
                                 elevation={0}
                             >
                                 <AccordionSummary
+                                    sx={{
+                                        minHeight: 52,
+                                        borderBottom: orderBookExpanded ? `1px solid ${theme.palette.border.soft}` : 0,
+                                        "& .MuiAccordionSummary-content": { my: 1.25 },
+                                    }}
                                     expandIcon={
                                         orderBookExpanded
                                             ? <KeyboardArrowUpIcon sx={{ color: theme.palette.primary.main }} />
@@ -818,12 +572,12 @@ function EventDetailsPage() {
                                     <Box display="flex" alignItems="center" gap={1}>
                                         <MonetizationOnIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                                         <Typography variant="body2"
-                                                    color={theme.palette.primary.main}>
+                                                    sx={{ color: theme.palette.primary.main, fontWeight: 900 }}>
                                             Order Book
                                         </Typography>
                                     </Box>
                                 </AccordionSummary>
-                                <AccordionDetails>
+                                <AccordionDetails sx={{ p: { xs: 1.5, sm: 2 } }}>
                                     {optionChanceTexts && (
                                         <Stack direction="row" spacing={1.5} sx={{ mb: 1.5 }}>
                                             {[0, 1].map((option) => (
@@ -883,10 +637,21 @@ function EventDetailsPage() {
 
                         {/* AI CONTEXT ACCORDION */}
                         {event?.AIcontext && (
-                            <Box sx={{ borderRadius: 1, mb: 3, padding: 0 }}>
-                                <Accordion sx={{ backgroundColor: theme.palette.background.default }}
+                            <Box sx={{ borderRadius: 1.5, mb: 2, padding: 0 }}>
+                                <Accordion sx={{
+                                    backgroundColor: theme.palette.surface[1],
+                                    border: `1px solid ${theme.palette.border.soft}`,
+                                    borderRadius: "12px !important",
+                                    overflow: "hidden",
+                                    "&:before": { display: "none" },
+                                }}
                                            expanded={aiContextExpanded} onChange={() => setAiContextExpanded((e) => !e)} elevation={0}>
                                     <AccordionSummary
+                                        sx={{
+                                            minHeight: 52,
+                                            borderBottom: aiContextExpanded ? `1px solid ${theme.palette.border.soft}` : 0,
+                                            "& .MuiAccordionSummary-content": { my: 1.25 },
+                                        }}
                                         expandIcon={aiContextExpanded
                                             ? <KeyboardArrowUpIcon sx={{ color: theme.palette.primary.main }} />
                                             : <ExpandMoreIcon sx={{ color: theme.palette.primary.main }} />
@@ -894,12 +659,12 @@ function EventDetailsPage() {
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <InsightsIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                                             <Typography variant="body2"
-                                                        color={theme.palette.primary.main}>
+                                                        sx={{ color: theme.palette.primary.main, fontWeight: 900 }}>
                                                 AI Context
                                             </Typography>
                                         </Box>
                                     </AccordionSummary>
-                                    <AccordionDetails>
+                                    <AccordionDetails sx={{ p: { xs: 1.5, sm: 2 } }}>
                                         <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-wrap" }}>
                                             {event.AIcontext}
                                         </Typography>
@@ -909,10 +674,21 @@ function EventDetailsPage() {
                         )}
 
                         {/* MORE DETAILS ACCORDION */}
-                        <Box sx={{ borderRadius: 1, mb: 3, padding: 0 }}>
-                            <Accordion sx={{ backgroundColor: theme.palette.background.default }}
+                        <Box sx={{ borderRadius: 1.5, mb: 3, padding: 0 }}>
+                            <Accordion sx={{
+                                backgroundColor: theme.palette.surface[1],
+                                border: `1px solid ${theme.palette.border.soft}`,
+                                borderRadius: "12px !important",
+                                overflow: "hidden",
+                                "&:before": { display: "none" },
+                            }}
                                        expanded={detailsExpanded} onChange={() => setDetailsExpanded((e) => !e)} elevation={0}>
                                 <AccordionSummary
+                                    sx={{
+                                        minHeight: 52,
+                                        borderBottom: detailsExpanded ? `1px solid ${theme.palette.border.soft}` : 0,
+                                        "& .MuiAccordionSummary-content": { my: 1.25 },
+                                    }}
                                     expandIcon={detailsExpanded
                                         ? <KeyboardArrowUpIcon sx={{ color: theme.palette.primary.main }} />
                                         : <ExpandMoreIcon sx={{ color: theme.palette.primary.main }} />
@@ -920,12 +696,12 @@ function EventDetailsPage() {
                                     <Box display="flex" alignItems="center" gap={1}>
                                         <InfoIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                                         <Typography variant="body2"
-                                                    color={theme.palette.primary.main}>
+                                                    sx={{ color: theme.palette.primary.main, fontWeight: 900 }}>
                                             More Details
                                         </Typography>
                                     </Box>
                                 </AccordionSummary>
-                                <AccordionDetails>
+                                <AccordionDetails sx={{ p: { xs: 1.5, sm: 2 } }}>
                                     <Grid container spacing={2}>
                                         {[
                                             { icon: EventAvailableIcon, label: "Open", value: event.openDate, color: theme.palette.primary.main },
@@ -981,24 +757,47 @@ function EventDetailsPage() {
                     <Grid item xs={12} md={4}>
                         <Box
                             sx={{
-                                width: "100%", borderRadius: 2,
-                                bgcolor: theme.palette.background.paper,
-                                border: `1px solid ${theme.palette.divider}`,
-                                boxShadow: 2, p: 1.5,
-                                position: "sticky", top: theme.spacing(10),
+                                width: "100%",
+                                borderRadius: 1.5,
+                                bgcolor: theme.palette.surface[1],
+                                border: `1px solid ${theme.palette.border.default}`,
+                                boxShadow: "0 18px 48px rgba(0,0,0,0.28)",
+                                p: { xs: 1.5, sm: 2 },
+                                position: "sticky",
+                                top: theme.spacing(10),
                             }}
                         >
                             <Stack spacing={2}>
+                                <Box>
+                                    <Typography
+                                        sx={{
+                                            color: "primary.main",
+                                            fontSize: "0.72rem",
+                                            fontWeight: 900,
+                                            letterSpacing: "0.12em",
+                                            textTransform: "uppercase",
+                                            mb: 0.5,
+                                        }}
+                                    >
+                                        Trade panel
+                                    </Typography>
+                                    <Typography sx={{ color: "text.secondary", fontSize: "0.82rem" }}>
+                                        Choose side, outcome, shares and price.
+                                    </Typography>
+                                </Box>
+
                                 {/* Buy / Sell tabs */}
                                 <Tabs value={tradeSide} onChange={(_, v) => v && setTradeSide(v)}
                                       variant="fullWidth"
                                       sx={{
                                           minHeight: 30,
-                                          "& .MuiTab-root": { minHeight: 30, textTransform: "none", fontWeight: 700, fontSize: 13, py: 0.25 },
+                                          p: 0.35,
+                                          borderRadius: 1.25,
+                                          border: `1px solid ${theme.palette.border.soft}`,
+                                          bgcolor: theme.palette.surface[2],
+                                          "& .MuiTab-root": { minHeight: 34, textTransform: "none", fontWeight: 900, fontSize: 13, py: 0.25, borderRadius: 1 },
                                           "& .MuiTabs-indicator": {
-                                              height: 2,
-                                              borderRadius: 1,
-                                              bgcolor: tradeSideColor(tradeSide).main,
+                                              display: "none",
                                           },
                                       }}>
                                     <Tab label="Buy" value="buy" sx={tradeSideTabSx("buy")} />
@@ -1014,7 +813,11 @@ function EventDetailsPage() {
                                                    }}
                                                    size="small" fullWidth
                                                    sx={{
-                                                       "& .MuiToggleButton-root": { borderColor: theme.palette.divider },
+                                                       gap: 1,
+                                                       "& .MuiToggleButtonGroup-grouped": {
+                                                           borderRadius: "8px !important",
+                                                           border: `1px solid ${theme.palette.border.soft} !important`,
+                                                       },
                                                    }}>
                                     <ToggleButton value={0} sx={optionToggleSx(0)}>{event?.option0Desc || "Option 0"}</ToggleButton>
                                     <ToggleButton value={1} sx={optionToggleSx(1)}>{event?.option1Desc || "Option 1"}</ToggleButton>
@@ -1047,7 +850,7 @@ function EventDetailsPage() {
                                 <Box display="flex" alignItems="center" justifyContent="space-between">
                                     <Typography variant="body2" color="text.secondary">Cost</Typography>
                                     <Box display="flex" alignItems="center" gap={0.5}>
-                                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatQubicAmount(tradeCoins)}</Typography>
+                                        <Typography className="amount" variant="body2" sx={{ fontWeight: 900 }}>{formatQubicAmount(tradeCoins)}</Typography>
                                         <img src={gcLogo} alt="coin" width={16} height={16} />
                                     </Box>
                                 </Box>
@@ -1061,7 +864,8 @@ function EventDetailsPage() {
                                 {/* Submit */}
                                 <Button variant="contained" fullWidth size="medium"
                                         onClick={handleTradeClick}
-                                        disabled={tradeSubmitDisabled}>
+                                        disabled={tradeSubmitDisabled}
+                                        sx={{ minHeight: 44, fontWeight: 900 }}>
                                     {submitting ? "Signing..." : (tradeSide === "buy" ? "Place Buy Order" : "Place Sell Order")}
                                 </Button>
 
@@ -1083,7 +887,7 @@ function EventDetailsPage() {
                     onConfirm={async () => {}}
                 />
             </Paper>
-        </Container>
+        </PageShell>
     );
 }
 

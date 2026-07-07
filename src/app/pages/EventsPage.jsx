@@ -4,41 +4,36 @@ import {
   Box,
   Button,
   Checkbox,
-  Container,
   FormControlLabel,
   Grid,
   IconButton,
   Menu,
   MenuItem,
   Pagination,
-  Paper,
   Stack,
   Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   Tabs,
-  Tooltip,
   Typography,
   useTheme,
 } from "@mui/material";
+import EventAvailableIcon from "@mui/icons-material/EventAvailable";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import { AnimatePresence, motion } from "framer-motion";
 import ModernSearchFilter from "../components/SearchFilter";
-import AnimatedBars from "../components/qubic/ui/AnimateBars";
 import EventOverviewCard from "../components/EventOverviewCard";
+import { ActionIconButton, DataTable, EmptyState, LoadingSkeleton, MetricGrid, PageHeader, PageShell } from "../components/ui";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
+import { useArchivedEvents } from "../hooks/data";
 import { useTxTracker } from "../hooks/useTxTracker";
 import usePageTitle from "../hooks/usePageTitle";
 import { TAG_GROUPS, getAllTags, getCanonicalTagId, getTagGroupId, getTagIdBySlug, getTagSlug, getTagsForGroup } from "../components/qubic/util/tagMap";
 import { isEventClosed, parseQubicUtcDate } from "../components/qubic/util/tradeValidation";
-import { fetchCachedEventVolumes, fetchEventVolumesByIds, getEventId } from "../utils/eventVolumes";
+import { fetchCachedEventVolumes, fetchEventVolumesByIds, formatCompactAmount, getEventId } from "../utils/eventVolumes";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
+import { formatDateUtc, formatInteger } from "../utils/format";
 
 const SORT_MODES = {
   VOLUME: "volume",
@@ -73,27 +68,6 @@ const EVENT_VIEW = {
 const PAGE_SIZE = 50;
 const EVENT_METRICS_REFRESH_MS = 15000;
 const EVENT_METRICS_DUPLICATE_WINDOW_MS = 5000;
-
-const API_BASE = process.env.REACT_APP_QUOTTERY_API_BASE || "";
-
-function apiUrl(path) {
-  return `${API_BASE}${path}`;
-}
-
-function formatAmount(value) {
-  if (value === null || value === undefined || value === "") return "-";
-  return String(value)
-      .split(".")[0]
-      .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-}
-
-function formatDateUtc(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  const part = (next) => String(next).padStart(2, "0");
-  return `${part(date.getUTCMonth() + 1)}/${part(date.getUTCDate())}/${date.getUTCFullYear()}, ${part(date.getUTCHours())}:${part(date.getUTCMinutes())}:${part(date.getUTCSeconds())}`;
-}
 
 function winnerLabel(event) {
   if (event?.result === null || event?.result === undefined) return "Pending";
@@ -147,11 +121,14 @@ function EventsPage() {
   const [eventVolumes, setEventVolumes] = useState({});
   const [eventOpenOrderVolumes, setEventOpenOrderVolumes] = useState({});
   const [eventProbabilities, setEventProbabilities] = useState({});
-  const [archivedEvents, setArchivedEvents] = useState([]);
-  const [archiveLoading, setArchiveLoading] = useState(false);
-  const [archiveError, setArchiveError] = useState("");
   const [archivePage, setArchivePage] = useState(1);
   const [showZeroVolumeArchiveEvents, setShowZeroVolumeArchiveEvents] = useState(false);
+  const {
+    events: archivedEvents,
+    loading: archiveLoading,
+    error: archiveError,
+    refetch: loadArchivedEvents,
+  } = useArchivedEvents();
   const lastImmediateMetricsRef = useRef({ key: "", at: 0 });
   const requestedGroupId = getValidGroupId(searchParams.get("group"));
   const selectedView = searchParams.get("view") === EVENT_VIEW.ARCHIVE ? EVENT_VIEW.ARCHIVE : EVENT_VIEW.ACTIVE;
@@ -173,26 +150,6 @@ function EventsPage() {
       : [SORT_MODES.VOLUME, SORT_MODES.OPEN_VOLUME, SORT_MODES.ENDING_SOON, SORT_MODES.NEWEST];
   const searchTerm = searchParams.get("q") || "";
   const eventsReturnPath = `${location.pathname}${location.search}`;
-
-  const loadArchivedEvents = React.useCallback(async () => {
-    setArchiveLoading(true);
-    setArchiveError("");
-    try {
-      const response = await fetch(apiUrl("/api/quottery/events?status=archived&limit=1000"));
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body?.details || body?.error || `Request failed with ${response.status}`);
-      setArchivedEvents(Array.isArray(body.events) ? body.events : []);
-    } catch (error) {
-      setArchiveError(error.message || "Failed to load archived markets");
-      setArchivedEvents([]);
-    } finally {
-      setArchiveLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadArchivedEvents();
-  }, [loadArchivedEvents]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -406,6 +363,19 @@ function EventsPage() {
     return sortEvents(baseEventsToDisplay.filter((event) => getTagGroupId(event.tag) === selectedGroupId));
   }, [activeSortMode, baseEventsToDisplay, eventOpenOrderVolumes, eventVolumes, selectedGroupId, selectedTopicId]);
 
+  const activeMarketStats = React.useMemo(() => {
+    return eventsToDisplay.reduce((stats, event) => {
+      const eventId = getEventId(event);
+      stats.tradedVolume += Number(eventVolumes[eventId] || 0);
+      stats.openOrderVolume += Number(eventOpenOrderVolumes[eventId] || 0);
+      return stats;
+    }, {
+      count: eventsToDisplay.length,
+      tradedVolume: 0,
+      openOrderVolume: 0,
+    });
+  }, [eventOpenOrderVolumes, eventVolumes, eventsToDisplay]);
+
   const updateEventsQuery = React.useCallback((updates, options = {}) => {
     const nextParams = new URLSearchParams(searchParams);
 
@@ -508,12 +478,7 @@ function EventsPage() {
     updateEventsQuery({ topic: "" });
   };
 
-  const renderLoading = () => (
-      <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", py: 8, gap: 2 }}>
-        <AnimatedBars />
-        <Typography variant="h6" color="text.secondary">Loading markets, please wait...</Typography>
-      </Box>
-  );
+  const renderLoading = () => <LoadingSkeleton variant="cards" cards={6} />;
 
   const archivedEventsToDisplay = React.useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
@@ -555,6 +520,24 @@ function EventsPage() {
   const archivePageCount = Math.max(1, Math.ceil(archivedEventsToDisplay.length / PAGE_SIZE));
   const safeArchivePage = Math.min(archivePage, archivePageCount);
   const pagedArchivedEvents = archivedEventsToDisplay.slice((safeArchivePage - 1) * PAGE_SIZE, safeArchivePage * PAGE_SIZE);
+  const marketMetrics = [
+    {
+      label: selectedView === EVENT_VIEW.ARCHIVE ? "Archived markets" : "Active markets",
+      value: selectedView === EVENT_VIEW.ARCHIVE ? archivedEventsToDisplay.length : activeMarketStats.count,
+      tone: "cyan",
+    },
+    {
+      label: "Traded volume",
+      value: formatCompactAmount(selectedView === EVENT_VIEW.ARCHIVE
+        ? archivedEventsToDisplay.reduce((sum, event) => sum + Number(event.traded_volume || 0), 0)
+        : activeMarketStats.tradedVolume),
+    },
+    {
+      label: "Open orders",
+      value: selectedView === EVENT_VIEW.ARCHIVE ? "-" : formatCompactAmount(activeMarketStats.openOrderVolume),
+      tone: "muted",
+    },
+  ];
 
   useEffect(() => {
     setArchivePage(1);
@@ -585,7 +568,7 @@ function EventsPage() {
             "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
           }}
         >
-          {explorerTickOrTxLabel(explorerRef, formatAmount)}
+          {explorerTickOrTxLabel(explorerRef, formatInteger)}
         </Button>
       ) : (
         <Typography variant="body2">-</Typography>
@@ -601,80 +584,91 @@ function EventsPage() {
     if (archiveLoading) return renderLoading();
     if (archiveError) {
       return (
-          <Box sx={{ textAlign: "center", py: 6, color: "error.main" }}>
-            <Typography>{archiveError}</Typography>
-          </Box>
+          <EmptyState
+            title="Failed to load archived markets"
+            description={archiveError}
+            sx={{ color: "error.main" }}
+          />
       );
     }
 
     if (archivedEventsToDisplay.length === 0) {
       return (
-          <Box sx={{ textAlign: "center", py: 6 }}>
-            <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>No archived markets found.</Typography>
-          </Box>
+          <EmptyState
+            title="No archived markets found"
+            description="Try changing search, sort, or zero-volume filter."
+          />
       );
     }
 
+    const archiveColumns = [
+      { key: "event_id", label: "ID", numeric: true, render: (event) => event.event_id },
+      {
+        key: "event",
+        label: "Event",
+        minWidth: 280,
+        wrap: true,
+        render: (event) => (
+          <Stack spacing={0.25} alignItems="flex-start">
+            <Button
+              size="small"
+              variant="text"
+              component="a"
+              href={`/markets?view=archive&q=${encodeURIComponent(event.event_id || event.description || "")}`}
+              onClick={(clickEvent) => {
+                if (clickEvent.metaKey || clickEvent.ctrlKey || clickEvent.shiftKey || clickEvent.altKey) return;
+                clickEvent.preventDefault();
+                updateEventsQuery({ q: String(event.event_id || event.description || "") });
+              }}
+              sx={{
+                minWidth: 0,
+                p: 0,
+                textTransform: "none",
+                textAlign: "left",
+                fontWeight: 800,
+                color: theme.palette.primary.main,
+                whiteSpace: "normal",
+                overflowWrap: "anywhere",
+                "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
+              }}
+            >
+              {event.description || `Event #${event.event_id}`}
+            </Button>
+            <Typography variant="caption" color="text.secondary">
+              {event.option0 || "Yes"} | {event.option1 || "No"}
+            </Typography>
+          </Stack>
+        ),
+      },
+      {
+        key: "winner",
+        label: "Winner",
+        render: (event) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{winnerLabel(event)}</Typography>,
+      },
+      { key: "traded_volume", label: "Volume", numeric: true, render: (event) => formatInteger(event.traded_volume) },
+      { key: "created_tick", label: "Created tick", numeric: true, render: (event) => renderTickWithDate(event.created_tick, event.created_tx_timestamp) },
+      { key: "finalized_tick", label: "Finalized tick", numeric: true, render: (event) => renderTickWithDate(event.finalized_tick, event.finalized_tx_timestamp) },
+      {
+        key: "archived_tick",
+        label: "Archived tick",
+        numeric: true,
+        render: (event) => renderTickWithDate(
+          event.archived_tick,
+          event.archived_tx_timestamp || event.finalized_tx_timestamp || event.result_tx_timestamp,
+          event.archived_tick_ref
+        ),
+      },
+    ];
+
     return (
       <>
-        <Paper elevation={0} variant="outlined" sx={{ overflowX: "auto", borderRadius: 2 }}>
-          <Table size="small" sx={{ minWidth: 940 }}>
-            <TableHead>
-              <TableRow>
-                <TableCell align="center" sx={{ fontWeight: 700 }}>ID</TableCell>
-                <TableCell sx={{ fontWeight: 700, minWidth: 280 }}>Event</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700 }}>Winner</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700 }}>Volume</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700 }}>Created tick</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700 }}>Finalized tick</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700 }}>Archived tick</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {pagedArchivedEvents.map((event) => (
-                  <TableRow key={event.event_id}>
-                    <TableCell align="center">{event.event_id}</TableCell>
-                    <TableCell sx={{ whiteSpace: "normal", overflowWrap: "anywhere" }}>
-                      <Button
-                        size="small"
-                        variant="text"
-                        component="a"
-                        href={`/events?view=archive&q=${encodeURIComponent(event.event_id || event.description || "")}`}
-                        onClick={(clickEvent) => {
-                          if (clickEvent.metaKey || clickEvent.ctrlKey || clickEvent.shiftKey || clickEvent.altKey) return;
-                          clickEvent.preventDefault();
-                          updateEventsQuery({ q: String(event.event_id || event.description || "") });
-                        }}
-                        sx={{
-                          minWidth: 0,
-                          p: 0,
-                          textTransform: "none",
-                          textAlign: "left",
-                          fontWeight: 650,
-                          color: theme.palette.primary.main,
-                          whiteSpace: "normal",
-                          overflowWrap: "anywhere",
-                          "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
-                        }}
-                      >
-                        {event.description || `Event #${event.event_id}`}
-                      </Button>
-                      <Typography variant="caption" color="text.secondary">
-                        {event.option0 || "Yes"} | {event.option1 || "No"}
-                      </Typography>
-                    </TableCell>
-                    <TableCell align="center">
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{winnerLabel(event)}</Typography>
-                    </TableCell>
-                    <TableCell align="center">{formatAmount(event.traded_volume)}</TableCell>
-                    <TableCell align="center">{renderTickWithDate(event.created_tick, event.created_tx_timestamp)}</TableCell>
-                    <TableCell align="center">{renderTickWithDate(event.finalized_tick, event.finalized_tx_timestamp)}</TableCell>
-                    <TableCell align="center">{renderTickWithDate(event.archived_tick, event.archived_tx_timestamp || event.finalized_tx_timestamp || event.result_tx_timestamp, event.archived_tick_ref)}</TableCell>
-                  </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Paper>
+        <DataTable
+          columns={archiveColumns}
+          rows={pagedArchivedEvents}
+          emptyText="No archived markets found."
+          minWidth={940}
+          getRowKey={(event) => event.event_id}
+        />
         {archivedEventsToDisplay.length > PAGE_SIZE && (
           <Stack direction="row" justifyContent="center" sx={{ mt: 2 }}>
             <Pagination
@@ -694,46 +688,74 @@ function EventsPage() {
   const isLoadingOverall = loading || isFilterLoading;
 
   const cardVariants = {
-    initial: { scale: 0.7, opacity: 0 },
-    animate: { scale: 1, opacity: 1, transition: { type: "spring", stiffness: 400, damping: 12, mass: 0.7 } },
-    exit: { scale: 0.7, opacity: 0, transition: { duration: 0.2, ease: "easeInOut" } },
+    initial: { y: 8, opacity: 0 },
+    animate: { y: 0, opacity: 1, transition: { duration: 0.2, ease: "easeOut" } },
+    exit: { y: 4, opacity: 0, transition: { duration: 0.15, ease: "easeInOut" } },
   };
 
   return (
-      <Box sx={{ minHeight: "100vh", background: theme.palette.background.default, pt: { xs: 5, md: 7 }, pb: { xs: 6, md: 10 } }}>
-        <Container maxWidth="lg">
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2, mb: 3 }}>
-            <Box />
-            <Typography variant="h3" color="text.primary" sx={{ fontWeight: 700, fontSize: { xs: "2rem", md: "2.7rem" } }}>
-              Markets
-            </Typography>
-            <Tooltip title="Refresh markets">
-              <Box component="span" sx={{ justifySelf: "end" }}>
-                <IconButton aria-label="refresh markets" onClick={handleRefresh} disabled={isLoadingOverall} size="small">
-                  <RefreshIcon fontSize="small" sx={{ color: theme.palette.text.secondary }} />
-                </IconButton>
-              </Box>
-            </Tooltip>
-          </Box>
+      <Box sx={{ minHeight: "100vh", background: theme.palette.background.default, pb: { xs: 6, md: 10 } }}>
+        <PageShell bottom={0}>
+          <Stack spacing={3} sx={{ mb: { xs: 3, md: 4 } }}>
+            <PageHeader
+              eyebrow="Qubic-native prediction markets"
+              title="Markets"
+              description="Discover active outcomes, compare market depth, and review archived settlement history."
+              icon={<EventAvailableIcon />}
+              actions={(
+                  <ActionIconButton
+                    label="Refresh markets"
+                    aria-label="refresh markets"
+                    onClick={handleRefresh}
+                    disabled={isLoadingOverall}
+                  >
+                    <RefreshIcon fontSize="small" />
+                  </ActionIconButton>
+              )}
+              sx={{ mb: 0 }}
+            />
 
-          <Tabs
-              value={selectedView}
-              onChange={handleViewChange}
-              centered
-              sx={{ mb: 3, minHeight: 40, "& .MuiTab-root": { minHeight: 40, textTransform: "none", fontWeight: 700 } }}
-          >
-            <Tab value={EVENT_VIEW.ACTIVE} label="Active" />
-            <Tab value={EVENT_VIEW.ARCHIVE} label={`Archive (${archivedEvents.length || 0})`} />
-          </Tabs>
+            <MetricGrid
+              metrics={marketMetrics}
+              columns={{ xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" }}
+              gap={1.5}
+            />
+
+            <Tabs
+                value={selectedView}
+                onChange={handleViewChange}
+                sx={{
+                  minHeight: 42,
+                  borderBottom: `1px solid ${theme.palette.border.soft}`,
+                  "& .MuiTab-root": {
+                    minHeight: 42,
+                    px: 2,
+                    textTransform: "none",
+                    fontWeight: 900,
+                    alignItems: "flex-start",
+                  },
+                }}
+            >
+              <Tab value={EVENT_VIEW.ACTIVE} label="Active" />
+              <Tab value={EVENT_VIEW.ARCHIVE} label={`Archive (${archivedEvents.length || 0})`} />
+            </Tabs>
+          </Stack>
 
           {selectedView === EVENT_VIEW.ACTIVE && !isConnected ? (
-              <Box sx={{ textAlign: "center", py: 8 }}>
-                <Typography variant="h6" color="text.secondary">Connect your wallet to browse markets.</Typography>
-              </Box>
+              <EmptyState
+                title="Connect wallet to browse markets"
+                description="Market data is loaded through your configured Qubic connection."
+              />
           ) : selectedView === EVENT_VIEW.ARCHIVE ? (
               <>
-                <Box sx={{ mb: 3 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+                <Box sx={{
+                  mb: 3,
+                  p: { xs: 1.5, sm: 2 },
+                  borderRadius: 1.5,
+                  border: `1px solid ${theme.palette.border.soft}`,
+                  bgcolor: theme.palette.surface[1],
+                }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexWrap: { xs: "wrap", md: "nowrap" } }}>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <ModernSearchFilter searchTerm={searchTerm} onSearchChange={handleSearchChange} />
                     </Box>
@@ -746,7 +768,7 @@ function EventsPage() {
                           minHeight: 38,
                           px: 1.5,
                           textTransform: "none",
-                          fontWeight: 700,
+                          fontWeight: 800,
                           flexShrink: 0,
                         }}
                     >
@@ -757,6 +779,13 @@ function EventsPage() {
                       anchorEl={sortMenuAnchorEl}
                       open={Boolean(sortMenuAnchorEl)}
                       onClose={handleSortMenuClose}
+                      PaperProps={{
+                        sx: {
+                          bgcolor: theme.palette.background.paper,
+                          border: `1px solid ${theme.palette.border.default}`,
+                          borderRadius: 1.5,
+                        },
+                      }}
                   >
                     {sortOptions.map((sortMode) => (
                         <MenuItem
@@ -781,7 +810,7 @@ function EventsPage() {
                             minHeight: 30,
                             px: 1.25,
                             textTransform: "none",
-                            fontWeight: 700,
+                            fontWeight: 800,
                           }}
                         >
                           {SORT_DIRECTION_LABELS[direction]}
@@ -816,7 +845,13 @@ function EventsPage() {
               </>
           ) : (
               <>
-                <Box sx={{ mb: 3 }}>
+                <Box sx={{
+                  mb: 3,
+                  p: { xs: 1.5, sm: 2 },
+                  borderRadius: 1.5,
+                  border: `1px solid ${theme.palette.border.soft}`,
+                  bgcolor: theme.palette.surface[1],
+                }}>
                   <ModernSearchFilter searchTerm={searchTerm} onSearchChange={handleSearchChange} />
                   <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2, mt: 2, flexWrap: "wrap" }}>
                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
@@ -833,8 +868,14 @@ function EventsPage() {
                                   minHeight: 34,
                                   px: 1.5,
                                   textTransform: "none",
-                                  fontWeight: 700,
+                                  fontWeight: 800,
                                   color: selected ? theme.palette.primary.contrastText : theme.palette.text.secondary,
+                                  border: selected ? "none" : `1px solid ${theme.palette.border.soft}`,
+                                  bgcolor: selected ? theme.palette.primary.main : theme.palette.surface[2],
+                                  "&:hover": {
+                                    bgcolor: selected ? theme.palette.primary.dark : theme.palette.surface[3],
+                                    color: selected ? theme.palette.primary.contrastText : theme.palette.text.primary,
+                                  },
                                 }}
                             >
                               {group.label}
@@ -852,7 +893,7 @@ function EventsPage() {
                           minHeight: 34,
                           px: 1.5,
                           textTransform: "none",
-                          fontWeight: 700,
+                          fontWeight: 800,
                           flexShrink: 0,
                         }}
                     >
@@ -862,6 +903,13 @@ function EventsPage() {
                         anchorEl={sortMenuAnchorEl}
                         open={Boolean(sortMenuAnchorEl)}
                         onClose={handleSortMenuClose}
+                        PaperProps={{
+                          sx: {
+                            bgcolor: theme.palette.background.paper,
+                            border: `1px solid ${theme.palette.border.default}`,
+                            borderRadius: 1.5,
+                          },
+                        }}
                     >
                       {sortOptions.map((sortMode) => (
                           <MenuItem
@@ -877,17 +925,21 @@ function EventsPage() {
                 </Box>
 
                 {isLoadingOverall ? renderLoading() : (
-                    <Box sx={{ display: "flex", gap: { xs: 2, md: 4 }, alignItems: "flex-start", mb: { xs: 4, md: 6 }, flexDirection: { xs: "column", md: "row" } }}>
+                    <Box sx={{ display: "flex", gap: { xs: 2, md: 3 }, alignItems: "flex-start", mb: { xs: 4, md: 6 }, flexDirection: { xs: "column", md: "row" } }}>
                       <Box
                           component="aside"
                           sx={{
-                            width: { xs: "100%", md: 210 },
+                            width: { xs: "100%", md: 230 },
                             flexShrink: 0,
-                            borderRight: { xs: 0, md: `1px solid ${theme.palette.divider}` },
-                            pr: { xs: 0, md: 2 },
+                            p: 1,
+                            borderRadius: 1.5,
+                            border: `1px solid ${theme.palette.border.soft}`,
+                            bgcolor: theme.palette.surface[1],
+                            position: { md: "sticky" },
+                            top: { md: 84 },
                           }}
                       >
-                        <Stack spacing={0.5} sx={{ width: "100%", pb: { xs: 1, md: 0 } }}>
+                        <Stack spacing={0.5} sx={{ width: "100%" }}>
                           {sidebarItems.map((item) => {
                             const itemId = item.id === "" ? "" : String(item.id);
                             const selected = item.type !== "group" && String(selectedTopicId) === itemId;
@@ -911,7 +963,7 @@ function EventsPage() {
                                       color: selected ? theme.palette.primary.contrastText : theme.palette.text.primary,
                                       pl: item.nested ? 1.5 : 0,
                                       "&:hover": {
-                                        bgcolor: selected ? theme.palette.primary.main : theme.palette.action.hover,
+                                        bgcolor: selected ? theme.palette.primary.dark : theme.palette.surface[2],
                                       },
                                     }}
                                 >
@@ -942,7 +994,7 @@ function EventsPage() {
                                       textOverflow: "ellipsis",
                                       whiteSpace: "nowrap",
                                       pr: 1,
-                                      fontWeight: item.type === "group" ? 650 : 500,
+                                      fontWeight: item.type === "group" ? 800 : 650,
                                       color: selected ? "inherit" : theme.palette.text.secondary,
                                     }}>
                                       {item.label}
@@ -970,14 +1022,14 @@ function EventsPage() {
 
                       <Box sx={{ flex: 1, minWidth: 0, width: "100%" }}>
                         {eventsToDisplay.length > 0 ? (
-                            <Grid container spacing={{ xs: 2, sm: 3, md: 4 }} justifyContent="center" alignItems="stretch">
+                            <Grid container spacing={{ xs: 2, sm: 2.25, md: 2.5 }} alignItems="stretch">
                               <AnimatePresence>
                                 {eventsToDisplay.map((event, index) => {
                                   const stableKey = event?.eid ?? `evt-${index}`;
                                   return (
                                       <Grid item xs={12} sm={6} lg={4} key={stableKey} component={motion.div} variants={cardVariants} initial="initial" animate="animate" exit="exit" style={{ display: "flex" }}>
                                         <EventOverviewCard
-                                            eventUrl={`/event/${event.eid}`}
+                                            eventUrl={`/market/${event.eid}`}
                                             data={{
                                               ...event,
                                               desc: event.desc,
@@ -985,7 +1037,7 @@ function EventsPage() {
                                               openOrderVolume: eventOpenOrderVolumes[getEventId(event)] ?? 0,
                                               probability: eventProbabilities[getEventId(event)],
                                             }}
-                                            onClick={() => navigate(`/event/${event.eid}`, { state: { from: eventsReturnPath } })}
+                                            onClick={() => navigate(`/market/${event.eid}`, { state: { from: eventsReturnPath } })}
                                             status={event.status}
                                             onTxBroadcast={trackTx}
                                         />
@@ -995,16 +1047,17 @@ function EventsPage() {
                               </AnimatePresence>
                             </Grid>
                         ) : (
-                            <Box sx={{ textAlign: "center", py: 6 }}>
-                              <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 500 }}>No markets found.</Typography>
-                            </Box>
+                            <EmptyState
+                              title="No markets found"
+                              description="Try changing search, category, or sort filters."
+                            />
                         )}
                       </Box>
                     </Box>
                 )}
               </>
           )}
-        </Container>
+        </PageShell>
       </Box>
   );
 }

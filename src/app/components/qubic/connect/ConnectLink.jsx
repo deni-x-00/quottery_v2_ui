@@ -13,7 +13,6 @@ import {
     Popper,
     Link,
 } from '@mui/material';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ConnectModal from './ConnectModal';
 import { useQubicConnect } from './QubicConnectContext';
@@ -42,12 +41,10 @@ const ConnectLink = () => {
     const buttonRef = useRef(null);
     const shouldShowGarthHint = Number(balance ?? 0) <= 0;
 
-    const icon = connected ? (
+    const icon = (
         <AccountBalanceWalletIcon
-            sx={{ color: theme.palette.primary.main }}
+            sx={{ color: connected ? theme.palette.primary.main : theme.palette.text.secondary }}
         />
-    ) : (
-        <LockOpenIcon color='tertiary' />
     );
 
     const handleBalanceClick = async (e) => {
@@ -113,7 +110,7 @@ const ConnectLink = () => {
                             }
                         >
                             <Typography variant='body1' fontWeight='bold' sx={{ letterSpacing: 0.5 }}>
-                                {connected ? `${formatQubicAmount(balance)} GARTH` : 'UNLOCK WALLET'}
+                                {connected ? `${formatQubicAmount(balance)} GARTH` : 'Connect Wallet'}
                             </Typography>
                         </Button>
                     ) : (
