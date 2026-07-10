@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Box,
     Typography,
@@ -9,6 +9,7 @@ import {
     CardContent,
     Slider,
     Alert,
+    IconButton,
     MenuItem,
     CircularProgress,
     Chip,
@@ -18,6 +19,7 @@ import RedeemIcon from "@mui/icons-material/Redeem";
 import SendIcon from "@mui/icons-material/Send";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { QubicHelper } from "@qubic-lib/qubic-ts-library/dist/qubicHelper";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext";
@@ -154,14 +156,9 @@ const findManagementRightsProcedure = (contract) => {
 
 const contractLabel = (contract) => contract?.label || contract?.name || `Contract #${contract?.contractIndex}`;
 
-const managementRightsFee = (sourceContract, destinationContract) => {
+const managementRightsFee = (sourceContract) => {
     const sourceFee = Number(sourceContract?.procedureFee || 0);
-    const destinationFee = Number(destinationContract?.procedureFee || 0);
-    const qxAcquireFee = Number(destinationContract?.contractIndex) === QX_CONTRACT_INDEX
-        ? TRANSFER_QUBIC_FEE
-        : 0;
-
-    return Math.max(sourceFee, destinationFee, qxAcquireFee);
+    return sourceFee;
 };
 
 const utilityInputSx = (theme) => ({
@@ -398,6 +395,7 @@ function UtilitiesPage() {
         balance,
         quBalance,
         qtryGovBalance,
+        fetchQuBalance,
         getScheduledTick,
     } = useQuotteryContext();
     const { bobUrl } = useConfig();
@@ -431,6 +429,8 @@ function UtilitiesPage() {
     const [smrAvailable, setSmrAvailable] = useState(null);
     const [smrAvailableLoading, setSmrAvailableLoading] = useState(false);
     const [smrSubmitting, setSmrSubmitting] = useState(false);
+    const [quBalanceRefreshing, setQuBalanceRefreshing] = useState(false);
+    const autoQuRefreshKeyRef = useRef("");
 
     const feeWarning = useMemo(() => (
         hasTransferFee(quBalance)
@@ -447,6 +447,11 @@ function UtilitiesPage() {
         () => smrDestinationContracts.find((contract) => String(contract.contractIndex) === String(smrDestinationContractIndex)) || null,
         [smrDestinationContractIndex, smrDestinationContracts]
     );
+    const selectedSmrFee = useMemo(
+        () => managementRightsFee(selectedSmrSource),
+        [selectedSmrSource]
+    );
+    const effectiveSmrAvailable = selectedSmrSource?.availableBalance ?? smrAvailable;
 
     const filteredSmrDestinationContracts = useMemo(() => {
         if (!selectedSmrSource) return smrDestinationContracts;
@@ -456,11 +461,35 @@ function UtilitiesPage() {
         return smrDestinationContracts.filter((contract) => Number(contract.contractIndex) !== Number(selectedSmrSource.contractIndex));
     }, [selectedSmrSource, smrDestinationContracts]);
 
-    const smrFeeWarning = useMemo(() => {
-        const fee = managementRightsFee(selectedSmrSource, selectedSmrDestination);
-        if (!selectedSmrSource || !selectedSmrDestination || quBalance === null || quBalance === undefined || quBalance >= fee) return "";
-        return `Transfer rights requires ${formatQubicAmount(fee)} QU for the selected contract fee. Current QU balance: ${formatQubicAmount(quBalance ?? 0)}.`;
-    }, [quBalance, selectedSmrDestination, selectedSmrSource]);
+    const smrFeeState = useMemo(() => {
+        if (!selectedSmrSource || !selectedSmrDestination) {
+            return { blocked: false, severity: "info", message: "" };
+        }
+
+        const requiredFee = formatQubicAmount(selectedSmrFee);
+        if (quBalance === null || quBalance === undefined) {
+            return {
+                blocked: true,
+                severity: "info",
+                message: `Required fee: ${requiredFee} QU. Loading QU balance...`,
+            };
+        }
+
+        const currentBalance = formatQubicAmount(quBalance);
+        if (quBalance < selectedSmrFee) {
+            return {
+                blocked: true,
+                severity: "warning",
+                message: `Transfer rights requires ${requiredFee} QU. Current QU balance: ${currentBalance}.`,
+            };
+        }
+
+        return {
+            blocked: false,
+            severity: "info",
+            message: `Required fee: ${requiredFee} QU. Current QU balance: ${currentBalance}.`,
+        };
+    }, [quBalance, selectedSmrDestination, selectedSmrFee, selectedSmrSource]);
 
     useEffect(() => {
         setPendingClaimEventIds(readPendingClaimIds(walletPublicIdentity));
@@ -474,6 +503,31 @@ function UtilitiesPage() {
             return nextIds;
         });
     }, [walletPublicIdentity]);
+
+    const refreshQuBalance = useCallback(async () => {
+        if (!walletPublicIdentity || typeof fetchQuBalance !== "function") return;
+        setQuBalanceRefreshing(true);
+        try {
+            await fetchQuBalance(walletPublicIdentity);
+        } catch (error) {
+            showSnackbar(`Failed to refresh QU balance: ${error.message || error}`, "error");
+        } finally {
+            setQuBalanceRefreshing(false);
+        }
+    }, [fetchQuBalance, showSnackbar, walletPublicIdentity]);
+
+    useEffect(() => {
+        const identity = connected ? walletPublicIdentity : "";
+        if (!identity) {
+            autoQuRefreshKeyRef.current = "";
+            return;
+        }
+        if (quBalance !== null && quBalance !== undefined) return;
+        if (autoQuRefreshKeyRef.current === identity) return;
+
+        autoQuRefreshKeyRef.current = identity;
+        refreshQuBalance();
+    }, [connected, quBalance, refreshQuBalance, walletPublicIdentity]);
 
     useEffect(() => {
         let cancelled = false;
@@ -947,13 +1001,17 @@ function UtilitiesPage() {
             showSnackbar("Enter a valid number of shares.", "error");
             return;
         }
-        if (smrAvailable !== null && smrAvailable !== undefined && shares > smrAvailable) {
+        if (effectiveSmrAvailable !== null && effectiveSmrAvailable !== undefined && shares > effectiveSmrAvailable) {
             showSnackbar("Number of shares exceeds the available balance.", "error");
             return;
         }
 
-        const procedureFee = managementRightsFee(selectedSmrSource, selectedSmrDestination);
-        if (quBalance !== null && quBalance !== undefined && quBalance < procedureFee) {
+        const procedureFee = selectedSmrFee;
+        if (quBalance === null || quBalance === undefined) {
+            showSnackbar("QU balance is still loading. Try again in a moment.", "warning");
+            return;
+        }
+        if (quBalance < procedureFee) {
             showSnackbar(`Transfer rights requires ${formatQubicAmount(procedureFee)} QU for the selected contract fee.`, "error");
             return;
         }
@@ -1152,14 +1210,36 @@ function UtilitiesPage() {
                         !selectedSmrSource ||
                         !selectedSmrDestination ||
                         !toPositiveInt(smrShares) ||
-                        !smrAvailable ||
-                        smrAvailable <= 0 ||
-                        !!smrFeeWarning
+                        !effectiveSmrAvailable ||
+                        effectiveSmrAvailable <= 0 ||
+                        smrFeeState.blocked
                     }
                     tone="primary"
                 >
                     {smartContractsError && <Alert severity="warning">{smartContractsError}</Alert>}
-                    {smrFeeWarning && <Alert severity="warning">{smrFeeWarning}</Alert>}
+                    {smrFeeState.message && (
+                        <Alert
+                            severity={smrFeeState.severity}
+                            action={
+                                <IconButton
+                                    aria-label="Refresh QU balance"
+                                    size="small"
+                                    onClick={refreshQuBalance}
+                                    disabled={!walletPublicIdentity || quBalanceRefreshing}
+                                    sx={{ color: "inherit", mt: -0.25 }}
+                                >
+                                    {quBalanceRefreshing ? <CircularProgress size={16} color="inherit" /> : <RefreshIcon fontSize="small" />}
+                                </IconButton>
+                            }
+                            sx={{
+                                alignItems: "center",
+                                "& .MuiAlert-message": { py: 0.25 },
+                                "& .MuiAlert-action": { py: 0, pl: 1, alignItems: "center" },
+                            }}
+                        >
+                            {smrFeeState.message}
+                        </Alert>
+                    )}
                     <TextField
                         select
                         label="Current Managing Contract"
@@ -1182,7 +1262,7 @@ function UtilitiesPage() {
                                 <Stack spacing={0.25}>
                                     <Typography variant="body2">{contractLabel(contract)}</Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        Available: {formatQubicAmount(contract.availableBalance)} GARTH | Fee {formatQubicAmount(contract.procedureFee)} QU
+                                        Available: {formatQubicAmount(contract.availableBalance)} GARTH | Procedure fee {formatQubicAmount(contract.procedureFee)} QU
                                     </Typography>
                                 </Stack>
                             </MenuItem>
@@ -1212,7 +1292,7 @@ function UtilitiesPage() {
                     <AmountSlider
                         label="Number of Shares"
                         value={smrShares}
-                        max={smrAvailable}
+                        max={effectiveSmrAvailable}
                         unit="GARTH"
                         onChange={setSmrShares}
                         disabled={!connected || smrAvailableLoading}

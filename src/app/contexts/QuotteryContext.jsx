@@ -373,6 +373,7 @@ export const QuotteryProvider = ({ children }) => {
       setWalletPublicIdentity(wallet.publicKey);
       setWalletPublicKeyBytes(publicKeyBytes);
       fetchBalance(wallet.publicKey);
+      fetchQuBalance(wallet.publicKey);
       fetchQtryGovBalance(wallet.publicKey);
     };
 
