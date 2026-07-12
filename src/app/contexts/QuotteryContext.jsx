@@ -13,12 +13,14 @@ import {
   fetchAllActiveEvents,
   fetchFullOrderbook,
   fetchUserBalanceAndPositions,
+  getEventInfo,
   getOrders,
   getNetworkTick,
   getEntityBalance,
   getQtryGovBalance,
 } from '../components/qubic/util/bobApi';
 import { excludedEventIds } from '../components/qubic/util/commons';
+import { isEventClosed } from '../components/qubic/util/tradeValidation';
 import { useTickRate } from '../hooks/useTickRate';
 
 const QuotteryContext = createContext();
@@ -30,6 +32,7 @@ const DEFAULT_TICK_SETTINGS = {
 };
 const WHOLE_SHARE_PRICE = 100000;
 const OPEN_ORDERS_CONCURRENCY = 6;
+const EVENT_RESULT_CONCURRENCY = 6;
 const excludedEventIdSet = new Set(excludedEventIds.map(Number));
 
 function filterVisibleEvents(events) {
@@ -134,7 +137,30 @@ export const QuotteryProvider = ({ children }) => {
     setLoading(true);
     try {
       const events = await fetchAllActiveEvents(bobUrl);
-      setAllEvents(filterVisibleEvents(events));
+      const visibleEvents = filterVisibleEvents(events);
+      const endedEvents = visibleEvents.filter((event) => isEventClosed(event));
+      const resultDetails = await runWithConcurrency(
+        endedEvents,
+        EVENT_RESULT_CONCURRENCY,
+        async (event) => {
+          try {
+            return await getEventInfo(bobUrl, event.eid ?? event.eventId);
+          } catch (error) {
+            console.warn(`Failed to load result for event ${event.eid ?? event.eventId}:`, error);
+            return null;
+          }
+        }
+      );
+      const resultsByEventId = new Map(
+        resultDetails
+          .filter(Boolean)
+          .map((event) => [String(event.eid ?? event.eventId), event])
+      );
+
+      setAllEvents(visibleEvents.map((event) => {
+        const details = resultsByEventId.get(String(event.eid ?? event.eventId));
+        return details ? { ...event, ...details } : event;
+      }));
     } catch (error) {
       console.error('Error fetching events via Bob:', error);
       setAllEvents([]);

@@ -40,6 +40,12 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
     const thumbSrc = tagInfo.thumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
     const hasEnded = isEventClosed(data);
     const cardStatus = status || (hasEnded ? "closed" : "open");
+    const resultOption = Number(data?.resultByGO);
+    const hasPublishedResult =
+        data?.resultByGO !== null &&
+        data?.resultByGO !== undefined &&
+        (resultOption === 0 || resultOption === 1);
+    const resultLabel = resultOption === 0 ? "YES" : "NO";
     const hasTradedVolume = data?.tradedVolume !== undefined && data?.tradedVolume !== null;
     const hasOpenOrderVolume = data?.openOrderVolume !== undefined && data?.openOrderVolume !== null;
     const chancePercent = Number(data?.probability?.percent);
@@ -112,7 +118,21 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
                         ) : (
                             <Box />
                         )}
-                        <StatusBadge status={cardStatus} size="xs" />
+                        {hasPublishedResult ? (
+                            <Stack direction="row" alignItems="center" spacing={0.55} sx={{ minWidth: 0 }}>
+                                <StatusBadge
+                                    status={resultOption === 0 ? "resolved" : "lose"}
+                                    label={`Result ${resultLabel}`}
+                                    size="xs"
+                                />
+                                <Typography component="span" variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 750 }}>
+                                    -
+                                </Typography>
+                                <StatusBadge status="closed" size="xs" />
+                            </Stack>
+                        ) : (
+                            <StatusBadge status={cardStatus} size="xs" />
+                        )}
                     </Stack>
 
                     {/* Thumbnail + Title */}
