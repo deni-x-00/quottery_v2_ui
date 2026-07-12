@@ -3,6 +3,7 @@ import {
   AppBar,
   Box,
   Button,
+  Divider,
   Grow,
   IconButton,
   Menu,
@@ -20,15 +21,18 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import AccountBalanceWalletIcon from "@mui/icons-material/AccountBalanceWallet";
 import ConnectLink from "../qubic/connect/ConnectLink";
 import PriceTicker from "../PriceTicker";
 import TickIndicator from "../TickIndicator";
 import { useConfig } from "../../contexts/ConfigContext";
+import { useQubicConnect } from "../qubic/connect/QubicConnectContext";
 import { useQuotteryContext } from "../../contexts/QuotteryContext";
 import { useThemeContext } from "../../contexts/ThemeContext";
 import { useBalanceNotifier } from "../../hooks/useBalanceNotifier";
 import { PAGE_GUTTER_X, PAGE_MAX_WIDTH } from "../ui/layout";
 import quotteryLogo from "../../../assets/quottery.svg";
+import { formatQubicAmount } from "../qubic/util";
 
 const primaryNav = [
   { label: "Home", to: "/" },
@@ -78,7 +82,8 @@ const Header = () => {
   const isDesktopNav = useMediaQuery(theme.breakpoints.up("md"));
   const { isDarkMode, toggleTheme } = useThemeContext();
   const { isConnected } = useConfig();
-  const { walletPublicIdentity, fetchBalance } = useQuotteryContext();
+  const { connected: walletConnected, toggleConnectModal } = useQubicConnect();
+  const { walletPublicIdentity, fetchBalance, balance } = useQuotteryContext();
   const { refreshBalanceWithNotifications } = useBalanceNotifier();
   const [moreAnchorEl, setMoreAnchorEl] = useState(null);
   const [mobileAnchorEl, setMobileAnchorEl] = useState(null);
@@ -271,6 +276,22 @@ const Header = () => {
         },
       }}
     >
+      <MenuItem
+        onClick={() => {
+          setMobileAnchorEl(null);
+          toggleConnectModal();
+        }}
+        sx={{
+          minHeight: 46,
+          fontWeight: 900,
+          gap: 1.25,
+          color: walletConnected ? "primary.main" : "text.primary",
+        }}
+      >
+        <AccountBalanceWalletIcon fontSize="small" />
+        {walletConnected ? `${formatQubicAmount(balance ?? 0)} GARTH` : "Connect Wallet"}
+      </MenuItem>
+      <Divider sx={{ borderColor: theme.palette.border.soft }} />
       {mobileItems.map((item) => (
         <MenuItem
           key={item.to}
