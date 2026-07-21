@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import SignClient from '@walletconnect/sign-client';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 const WalletConnectContext = createContext(undefined);
 
@@ -53,6 +54,7 @@ const isEmptyAccountsChangedEvent = (event) => {
 };
 
 export function WalletConnectProvider({ children }) {
+  const { t } = useTranslation();
   const [signClient, setSignClient] = useState(null);
   const [sessionTopic, setSessionTopic] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
@@ -213,10 +215,10 @@ export function WalletConnectProvider({ children }) {
         },
       });
     } catch (error) {
-      toast.error(error?.message || 'Failed to sign transaction');
+      toast.error(error?.message || t('walletConnect.signTransactionFailed'));
       throw error;
     }
-  }, [ensureActiveSession, signClient, sessionTopic]);
+  }, [ensureActiveSession, signClient, sessionTopic, t]);
 
   const signMessage = useCallback(async (params) => {
     ensureActiveSession();

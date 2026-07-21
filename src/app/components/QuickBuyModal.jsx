@@ -30,10 +30,12 @@ import { isEventClosed, validateOrderPreflight } from './qubic/util/tradeValidat
 import gcLogo from '../../assets/gc.png';
 import TradePriceSelector from './TradePriceSelector';
 import TradeAmountSlider from './TradeAmountSlider';
+import { useTranslation } from 'react-i18next';
 
 const WHOLE_SHARE_PRICE = 100000;
 
 const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast }) => {
+    const { t } = useTranslation();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
@@ -47,6 +49,17 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
     const [price, setPrice] = useState(50000);
     const [priceInput, setPriceInput] = useState('50000');
     const [submitting, setSubmitting] = useState(false);
+    const localizePreflightError = (error) => {
+        if (!error) return '';
+        if (error.startsWith('This event is closed')) return t('quickBuy.eventClosed');
+        if (error.startsWith('Please enter a valid amount')) return t('quickBuy.validShares');
+        if (error.startsWith('Price must be between')) return t('quickBuy.validPrice');
+        const garthMatch = error.match(/^Insufficient GARTH balance\. Required (.+), available (.+)\.$/);
+        if (garthMatch) return t('quickBuy.insufficientGarth', { required: garthMatch[1], available: garthMatch[2] });
+        const quMatch = error.match(/^Insufficient QU balance for the anti-spam fee\. Required (.+), available (.+)\.$/);
+        if (quMatch) return t('quickBuy.insufficientQu', { required: quMatch[1], available: quMatch[2] });
+        return error;
+    };
     const optionColor = (option) => (option === 0 ? theme.palette.success : theme.palette.error);
     const optionToggleSx = (option) => {
         const palette = optionColor(option);
@@ -84,17 +97,17 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
     const handleSubmit = async () => {
         if (!connected) { toggleConnectModal(); return; }
         if (!walletPublicIdentity || !walletPublicKeyBytes) {
-            showSnackbar('Connect your wallet first.', 'error');
+            showSnackbar(t('quickBuy.connectFirst'), 'error');
             return;
         }
         if (shares <= 0 || price <= 0 || price >= WHOLE_SHARE_PRICE) {
-            showSnackbar('Enter valid shares and price.', 'error');
+            showSnackbar(t('quickBuy.validOrder'), 'error');
             return;
         }
 
         const eid = event?.eid ?? event?.eventId;
         if (eid === undefined || eid === null) {
-            showSnackbar('Invalid event.', 'error');
+            showSnackbar(t('quickBuy.invalidEvent'), 'error');
             return;
         }
 
@@ -107,7 +120,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
             balance,
         });
         if (preflightError) {
-            showSnackbar(preflightError, 'error');
+            showSnackbar(localizePreflightError(preflightError), 'error');
             return;
         }
 
@@ -119,7 +132,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
             ]);
 
             if (!tickInfo || !basicInfo) {
-                showSnackbar('Failed to get network info.', 'error');
+                showSnackbar(t('quickBuy.networkInfoFailed'), 'error');
                 return;
             }
 
@@ -140,7 +153,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                 antiSpamAmount,
             });
             if (fundedPreflightError) {
-                showSnackbar(fundedPreflightError, 'error');
+                showSnackbar(localizePreflightError(fundedPreflightError), 'error');
                 return;
             }
 
@@ -153,7 +166,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                 payload
             );
 
-            showSnackbar('Sign your transaction in wallet.', 'info');
+            showSnackbar(t('quickBuy.signTransaction'), 'info');
             const confirmed = await getSignedTx(packet);
             if (!confirmed) return;
 
@@ -169,7 +182,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                     onTxBroadcast({
                         txHash: res.txHash,
                         scheduledTick,
-                        description: `Buy ${formatQubicAmount(shares)} "${optDesc}" @ ${formatQubicAmount(price)}`,
+                        description: t('quickBuy.transactionDescription', { amount: formatQubicAmount(shares), option: optDesc, price: formatQubicAmount(price) }),
                         inputType: QTRY_ADD_BID_ORDER,
                         type: 'order',
                         eventId: eid,
@@ -180,16 +193,16 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                     });
                 } else {
                     showSnackbar(
-                        `Buy transaction broadcasted for tick ${scheduledTick}. Waiting for execution: ${shares} shares of "${optDesc}" @ ${formatQubicAmount(price)}`,
+                        t('quickBuy.broadcasted', { tick: scheduledTick, amount: shares, option: optDesc, price: formatQubicAmount(price) }),
                         'info'
                     );
                 }
                 onClose();
             } else {
-                showSnackbar(`Broadcast failed: ${res?.error || 'Unknown error'}`, 'error');
+                showSnackbar(t('quickBuy.broadcastFailed', { error: res?.error || t('quickBuy.unknownError') }), 'error');
             }
         } catch (err) {
-            showSnackbar(`Error: ${err.message}`, 'error');
+            showSnackbar(t('quickBuy.error', { error: err.message }), 'error');
         } finally {
             setSubmitting(false);
         }
@@ -234,15 +247,15 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                             '& .MuiToggleButton-root': { borderColor: theme.palette.divider },
                         }}
                     >
-                        <ToggleButton value={0} sx={optionToggleSx(0)}>{event.option0Desc || 'Option 0'}</ToggleButton>
-                        <ToggleButton value={1} sx={optionToggleSx(1)}>{event.option1Desc || 'Option 1'}</ToggleButton>
+                        <ToggleButton value={0} sx={optionToggleSx(0)}>{event.option0Desc || t('eventDetails.option0')}</ToggleButton>
+                        <ToggleButton value={1} sx={optionToggleSx(1)}>{event.option1Desc || t('eventDetails.option1')}</ToggleButton>
                     </ToggleButtonGroup>
 
                     <TradeAmountSlider
-                        label="Shares"
+                        label={t('quickBuy.shares')}
                         value={sharesInput}
                         max={maxShares}
-                        unit="shares"
+                        unit={t('quickBuy.shares')}
                         availableValue={balance}
                         availableUnit="GARTH"
                         disabled={submitting}
@@ -263,7 +276,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
 
                     {/* Cost */}
                     <Box display="flex" alignItems="center" justifyContent="space-between">
-                        <Typography variant="body2" color="text.secondary">Cost</Typography>
+                        <Typography variant="body2" color="text.secondary">{t('quickBuy.cost')}</Typography>
                         <Box display="flex" alignItems="center" gap={0.5}>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
                                 {formatQubicAmount(cost)}
@@ -275,7 +288,7 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                     {/* Balance */}
                     {connected && balance != null && (
                         <Typography variant="caption" color="text.secondary" textAlign="right">
-                            Balance: {formatQubicAmount(balance)} GARTH
+                            {t('quickBuy.balance', { amount: formatQubicAmount(balance) })}
                         </Typography>
                     )}
 
@@ -285,11 +298,11 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
                         onClick={handleSubmit}
                         disabled={submitting || isEventClosed(event) || shares <= 0 || price <= 0 || price >= WHOLE_SHARE_PRICE || Number(balance || 0) < cost}
                     >
-                        {submitting ? 'Signing...' : 'Place Buy Order'}
+                        {submitting ? t('quickBuy.signing') : t('quickBuy.placeBuyOrder')}
                     </Button>
 
                     <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ lineHeight: 1.3 }}>
-                        Mint: matches if opposite option has buy price >= {formatQubicAmount(WHOLE_SHARE_PRICE - price)}
+                        {t('quickBuy.mintHint', { price: formatQubicAmount(WHOLE_SHARE_PRICE - price) })}
                     </Typography>
                 </Stack>
             </DialogContent>

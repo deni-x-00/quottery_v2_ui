@@ -17,6 +17,7 @@ import usePageTitle from "../hooks/usePageTitle";
 import { ActionIconButton, LoadingSkeleton, MetricGrid, PageHeader, PageShell } from "../components/ui";
 import { copyText } from "../utils";
 import { byteArrayToHexString, formatQubicAmount } from "../components/qubic/util";
+import { useTranslation } from "react-i18next";
 import {
     broadcastTransaction,
     getBasicInfo,
@@ -33,7 +34,8 @@ const GOV_TOTAL_VOTES = 676;
 const GOV_ACCEPTANCE_THRESHOLD = 451;
 
 function GovernancePage() {
-    usePageTitle("Governance");
+    const { t } = useTranslation();
+    usePageTitle(t("governance.pageTitle"));
     const theme = useTheme();
     const { bobUrl } = useConfig();
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
@@ -68,11 +70,11 @@ function GovernancePage() {
             setUniqueProposalCount(top?.uniqueCount || 0);
         } catch (e) {
             console.error("Failed to load governance data:", e);
-            setError("Failed to load governance data");
+            setError(t("governance.loadFailed"));
         } finally {
             setLoading(false);
         }
-    }, [bobUrl]);
+    }, [bobUrl, t]);
 
     useEffect(() => { loadData(); }, [loadData]);
 
@@ -140,15 +142,15 @@ function GovernancePage() {
                 bgcolor: theme.palette.surface[2],
             }}>
                 <Typography className="stat" variant="body2" sx={{ fontWeight: 900 }}>
-                    Votes: {formatQubicAmount(votes)} / {formatQubicAmount(GOV_TOTAL_VOTES)}
+                    {t("governance.votes", { votes: formatQubicAmount(votes), total: formatQubicAmount(GOV_TOTAL_VOTES) })}
                 </Typography>
                 <Box sx={{ mt: 0.85, height: 4, borderRadius: 999, bgcolor: theme.palette.surface[3], overflow: "hidden" }}>
                     <Box sx={{ width: `${progress}%`, height: "100%", bgcolor: remaining > 0 ? theme.palette.primary.main : theme.palette.market.yes }} />
                 </Box>
                 <Typography variant="caption" color={remaining > 0 ? "text.secondary" : "success.main"}>
                     {remaining > 0
-                        ? `${formatQubicAmount(remaining)} more to pass`
-                        : "Threshold reached"}
+                        ? t("governance.moreToPass", { count: formatQubicAmount(remaining) })
+                        : t("governance.thresholdReached")}
                 </Typography>
             </Box>
         );
@@ -160,7 +162,7 @@ function GovernancePage() {
             return;
         }
         if (!walletPublicKeyBytes) {
-            showSnackbar("Wallet public key not found.", "error");
+            showSnackbar(t("governance.walletKeyMissing"), "error");
             return;
         }
 
@@ -168,7 +170,7 @@ function GovernancePage() {
         try {
             const govBalance = qtryGovBalance ?? await fetchQtryGovBalance(walletPublicIdentity);
             if (!govBalance || Number(govBalance) <= 0) {
-                showSnackbar("Voting is available only for QTRYGOV holders.", "error");
+                showSnackbar(t("governance.holdersOnly"), "error");
                 return;
             }
 
@@ -177,11 +179,11 @@ function GovernancePage() {
                 basicInfo ? Promise.resolve(basicInfo) : getBasicInfo(bobUrl),
             ]);
             if (!tickInfo) {
-                showSnackbar("Failed to get scheduled tick.", "error");
+                showSnackbar(t("governance.scheduledTickFailed"), "error");
                 return;
             }
             if (!bi) {
-                showSnackbar("Failed to get contract info.", "error");
+                showSnackbar(t("governance.contractInfoFailed"), "error");
                 return;
             }
 
@@ -194,7 +196,7 @@ function GovernancePage() {
                 bi.antiSpamAmount || 0,
                 payload
             );
-            showSnackbar("Sign your transaction in wallet.", "info");
+            showSnackbar(t("governance.signTransaction"), "info");
             const confirmed = await getSignedTx(packet);
             if (!confirmed) return;
 
@@ -207,7 +209,7 @@ function GovernancePage() {
                 throw new Error(res?.error || "Broadcast failed");
             }
 
-            const description = `Vote for governance proposal #${proposal.rank}`;
+            const description = t("governance.voteTrack", { rank: proposal.rank });
             trackTx({
                 txHash: res.txHash,
                 scheduledTick: tickInfo.scheduledTick,
@@ -218,7 +220,7 @@ function GovernancePage() {
             scheduleBalanceRefresh(3000);
             loadData();
         } catch (e) {
-            showSnackbar(`Vote failed: ${e.message}`, "error");
+            showSnackbar(t("governance.voteFailed", { error: e.message }), "error");
         } finally {
             setVotingRank(null);
         }
@@ -227,21 +229,21 @@ function GovernancePage() {
     const hasGovTokens = connected && qtryGovBalance !== null && Number(qtryGovBalance) > 0;
     const hasNoGovTokens = connected && qtryGovBalance !== null && Number(qtryGovBalance) <= 0;
     const govStats = [
-        { label: "QTRYGOV Supply", value: formatQubicAmount(GOV_TOTAL_VOTES) },
-        { label: "Passing Threshold", value: formatQubicAmount(GOV_ACCEPTANCE_THRESHOLD) },
-        { label: "Unique Proposals", value: loading ? "Loading" : formatQubicAmount(uniqueProposalCount) },
-        { label: "Your QTRYGOV", value: connected ? (qtryGovBalance !== null ? formatQubicAmount(qtryGovBalance) : "Unavailable") : "-" },
+        { label: t("governance.supply"), value: formatQubicAmount(GOV_TOTAL_VOTES) },
+        { label: t("governance.threshold"), value: formatQubicAmount(GOV_ACCEPTANCE_THRESHOLD) },
+        { label: t("governance.uniqueProposals"), value: loading ? t("governance.loading") : formatQubicAmount(uniqueProposalCount) },
+        { label: t("governance.yourGov"), value: connected ? (qtryGovBalance !== null ? formatQubicAmount(qtryGovBalance) : t("governance.unavailable")) : "-" },
     ];
 
     return (
         <PageShell top={{ xs: 10, md: 12 }}>
             <PageHeader
-                eyebrow="Protocol voting"
-                title="Governance"
-                description="QTRYGOV holders vote on fees, dispute deposits, event costs, and the Game Operator address."
+                eyebrow={t("governance.eyebrow")}
+                title={t("governance.title")}
+                description={t("governance.description")}
                 icon={<GavelIcon />}
                 actions={(
-                    <ActionIconButton label="Refresh governance data" onClick={loadData} disabled={loading}>
+                    <ActionIconButton label={t("governance.refresh")} tooltip={t("governance.refresh")} onClick={loadData} disabled={loading}>
                         <RefreshIcon fontSize="small" />
                     </ActionIconButton>
                 )}
@@ -261,31 +263,31 @@ function GovernancePage() {
                     >
                         <Box>
                             <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                                Current Parameters
+                                {t("governance.currentParameters")}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                                Active protocol values currently returned by the contract.
+                                {t("governance.currentDescription")}
                             </Typography>
                         </Box>
                     </Stack>
                     <Grid container spacing={1.25}>
                         <Grid item xs={12} sm={6} md={4}>
-                            {renderGovPercentParam("Shareholder Fee", basicInfo.shareholderFee)}
+                            {renderGovPercentParam(t("governance.shareholderFee"), basicInfo.shareholderFee)}
                         </Grid>
                         <Grid item xs={12} sm={6} md={4}>
-                            {renderGovPercentParam("Burn Fee", basicInfo.burnFee)}
+                            {renderGovPercentParam(t("governance.burnFee"), basicInfo.burnFee)}
                         </Grid>
                         <Grid item xs={12} sm={6} md={4}>
-                            {renderGovPercentParam("Operation Fee", basicInfo.operationFee)}
+                            {renderGovPercentParam(t("governance.operationFee"), basicInfo.operationFee)}
                         </Grid>
                         <Grid item xs={12} sm={6} md={4}>
-                            {renderGovParam("Fee Per Day", basicInfo.feePerDay)}
+                            {renderGovParam(t("governance.feePerDay"), basicInfo.feePerDay)}
                         </Grid>
                         <Grid item xs={12} sm={6} md={4}>
-                            {renderGovParam("Dispute Deposit", basicInfo.depositAmountForDispute, " QU")}
+                            {renderGovParam(t("governance.disputeDeposit"), basicInfo.depositAmountForDispute, " QU")}
                         </Grid>
                         <Grid item xs={12} sm={6} md={4}>
-                            {renderGovParam("Anti-Spam", basicInfo.antiSpamAmount, " QU")}
+                            {renderGovParam(t("governance.antiSpam"), basicInfo.antiSpamAmount, " QU")}
                         </Grid>
                     </Grid>
                     <Box sx={{ mt: 1.5 }}>
@@ -295,7 +297,7 @@ function GovernancePage() {
                                 color="text.secondary"
                                 sx={{ fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}
                             >
-                                Game Operator
+                                {t("governance.gameOperator")}
                             </Typography>
                             <Box display="flex" alignItems="center" justifyContent="center" gap={0.75} sx={{ mt: 0.5, maxWidth: "100%" }}>
                                 <Typography
@@ -311,11 +313,11 @@ function GovernancePage() {
                                     {basicInfo.gameOperator || "-"}
                                 </Typography>
                                 {!!basicInfo.gameOperator && (
-                                    <Tooltip title="Copy Game Operator">
+                                    <Tooltip title={t("governance.copyGameOperator")}>
                                         <IconButton
                                             size="small"
                                             onClick={() => copyText(basicInfo.gameOperator)}
-                                            aria-label="Copy Game Operator"
+                                            aria-label={t("governance.copyGameOperator")}
                                             sx={{ flexShrink: 0, color: "text.secondary" }}
                                         >
                                             <ContentCopyIcon fontSize="small" />
@@ -340,9 +342,9 @@ function GovernancePage() {
 
             {!loading && !error && proposals.length === 0 && (
                 <Paper elevation={0} sx={{ ...panelSx, p: 4, textAlign: "center" }}>
-                    <Typography sx={{ fontWeight: 900 }}>No active proposals</Typography>
+                    <Typography sx={{ fontWeight: 900 }}>{t("governance.noProposals")}</Typography>
                     <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-                        Governance proposals will appear here when enough QTRYGOV holders align on parameters.
+                        {t("governance.noProposalsDescription")}
                     </Typography>
                 </Paper>
             )}
@@ -352,14 +354,14 @@ function GovernancePage() {
                     <Box sx={{ mb: 1.5 }}>
                         <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2}>
                             <Box>
-                                <Typography variant="h5" sx={{ fontWeight: 900 }}>Top Proposals</Typography>
+                                <Typography variant="h5" sx={{ fontWeight: 900 }}>{t("governance.topProposals")}</Typography>
                                 <Typography variant="body2" color="text.secondary">
-                                    Unique proposals in current epoch: {uniqueProposalCount}
+                                    {t("governance.uniqueInEpoch", { count: uniqueProposalCount })}
                                 </Typography>
                             </Box>
                             {connected && (
                                 <Typography variant="body2" color="text.secondary" textAlign="right">
-                                    QTRYGOV: {qtryGovBalance !== null ? formatQubicAmount(qtryGovBalance) : "Unavailable"}
+                                    QTRYGOV: {qtryGovBalance !== null ? formatQubicAmount(qtryGovBalance) : t("governance.unavailable")}
                                 </Typography>
                             )}
                         </Box>
@@ -373,7 +375,7 @@ function GovernancePage() {
                                     bgcolor: alpha(theme.palette.primary.main, 0.07),
                                 }}
                             >
-                                Voting is available only for QTRYGOV holders.
+                                {t("governance.holdersOnly")}
                             </Alert>
                         )}
                     </Box>
@@ -406,10 +408,10 @@ function GovernancePage() {
                                 >
                                     <Box sx={{ pl: 0.75 }}>
                                         <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                                            Proposal #{proposal.rank}
+                                            {t("governance.proposal", { rank: proposal.rank })}
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary">
-                                            Full parameter set proposed for the next epoch.
+                                            {t("governance.proposalDescription")}
                                         </Typography>
                                     </Box>
                                     {renderProposalVoteStatus(proposal.totalVotes)}
@@ -418,19 +420,19 @@ function GovernancePage() {
                                 <Divider sx={{ my: 1.25, borderColor: theme.palette.border.soft }} />
                                 <Grid container spacing={1.25}>
                                     <Grid item xs={12} sm={6} md={4}>
-                                        {renderGovPercentParam("Shareholder Fee", proposal.govParams.shareholderFee)}
+                                        {renderGovPercentParam(t("governance.shareholderFee"), proposal.govParams.shareholderFee)}
                                     </Grid>
                                     <Grid item xs={12} sm={6} md={4}>
-                                        {renderGovPercentParam("Burn Fee", proposal.govParams.burnFee)}
+                                        {renderGovPercentParam(t("governance.burnFee"), proposal.govParams.burnFee)}
                                     </Grid>
                                     <Grid item xs={12} sm={6} md={4}>
-                                        {renderGovPercentParam("Operation Fee", proposal.govParams.operationFee)}
+                                        {renderGovPercentParam(t("governance.operationFee"), proposal.govParams.operationFee)}
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
-                                        {renderGovParam("Fee Per Day", proposal.govParams.feePerDay)}
+                                        {renderGovParam(t("governance.feePerDay"), proposal.govParams.feePerDay)}
                                     </Grid>
                                     <Grid item xs={12} sm={6}>
-                                        {renderGovParam("Dispute Deposit", proposal.govParams.depositAmountForDispute, " QU")}
+                                        {renderGovParam(t("governance.disputeDeposit"), proposal.govParams.depositAmountForDispute, " QU")}
                                     </Grid>
                                 </Grid>
                                 {proposal.govParams.operationId && (
@@ -440,7 +442,7 @@ function GovernancePage() {
                                             color="text.secondary"
                                             sx={{ display: "block", mb: 0.5, fontWeight: 900, letterSpacing: "0.06em", textTransform: "uppercase" }}
                                         >
-                                            Proposed Operator
+                                            {t("governance.proposedOperator")}
                                         </Typography>
                                         <Box display="flex" alignItems="center" gap={0.75}>
                                             <Typography
@@ -454,11 +456,11 @@ function GovernancePage() {
                                             >
                                                 {proposal.govParams.operationId}
                                             </Typography>
-                                            <Tooltip title="Copy Proposed Operator">
+                                            <Tooltip title={t("governance.copyProposedOperator")}>
                                                 <IconButton
                                                     size="small"
                                                     onClick={() => copyText(proposal.govParams.operationId)}
-                                                    aria-label="Copy Proposed Operator"
+                                                    aria-label={t("governance.copyProposedOperator")}
                                                     sx={{ color: "text.secondary" }}
                                                 >
                                                     <ContentCopyIcon fontSize="small" />
@@ -475,11 +477,11 @@ function GovernancePage() {
                                         disabled={!hasGovTokens || votingRank !== null}
                                         sx={{ minWidth: 120 }}
                                     >
-                                        {votingRank === proposal.rank ? "Signing..." : "Vote"}
+                                        {votingRank === proposal.rank ? t("governance.signing") : t("governance.vote")}
                                     </Button>
                                     {!hasGovTokens && (
                                         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, textAlign: "right" }}>
-                                            Only QTRYGOV holders can vote.
+                                            {t("governance.holdersOnlyHint")}
                                         </Typography>
                                     )}
                                 </Box>

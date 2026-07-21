@@ -534,6 +534,49 @@ async function getPreferredDataSource() {
   return sourceCache;
 }
 
+async function getTransactionForDbVerification(txHash) {
+  const sourceInfo = await getPreferredDataSource();
+  if (sourceInfo.source !== 'bob') {
+    return { source: 'public', transaction: null };
+  }
+
+  const publicTick = Number(sourceInfo.tickInfo?.publicTick || 0);
+  const statusByTarget = new Map(
+    (sourceInfo.tickInfo?.bobStatuses || []).map((status) => [status.target, status])
+  );
+  const eligibleTargets = getBobTargetOrder(sourceInfo.bobTargetIndex).filter((target) => {
+    const status = statusByTarget.get(target.label);
+    const tick = Number(status?.tick || 0);
+    return tick > 0 && (!publicTick || publicTick - tick <= PUBLIC_TICK_TOLERANCE);
+  });
+  let successfulLookup = false;
+  const errors = [];
+
+  for (const target of eligibleTargets) {
+    try {
+      const transaction = await getJsonFromUrl(
+        new URL(`/tx/${encodeURIComponent(txHash)}`, target.url).toString(),
+        Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000)
+      );
+      successfulLookup = true;
+      if (transaction && transaction.found !== false && transaction.ok !== false && !transaction.error) {
+        return { source: 'bob', transaction, target: target.label };
+      }
+    } catch (error) {
+      errors.push(`${target.label}: ${error.message}`);
+    }
+  }
+
+  if (successfulLookup) {
+    return { source: 'bob', transaction: null };
+  }
+
+  if (errors.length > 0) {
+    console.warn(`[bob-proxy] Bob transaction lookup unavailable; using public RPC: ${errors.join('; ')}`);
+  }
+  return { source: 'public', transaction: null };
+}
+
 async function querySmartContract(funcNumber, inputHex = '') {
   const sourceInfo = await getPreferredDataSource();
   if (sourceInfo.source === 'public') {
@@ -1002,7 +1045,16 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (handleQuotteryDbApi && await handleQuotteryDbApi(req, res, requestUrl, sendJson)) {
+  if (handleQuotteryDbApi && await handleQuotteryDbApi(
+    req,
+    res,
+    requestUrl,
+    sendJson,
+    {
+      getTransactionByHash: getTransactionForDbVerification,
+      querySmartContract,
+    }
+  )) {
     return;
   }
 

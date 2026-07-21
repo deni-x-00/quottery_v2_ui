@@ -33,17 +33,20 @@ import { useBalanceNotifier } from "../../hooks/useBalanceNotifier";
 import { PAGE_GUTTER_X, PAGE_MAX_WIDTH } from "../ui/layout";
 import quotteryLogo from "../../../assets/quottery.svg";
 import { formatQubicAmount } from "../qubic/util";
+import { useTranslation } from "react-i18next";
+import LanguageSelector from "./LanguageSelector";
+import NotificationCenter from "./NotificationCenter";
 
 const primaryNav = [
-  { label: "Home", to: "/" },
-  { label: "Markets", to: "/markets" },
-  { label: "Leaderboard", to: "/leaderboard" },
+  { labelKey: "nav.home", to: "/" },
+  { labelKey: "nav.markets", to: "/markets" },
+  { labelKey: "nav.leaderboard", to: "/leaderboard" },
 ];
 
 const secondaryNav = [
-  { label: "About", to: "/about" },
-  { label: "Governance", to: "/governance" },
-  { label: "Utilities", to: "/utilities" },
+  { labelKey: "nav.about", to: "/about" },
+  { labelKey: "nav.governance", to: "/governance" },
+  { labelKey: "nav.utilities", to: "/utilities" },
 ];
 
 const headerContainerSx = {
@@ -78,6 +81,7 @@ function isActiveRoute(pathname, to) {
 
 const Header = () => {
   const theme = useTheme();
+  const { t } = useTranslation();
   const location = useLocation();
   const isDesktopNav = useMediaQuery(theme.breakpoints.up("md"));
   const { isDarkMode, toggleTheme } = useThemeContext();
@@ -92,7 +96,7 @@ const Header = () => {
 
   const scrollTrigger = useScrollTrigger({ disableHysteresis: true, threshold: 24 });
   const navItems = isConnected
-    ? [...primaryNav, { label: "Portfolio", to: "/portfolio" }]
+    ? [...primaryNav, { labelKey: "nav.portfolio", to: "/portfolio" }]
     : primaryNav;
   const mobileItems = [...navItems, ...secondaryNav];
 
@@ -252,7 +256,7 @@ const Header = () => {
             },
           }}
         >
-          {item.label}
+          {t(item.labelKey)}
         </MenuItem>
       ))}
     </Menu>
@@ -289,7 +293,7 @@ const Header = () => {
         }}
       >
         <AccountBalanceWalletIcon fontSize="small" />
-        {walletConnected ? `${formatQubicAmount(balance ?? 0)} GARTH` : "Connect Wallet"}
+        {walletConnected ? `${formatQubicAmount(balance ?? 0)} GARTH` : t("wallet.connect")}
       </MenuItem>
       <Divider sx={{ borderColor: theme.palette.border.soft }} />
       {mobileItems.map((item) => (
@@ -301,7 +305,7 @@ const Header = () => {
           onClick={() => setMobileAnchorEl(null)}
           sx={{ minHeight: 42, fontWeight: 800 }}
         >
-          {item.label}
+          {t(item.labelKey)}
         </MenuItem>
       ))}
     </Menu>
@@ -388,7 +392,7 @@ const Header = () => {
 
           <Box
             component="nav"
-            aria-label="Main navigation"
+            aria-label={t("nav.main")}
             sx={{
               display: { xs: "none", md: "flex" },
               justifyContent: "center",
@@ -405,7 +409,7 @@ const Header = () => {
                 size="small"
                 sx={navButtonSx(isActiveRoute(location.pathname, item.to))}
               >
-                {item.label}
+                {t(item.labelKey)}
               </Button>
             ))}
             <Box
@@ -431,7 +435,7 @@ const Header = () => {
                 }
                 sx={navButtonSx(secondaryNav.some((item) => isActiveRoute(location.pathname, item.to)) || Boolean(moreAnchorEl))}
               >
-                More
+                {t("nav.more")}
               </Button>
             </Box>
             {moreMenu}
@@ -449,9 +453,11 @@ const Header = () => {
             <Box sx={{ display: { xs: "none", sm: "block" } }}>
               <ConnectLink />
             </Box>
-            <Tooltip title={`Switch to ${isDarkMode ? "light" : "dark"} mode`} arrow>
+            <NotificationCenter iconButtonSx={iconButtonSx} />
+            <LanguageSelector />
+            <Tooltip title={isDarkMode ? t("theme.switchToLight") : t("theme.switchToDark")} arrow>
               <IconButton
-                aria-label={`Switch to ${isDarkMode ? "light" : "dark"} mode`}
+                aria-label={isDarkMode ? t("theme.switchToLight") : t("theme.switchToDark")}
                 onClick={toggleTheme}
                 size="small"
                 sx={{ ...iconButtonSx, display: { xs: "none", md: "inline-flex" } }}
@@ -460,7 +466,7 @@ const Header = () => {
               </IconButton>
             </Tooltip>
             <IconButton
-              aria-label="Open navigation"
+              aria-label={t("nav.open")}
               onClick={(event) => setMobileAnchorEl(event.currentTarget)}
               size="small"
               sx={{ ...iconButtonSx, display: { xs: "inline-flex", md: "none" } }}

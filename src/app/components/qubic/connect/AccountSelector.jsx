@@ -15,6 +15,7 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DoneIcon from '@mui/icons-material/Done';
 import { copyText } from '../../../utils';
+import { useTranslation } from 'react-i18next';
 
 const AccountSelector = ({
   label,
@@ -24,6 +25,7 @@ const AccountSelector = ({
   isLoading = false,
   error,
 }) => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const [copiedValue, setCopiedValue] = useState('');
   const selectedOption = options[selected];
@@ -48,7 +50,7 @@ const AccountSelector = ({
         </Typography>
         <Chip
           size='small'
-          label={`${options.length} account${options.length === 1 ? '' : 's'}`}
+          label={t('walletConnect.accountCount', { count: options.length })}
           variant='outlined'
           sx={{ height: 22, '& .MuiChip-label': { px: 0.75 } }}
         />
@@ -72,7 +74,7 @@ const AccountSelector = ({
 
         {!isLoading && options.length === 0 && !error && (
           <Typography variant='body2' color='text.secondary'>
-            No accounts available.
+            {t('walletConnect.noAccountsAvailable')}
           </Typography>
         )}
 
@@ -134,12 +136,12 @@ const AccountSelector = ({
               <Box sx={{ minWidth: 0, flex: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                   <Typography variant='body2' sx={{ fontWeight: 700 }} noWrap>
-                    {option.label || `Account ${index + 1}`}
+                    {option.label || t('walletConnect.account', { number: index + 1 })}
                   </Typography>
                   {isSelected && (
                     <Chip
                       size='small'
-                      label='Selected'
+                      label={t('walletConnect.selected')}
                       color='primary'
                       variant='outlined'
                       sx={{ height: 20, flexShrink: 0, '& .MuiChip-label': { px: 0.75 } }}
@@ -167,7 +169,7 @@ const AccountSelector = ({
                 <IconButton
                   size='small'
                   onClick={(e) => handleCopy(option.value, e)}
-                  aria-label='Copy account address'
+                  aria-label={t('walletConnect.copyAccountAddress')}
                 >
                   {isCopied ? <DoneIcon fontSize='small' color='success' /> : <ContentCopyIcon fontSize='small' />}
                 </IconButton>
@@ -194,7 +196,7 @@ const AccountSelector = ({
           }}
         >
           <Typography variant='caption' color='text.secondary' sx={{ display: 'block', lineHeight: 1.2 }}>
-            Selected identity
+            {t('walletConnect.selectedIdentity')}
           </Typography>
           <Typography variant='caption' sx={{ display: 'block', fontFamily: 'monospace', lineHeight: 1.35 }} noWrap>
             {formatIdentity(selectedOption.value)}

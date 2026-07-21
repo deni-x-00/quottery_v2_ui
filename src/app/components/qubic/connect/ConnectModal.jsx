@@ -37,6 +37,7 @@ import WalletConnectLogo from '../../../../assets/wallet-connect.svg';
 import AccountSelector from './AccountSelector';
 import { useQuotteryContext } from '../../../contexts/QuotteryContext';
 import { formatQubicAmount } from '../util';
+import { useTranslation } from 'react-i18next';
 
 export const MetamaskActions = Object.freeze({
   SetInstalled: 'SetInstalled',
@@ -75,10 +76,8 @@ const formatIdentity = (value = '') => {
 };
 
 const ACCOUNT_REQUEST_TIMEOUT_MS = 8000;
-const ACCOUNT_REQUEST_TIMEOUT_MESSAGE =
-    'Qubic Wallet did not respond. Open Qubic Wallet, unlock it, then refresh accounts.';
-
 const ConnectModal = ({ open, onClose, darkMode }) => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [state] = useContext(MetaMaskContext);
@@ -152,7 +151,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
       if (result) {
         setQrCode(result);
       } else {
-        setQrError('Failed to generate WalletConnect QR code.');
+        setQrError(t('walletConnect.failedQrCode'));
       }
     };
 
@@ -160,7 +159,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
     await renderUri(uri);
 
     if (!activeUri) {
-      setQrError('Failed to create WalletConnect pairing URI.');
+      setQrError(t('walletConnect.failedPairingUri'));
       return;
     }
 
@@ -178,14 +177,14 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
       const accountsResponse = await Promise.race([
         requestAccounts(),
         new Promise((_, reject) => {
-          setTimeout(() => reject(new Error(ACCOUNT_REQUEST_TIMEOUT_MESSAGE)), ACCOUNT_REQUEST_TIMEOUT_MS);
+          setTimeout(() => reject(new Error(t('walletConnect.accountRequestTimeout'))), ACCOUNT_REQUEST_TIMEOUT_MS);
         }),
       ]);
       const nextAccounts = normalizeWalletConnectAccounts(accountsResponse);
       if (nextAccounts.length === 0) {
         setAccounts([]);
         setSelectedAccount(0);
-        setAccountsError('No accounts returned by Qubic Wallet. Open Qubic Wallet, unlock it, then refresh accounts.');
+        setAccountsError(t('walletConnect.noAccountsReturned'));
         return;
       }
 
@@ -196,7 +195,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
       setAccounts([]);
       setSelectedAccount(0);
       setAccountsError(
-          error?.message || ACCOUNT_REQUEST_TIMEOUT_MESSAGE
+          error?.message || t('walletConnect.accountRequestTimeout')
       );
     } finally {
       setAccountsLoading(false);
@@ -210,7 +209,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
   const selectWalletConnectAccount = () => {
     const account = accounts[parseInt(selectedAccount.toString())];
     if (!account?.publicId) {
-      setAccountsError('Select an account first.');
+      setAccountsError(t('walletConnect.selectAccountFirst'));
       return;
     }
 
@@ -288,10 +287,10 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
             </Box>
             <Box>
               <Typography variant='h6' color='text.primary' sx={{ fontWeight: 900, lineHeight: 1.1 }}>
-                Connect Wallet
+                {t('walletConnect.connectTitle')}
               </Typography>
               <Typography variant='caption' color='text.secondary' sx={{ fontWeight: 700 }}>
-                Qubic account access
+                {t('walletConnect.accountAccess')}
               </Typography>
             </Box>
           </Box>
@@ -315,17 +314,17 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                   {connected && (
                       <>
                         <Box sx={panelSx}>
-                          <Typography variant='overline' color='text.secondary' sx={{ fontWeight: 900 }}>Identity</Typography>
+                          <Typography variant='overline' color='text.secondary' sx={{ fontWeight: 900 }}>{t('walletConnect.identity')}</Typography>
                           <Box display='flex' alignItems='center' gap={0.75}>
                             <Typography variant='body2' sx={{ wordBreak: 'break-all', fontFamily: 'monospace', flex: 1 }}>
                               {walletPublicIdentity || '-'}
                             </Typography>
                             {!!walletPublicIdentity && (
-                                <Tooltip title='Copy identity'>
+                                <Tooltip title={t('walletConnect.copyIdentity')}>
                                   <IconButton
                                       size='small'
                                       onClick={() => copyText(walletPublicIdentity)}
-                                      aria-label='Copy wallet identity'
+                                      aria-label={t('walletConnect.copyIdentity')}
                                   >
                                     <ContentCopyIcon fontSize='small' />
                                   </IconButton>
@@ -342,22 +341,21 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                                   disabled={accountsLoading}
                                   sx={{ ...modalButtonSx, mt: 1.5 }}
                               >
-                                Switch Account
+                                {t('walletConnect.switchAccount')}
                               </Button>
                           )}
                           <Box mt={1} />
-                          <Typography variant='overline' color='text.secondary'>Balance (GARTH)</Typography>
+                          <Typography variant='overline' color='text.secondary'>{t('walletConnect.garthBalance')}</Typography>
                           <Typography variant='body2'>
                             {balance !== null && balance !== undefined ? formatQubicAmount(balance) : '-'}
                           </Typography>
                           {eventPositions && eventPositions.length > 0 && (
                               <>
                                 <Box mt={1} />
-                                <Typography variant='overline' color='text.secondary'>Positions</Typography>
+                                <Typography variant='overline' color='text.secondary'>{t('walletConnect.positions')}</Typography>
                                 {eventPositions.map((position, idx) => (
                                     <Typography key={`${position.eventId}-${position.option}-${idx}`} variant='body2'>
-                                      Event {position.eventId} – Option {position.option}:{' '}
-                                      {position.amount} share{position.amount !== 1 ? 's' : ''}
+                                      {t('walletConnect.positionSummary', { event: position.eventId, option: position.option, amount: position.amount })}
                                     </Typography>
                                 ))}
                               </>
@@ -370,9 +368,9 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                         >
                           <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={1.5}>
                             <Box>
-                              <Typography variant="overline" color="text.secondary">Transaction Tick</Typography>
+                              <Typography variant="overline" color="text.secondary">{t('walletConnect.transactionTick')}</Typography>
                               <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.25 }}>
-                                Choose one tick scheduling mode.
+                                {t('walletConnect.transactionTickHelp')}
                               </Typography>
                             </Box>
                             <Typography variant="caption" color="text.secondary">
@@ -390,16 +388,16 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                               sx={{ mb: 1.5 }}
                           >
                             <ToggleButton value="approval" sx={{ textTransform: 'none' }}>
-                              Approval time
+                              {t('walletConnect.approvalTime')}
                             </ToggleButton>
                             <ToggleButton value="fixed" sx={{ textTransform: 'none' }}>
-                              Fixed ticks
+                              {t('walletConnect.fixedTicks')}
                             </ToggleButton>
                           </ToggleButtonGroup>
                           {(txTickSettings?.mode || 'approval') === 'fixed' ? (
                               <>
                                 <Box display="flex" justifyContent="space-between" alignItems="baseline">
-                                  <Typography variant="body2" color="text.secondary">Ticks added</Typography>
+                                  <Typography variant="body2" color="text.secondary">{t('walletConnect.ticksAdded')}</Typography>
                                   <Typography variant="body2" fontWeight={700}>
                                     {txTickSettings?.fixedTicks || 20}
                                   </Typography>
@@ -417,7 +415,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                           ) : (
                               <>
                                 <Box display="flex" justifyContent="space-between" alignItems="baseline">
-                                  <Typography variant="body2" color="text.secondary">Approval window</Typography>
+                                  <Typography variant="body2" color="text.secondary">{t('walletConnect.approvalWindow')}</Typography>
                                   <Typography variant="body2" fontWeight={700}>
                                     {txTickSettings?.approvalSeconds || 15}s / +{approvalTicks} ticks
                                   </Typography>
@@ -438,7 +436,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                         <Button variant='outlined' color='primary' size='large'
                                 startIcon={<AccountBalanceWalletIcon />}
                                 onClick={() => disconnect()} fullWidth sx={{ ...modalButtonSx, mt: 0.5 }}>
-                          <Typography variant='button' fontWeight='bold'>Disconnect Wallet</Typography>
+                          <Typography variant='button' fontWeight='bold'>{t('walletConnect.disconnect')}</Typography>
                         </Button>
                       </>
                   )}
@@ -449,7 +447,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                             <AccountBalanceWalletIcon />
                           </Box>
                           <Typography variant='body1' color='text.secondary' mt={1.5} sx={{ fontWeight: 700 }}>
-                            Choose your preferred connection method
+                            {t('walletConnect.chooseMethod')}
                           </Typography>
                         </Box>
                         <Button variant='outlined' color='primary' size='large'
@@ -487,7 +485,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                     <Box sx={{ minWidth: 0, flex: 1 }}>
                       <Stack direction='row' spacing={1} alignItems='center' sx={{ minWidth: 0 }}>
                         <Typography variant='h6' color='text.primary' sx={{ fontWeight: 700 }} noWrap>
-                          Wallet accounts
+                          {t('walletConnect.walletAccounts')}
                         </Typography>
                         {isConnected && (
                             <Chip
@@ -517,16 +515,16 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                             whiteSpace: 'nowrap',
                           }}
                       >
-                        {wallet?.publicKey ? formatIdentity(wallet.publicKey) : 'No account selected'}
+                        {wallet?.publicKey ? formatIdentity(wallet.publicKey) : t('walletConnect.noAccountSelected')}
                       </Typography>
                     </Box>
-                    <Tooltip title='Refresh accounts'>
+                    <Tooltip title={t('walletConnect.refreshAccounts')}>
                       <span>
                         <IconButton
                             size='small'
                             onClick={() => loadWalletConnectAccounts()}
                             disabled={accountsLoading}
-                            aria-label='Refresh accounts'
+                            aria-label={t('walletConnect.refreshAccounts')}
                             sx={{ border: `1px solid ${theme.palette.border.soft}` }}
                         >
                           <RefreshIcon fontSize='small' />
@@ -535,9 +533,9 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                     </Tooltip>
                   </Box>
                   <AccountSelector
-                      label='Available accounts'
+                      label={t('walletConnect.availableAccounts')}
                       options={accounts.map((account, idx) => ({
-                        label: account.alias || `Account ${idx + 1}`,
+                        label: account.alias || t('walletConnect.account', { number: idx + 1 }),
                         value: account.publicId,
                       }))}
                       selected={selectedAccount}
@@ -549,13 +547,13 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={cancelAccountSelection}
                             sx={modalButtonSx}>
-                      Cancel
+                      {t('walletConnect.cancel')}
                     </Button>
                     <Button variant='contained' color='primary' size='large'
                             onClick={selectWalletConnectAccount}
                             disabled={accountsLoading || accounts.length === 0}
                             sx={modalButtonSx}>
-                      Select Account
+                      {t('walletConnect.selectAccount')}
                     </Button>
                   </Box>
                 </Box>
@@ -570,14 +568,14 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                       <MetaMaskLogo style={{ width: 28, height: 28 }} />
                     </Box>
                     <Typography variant='body1' mt={1.5} color='text.secondary' sx={{ fontWeight: 700 }}>
-                      Connect your MetaMask wallet. MetaMask must be installed and unlocked.
+                      {t('walletConnect.metamaskInstruction')}
                     </Typography>
                   </Box>
                   <Box display='flex' flexDirection='column' gap={2}>
                     <HeaderButtons state={state} onConnectClick={() => { mmSnapConnect(); setSelectedMode('none'); onClose(); }} />
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={() => setSelectedMode('none')} sx={modalButtonSx}>
-                      Cancel
+                      {t('walletConnect.cancel')}
                     </Button>
                   </Box>
                 </Box>
@@ -597,7 +595,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                       </Typography>
                     </Stack>
                     <Typography variant='body2' color='text.secondary' sx={{ fontWeight: 700 }}>
-                      Scan with Qubic Wallet or open the pairing link on this device.
+                      {t('walletConnect.scanInstruction')}
                     </Typography>
                   </Box>
                   <Box display='flex' flexDirection='column' gap={2}>
@@ -626,7 +624,7 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                                 boxShadow: '0 12px 36px rgba(0,0,0,0.22)',
                               }}
                           >
-                            <img src={qrCode} alt='Wallet Connect QR Code' style={{ width: 216, height: 216, display: 'block' }} />
+                            <img src={qrCode} alt={t('walletConnect.qrCode')} style={{ width: 216, height: 216, display: 'block' }} />
                           </Box>
                       ) : qrError ? (
                           <Typography variant='body2' color='error' textAlign='center'>
@@ -647,17 +645,17 @@ const ConnectModal = ({ open, onClose, darkMode }) => {
                             startIcon={<OpenInNewIcon />}
                             onClick={openQubicWallet}
                             disabled={!connectionURI} sx={modalButtonSx}>
-                      Open in Qubic Wallet
+                      {t('walletConnect.openWallet')}
                     </Button>
                     <Button variant='outlined' color='primary' size='large'
                             startIcon={<ContentCopyIcon />}
                             onClick={() => copyText(connectionURI)}
                             disabled={!connectionURI} sx={modalButtonSx}>
-                      Copy WalletConnect URL
+                      {t('walletConnect.copyUrl')}
                     </Button>
                     <Button variant='outlined' color='secondary' size='large'
                             onClick={() => setSelectedMode('none')} sx={modalButtonSx}>
-                      Cancel
+                      {t('walletConnect.cancel')}
                     </Button>
                   </Box>
                 </Box>

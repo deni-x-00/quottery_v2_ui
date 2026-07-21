@@ -18,6 +18,7 @@ import { toast } from 'react-hot-toast';
 import { getSnap } from './utils';
 import { connectSnap } from './utils';
 import { useWalletConnect } from './WalletConnectContext';
+import { useTranslation } from 'react-i18next';
 // @ts-ignore
 import { atom, useAtom } from 'jotai';
 
@@ -74,6 +75,7 @@ const readStoredWallet = () => {
 };
 
 function QubicConnectProviderInner({ children }) {
+  const { t } = useTranslation();
   const [wallet, setWallet] = useState(readStoredWallet);
   const [connected, setConnected] = useState(() => Boolean(wallet));
   const [showConnectModal, setShowConnectModal] = useState(false);
@@ -310,7 +312,7 @@ function QubicConnectProviderInner({ children }) {
     const payloadBytes = decodedTx.payload?.getPackageData?.() || new Uint8Array();
     const payload = payloadBytes.length > 0 ? uint8ArrayToBase64(payloadBytes) : null;
 
-    toast('Sign the transaction in your wallet');
+    toast(t('walletConnect.signTransaction'));
 
     const result = await signWalletConnectTransaction({
       from,
@@ -382,7 +384,7 @@ function QubicConnectProviderInner({ children }) {
       });
     } catch (error) {
       console.error(error);
-      toast.error('MetaMask Snap (mmsnap) is not installed. Please install it and try again.');
+      toast.error(t('walletConnect.metamaskSnapMissing'));
       dispatch({
         type: MetamaskActions.SetError,
         payload: error,

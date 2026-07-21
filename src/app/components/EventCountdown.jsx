@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Box, Stack, Typography, useTheme } from "@mui/material";
 import { alpha } from "@mui/material/styles";
+import { useTranslation } from "react-i18next";
 import { parseQubicUtcDate } from "./qubic/util/tradeValidation";
 
 const SECOND_MS = 1000;
@@ -56,6 +57,7 @@ function CountdownUnit({ value, label, compact = false, color }) {
 }
 
 function EventCountdown({ endDate, compact = false, forceEnded = false }) {
+    const { t } = useTranslation();
     const theme = useTheme();
     const [nowTime, setNowTime] = useState(() => Date.now());
     const endTime = useMemo(() => {
@@ -80,11 +82,11 @@ function EventCountdown({ endDate, compact = false, forceEnded = false }) {
     const isEnded = forceEnded || parts.isEnded;
     const countdownColor = isEnded ? theme.palette.error.main : theme.palette.primary.main;
     const units = [
-        ...(parts.months > 0 ? [{ value: parts.months, label: "MONTHS" }] : []),
-        ...(parts.months > 0 || parts.days > 0 ? [{ value: parts.days, label: "DAYS" }] : []),
-        { value: parts.hours, label: "HRS" },
-        { value: parts.minutes, label: "MINS" },
-        { value: parts.seconds, label: "SECS" },
+        ...(parts.months > 0 ? [{ value: parts.months, label: t("eventDetails.months") }] : []),
+        ...(parts.months > 0 || parts.days > 0 ? [{ value: parts.days, label: t("eventDetails.days") }] : []),
+        { value: parts.hours, label: t("eventDetails.hours") },
+        { value: parts.minutes, label: t("eventDetails.minutes") },
+        { value: parts.seconds, label: t("eventDetails.seconds") },
     ];
 
     return (
@@ -112,7 +114,7 @@ function EventCountdown({ endDate, compact = false, forceEnded = false }) {
                         mb: 1,
                     }}
                 >
-                    {isEnded ? "EVENT ENDED" : "TIME LEFT"}
+                    {isEnded ? t("eventDetails.eventEnded") : t("eventDetails.timeLeft")}
                 </Typography>
             )}
             <Stack direction="row" spacing={compact ? { xs: 1, sm: 1.35 } : { xs: 1.5, sm: 2.25 }} justifyContent="center" useFlexGap flexWrap="wrap">
@@ -125,7 +127,7 @@ function EventCountdown({ endDate, compact = false, forceEnded = false }) {
                             lineHeight: 1,
                         }}
                     >
-                        ENDED
+                        {t("eventDetails.ended")}
                     </Typography>
                 ) : units.map((unit) => (
                     <CountdownUnit key={unit.label} value={unit.value} label={unit.label} compact={compact} color={countdownColor} />

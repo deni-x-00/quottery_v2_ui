@@ -54,6 +54,7 @@ import { StatusBadge } from "../components/ui";
 import { calculateOptionProbability } from "../utils/eventProbability";
 import { formatPercent, formatPrice, formatPricePercent } from "../utils/format";
 import usePageTitle from "../hooks/usePageTitle";
+import { useTranslation } from "react-i18next";
 const thumbnails = require.context("../../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 const resolveThumbnail = (name) => {
     try {
@@ -64,6 +65,7 @@ const resolveThumbnail = (name) => {
 };
 
 function EventDetailsPage() {
+    const { t } = useTranslation();
     const { id } = useParams();
     const navigate = useNavigate();
     const location = useLocation();
@@ -117,7 +119,7 @@ function EventDetailsPage() {
         trackTx,
         scheduleBalanceRefresh,
     });
-    usePageTitle(event?.desc || (id ? `Event #${id}` : "Event"));
+    usePageTitle(event?.desc || (id ? t("eventDetails.eventFallback", { id }) : t("eventDetails.event")));
 
     // Trading box state
     const WHOLE_SHARE_PRICE = 100000;
@@ -137,8 +139,14 @@ function EventDetailsPage() {
         ? Number(balance || 0) < tradeCoins
         : availableTradeShares < Number(tradeAmount || 0);
     const tradeResourceError = tradeSide === "buy"
-        ? `Insufficient GARTH: need ${formatQubicAmount(tradeCoins)}, available ${formatQubicAmount(balance || 0)}.`
-        : `Insufficient shares: need ${formatQubicAmount(tradeAmount || 0)}, available ${formatQubicAmount(availableTradeShares)}.`;
+        ? t("eventDetails.insufficientGarth", {
+            needed: formatQubicAmount(tradeCoins),
+            available: formatQubicAmount(balance || 0),
+        })
+        : t("eventDetails.insufficientShares", {
+            needed: formatQubicAmount(tradeAmount || 0),
+            available: formatQubicAmount(availableTradeShares),
+        });
     const tradeSubmitDisabled =
         submitting ||
         !connected ||
@@ -232,7 +240,7 @@ function EventDetailsPage() {
             if (visibleEntries.length === 0) {
                 return (
                     <Box sx={{ py: 2.25, px: 1.5, color: "text.secondary", fontSize: "0.82rem" }}>
-                        No {isBidSide ? "buy" : "sell"} orders
+                        {t(isBidSide ? "eventDetails.noBuyOrders" : "eventDetails.noSellOrders")}
                     </Box>
                 );
             }
@@ -342,7 +350,7 @@ function EventDetailsPage() {
                 </Box>
             );
         },
-        [theme]
+        [t, theme]
     );
 
     const renderOrderBookPanel = useCallback(() => {
@@ -353,7 +361,7 @@ function EventDetailsPage() {
         const spread = Number.isFinite(Number(bestBid)) && Number.isFinite(Number(bestAsk))
             ? Number(bestAsk) - Number(bestBid)
             : null;
-        const optionLabel = obTab === 0 ? "YES" : "NO";
+        const optionLabel = obTab === 0 ? t("eventDetails.yes") : t("eventDetails.no");
 
         return (
             <Box
@@ -374,16 +382,16 @@ function EventDetailsPage() {
                     }}
                 >
                     <Typography sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                        Trade {optionLabel}
+                        {t("eventDetails.tradeOption", { option: optionLabel })}
                     </Typography>
                     <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                        Price
+                        {t("eventDetails.price")}
                     </Typography>
                     <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                        Shares
+                        {t("eventDetails.shares")}
                     </Typography>
                     <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.72rem", fontWeight: 900, letterSpacing: 1.2, textTransform: "uppercase" }}>
-                        Total
+                        {t("eventDetails.total")}
                     </Typography>
                 </Box>
                 <Box
@@ -415,20 +423,20 @@ function EventDetailsPage() {
                     >
                         <Box />
                         <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.74rem", fontWeight: 750 }}>
-                            Bid: {bestBid === undefined ? "-" : formatPrice(bestBid)}
+                            {t("eventDetails.bid", { value: bestBid === undefined ? "-" : formatPrice(bestBid) })}
                         </Typography>
                         <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.76rem", fontWeight: 800 }}>
-                            Spread: {spread === null ? "-" : formatPricePercent(Math.max(0, spread))}
+                            {t("eventDetails.spread", { value: spread === null ? "-" : formatPricePercent(Math.max(0, spread)) })}
                         </Typography>
                         <Typography align="center" sx={{ color: "text.secondary", fontSize: "0.74rem", fontWeight: 750 }}>
-                            Ask: {bestAsk === undefined ? "-" : formatPrice(bestAsk)}
+                            {t("eventDetails.ask", { value: bestAsk === undefined ? "-" : formatPrice(bestAsk) })}
                         </Typography>
                     </Box>
                     {renderOrderBookSide(bids, "bids")}
                 </Box>
             </Box>
         );
-    }, [buildOrderSideEntries, obTab, orderbook, renderOrderBookSide, theme]);
+    }, [buildOrderSideEntries, obTab, orderbook, renderOrderBookSide, t, theme]);
 
     const { refreshData } = useEventOrderbook(event, fetchOrderbook);
 
@@ -456,15 +464,15 @@ function EventDetailsPage() {
             <PageShell top={12} bottom={4} sx={{ textAlign: "center" }}>
                 <EmptyState
                     tone="warning"
-                    title="Event not found"
-                    description="This event is missing or the event ID is invalid."
+                    title={t("eventDetails.notFound")}
+                    description={t("eventDetails.invalidEvent")}
                     action={(
                         <Button
                             variant="outlined"
                             startIcon={<KeyboardReturnIcon />}
                             onClick={handleBack}
                         >
-                            Back to Markets
+                            {t("eventDetails.back")}
                         </Button>
                     )}
                 />
@@ -518,10 +526,12 @@ function EventDetailsPage() {
                             <Box display="flex" alignItems="center" gap={1} sx={{ flexWrap: "wrap" }}>
                                 <StatusBadge
                                     status={event.resultByGO === -1 ? "pending" : "resolved"}
-                                    label={event.resultByGO === -1 ? "Pending" : `Result: ${event.resultByGO === 0 ? event.option0Desc : event.option1Desc}`}
+                                    label={event.resultByGO === -1
+                                        ? t("eventDetails.pending")
+                                        : t("eventDetails.result", { option: event.resultByGO === 0 ? event.option0Desc : event.option1Desc })}
                                 />
                                 <IconButton
-                                    aria-label="refresh order book"
+                                    aria-label={t("eventDetails.refreshOrderBook")}
                                     size="small"
                                     onClick={refreshData}
                                     disabled={obLoading}
@@ -573,7 +583,7 @@ function EventDetailsPage() {
                                         <MonetizationOnIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                                         <Typography variant="body2"
                                                     sx={{ color: theme.palette.primary.main, fontWeight: 900 }}>
-                                            Order Book
+                                            {t("eventDetails.orderBook")}
                                         </Typography>
                                     </Box>
                                 </AccordionSummary>
@@ -613,7 +623,9 @@ function EventDetailsPage() {
                                                             opacity: 0.9,
                                                         }}
                                                     >
-                                                        {option === 0 ? event?.option0Desc || "Option 0" : event?.option1Desc || "Option 1"}
+                                                        {option === 0
+                                                            ? event?.option0Desc || t("eventDetails.option0")
+                                                            : event?.option1Desc || t("eventDetails.option1")}
                                                     </Typography>
                                                 </Box>
                                             ))}
@@ -621,11 +633,11 @@ function EventDetailsPage() {
                                     )}
                                     <Tabs value={obTab} onChange={(_, v) => setObTab(v)}
                                           sx={{ mb: 1, "& .MuiTab-root": { textTransform: "none", fontWeight: 600 }, "& .MuiTabs-indicator": { height: 3, borderRadius: 1.5 } }}>
-                                        <Tab label={event?.option0Desc || "Option 0"} value={0} sx={optionTabSx(0)} />
-                                        <Tab label={event?.option1Desc || "Option 1"} value={1} sx={optionTabSx(1)} />
+                                        <Tab label={event?.option0Desc || t("eventDetails.option0")} value={0} sx={optionTabSx(0)} />
+                                        <Tab label={event?.option1Desc || t("eventDetails.option1")} value={1} sx={optionTabSx(1)} />
                                     </Tabs>
 
-                                    {obLoading && <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>Loading order book...</Typography>}
+                                    {obLoading && <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>{t("eventDetails.loadingOrderBook")}</Typography>}
                                     {obError && <Typography variant="body2" color="error" sx={{ py: 1 }}>{obError}</Typography>}
 
                                     {!obLoading && !obError && (
@@ -660,7 +672,7 @@ function EventDetailsPage() {
                                             <InsightsIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                                             <Typography variant="body2"
                                                         sx={{ color: theme.palette.primary.main, fontWeight: 900 }}>
-                                                AI Context
+                                                {t("eventDetails.aiContext")}
                                             </Typography>
                                         </Box>
                                     </AccordionSummary>
@@ -697,15 +709,15 @@ function EventDetailsPage() {
                                         <InfoIcon sx={{ color: theme.palette.primary.main, width: 20 }} />
                                         <Typography variant="body2"
                                                     sx={{ color: theme.palette.primary.main, fontWeight: 900 }}>
-                                            More Details
+                                            {t("eventDetails.moreDetails")}
                                         </Typography>
                                     </Box>
                                 </AccordionSummary>
                                 <AccordionDetails sx={{ p: { xs: 1.5, sm: 2 } }}>
                                     <Grid container spacing={2}>
                                         {[
-                                            { icon: EventAvailableIcon, label: "Open", value: event.openDate, color: theme.palette.primary.main },
-                                            { icon: TimelineIcon, label: "End", value: event.endDate, color: timerColor },
+                                            { icon: EventAvailableIcon, label: t("eventDetails.open"), value: event.openDate, color: theme.palette.primary.main },
+                                            { icon: TimelineIcon, label: t("eventDetails.end"), value: event.endDate, color: timerColor },
                                         ].map((item, idx) => (
                                             <Grid item xs={12} md={6} key={idx}>
                                                 <Box display="flex" alignItems="center" gap={2}>
@@ -721,11 +733,11 @@ function EventDetailsPage() {
                                     {event.disputerId && (
                                         <Box mt={2}>
                                             <Typography variant="body2" color="text.secondary">
-                                                Disputer: {event.disputerId} (Amount: {event.disputeAmount})
+                                                {t("eventDetails.disputer", { identity: event.disputerId, amount: event.disputeAmount })}
                                             </Typography>
                                             {(event.computorsVote0 > 0 || event.computorsVote1 > 0) && (
                                                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                    Computor votes — No: {event.computorsVote0} / Yes: {event.computorsVote1}
+                                                    {t("eventDetails.votes", { no: event.computorsVote0, yes: event.computorsVote1 })}
                                                 </Typography>
                                             )}
                                         </Box>
@@ -740,10 +752,10 @@ function EventDetailsPage() {
                                                 size="small"
                                                 onClick={handleDispute}
                                             >
-                                                Dispute Result
+                                                {t("eventDetails.dispute")}
                                             </Button>
                                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                                Requires deposit. Triggers computor vote to overturn the published result.
+                                                {t("eventDetails.disputeHint")}
                                             </Typography>
                                         </Box>
                                     )}
@@ -779,10 +791,10 @@ function EventDetailsPage() {
                                             mb: 0.5,
                                         }}
                                     >
-                                        Trade panel
+                                        {t("eventDetails.tradePanel")}
                                     </Typography>
                                     <Typography sx={{ color: "text.secondary", fontSize: "0.82rem" }}>
-                                        Choose side, outcome, shares and price.
+                                        {t("eventDetails.tradeDescription")}
                                     </Typography>
                                 </Box>
 
@@ -800,8 +812,8 @@ function EventDetailsPage() {
                                               display: "none",
                                           },
                                       }}>
-                                    <Tab label="Buy" value="buy" sx={tradeSideTabSx("buy")} />
-                                    <Tab label="Sell" value="sell" sx={tradeSideTabSx("sell")} />
+                                    <Tab label={t("eventDetails.buy")} value="buy" sx={tradeSideTabSx("buy")} />
+                                    <Tab label={t("eventDetails.sell")} value="sell" sx={tradeSideTabSx("sell")} />
                                 </Tabs>
 
                                 {/* Option selector */}
@@ -819,17 +831,17 @@ function EventDetailsPage() {
                                                            border: `1px solid ${theme.palette.border.soft} !important`,
                                                        },
                                                    }}>
-                                    <ToggleButton value={0} sx={optionToggleSx(0)}>{event?.option0Desc || "Option 0"}</ToggleButton>
-                                    <ToggleButton value={1} sx={optionToggleSx(1)}>{event?.option1Desc || "Option 1"}</ToggleButton>
+                                    <ToggleButton value={0} sx={optionToggleSx(0)}>{event?.option0Desc || t("eventDetails.option0")}</ToggleButton>
+                                    <ToggleButton value={1} sx={optionToggleSx(1)}>{event?.option1Desc || t("eventDetails.option1")}</ToggleButton>
                                 </ToggleButtonGroup>
 
                                 <TradeAmountSlider
-                                    label="Shares"
+                                    label={t("eventDetails.shares")}
                                     value={tradeAmountInput}
                                     max={maxTradeAmount}
-                                    unit="shares"
+                                    unit={t("eventDetails.shareUnit")}
                                     availableValue={tradeSide === "buy" ? Number(balance || 0) : availableTradeShares}
-                                    availableUnit={tradeSide === "buy" ? "GARTH" : "shares"}
+                                    availableUnit={tradeSide === "buy" ? "GARTH" : t("eventDetails.shareUnit")}
                                     disabled={submitting}
                                     onChange={(nextValue) => {
                                         setTradeAmountInput(nextValue);
@@ -848,7 +860,7 @@ function EventDetailsPage() {
 
                                 {/* Cost estimation */}
                                 <Box display="flex" alignItems="center" justifyContent="space-between">
-                                    <Typography variant="body2" color="text.secondary">Cost</Typography>
+                                    <Typography variant="body2" color="text.secondary">{t("eventDetails.cost")}</Typography>
                                     <Box display="flex" alignItems="center" gap={0.5}>
                                         <Typography className="amount" variant="body2" sx={{ fontWeight: 900 }}>{formatQubicAmount(tradeCoins)}</Typography>
                                         <img src={gcLogo} alt="coin" width={16} height={16} />
@@ -866,14 +878,16 @@ function EventDetailsPage() {
                                         onClick={handleTradeClick}
                                         disabled={tradeSubmitDisabled}
                                         sx={{ minHeight: 44, fontWeight: 900 }}>
-                                    {submitting ? "Signing..." : (tradeSide === "buy" ? "Place Buy Order" : "Place Sell Order")}
+                                    {submitting
+                                        ? t("eventDetails.signing")
+                                        : (tradeSide === "buy" ? t("eventDetails.placeBuy") : t("eventDetails.placeSell"))}
                                 </Button>
 
                                 {/* Matching info hint */}
                                 <Typography variant="caption" color="text.secondary" sx={{ textAlign: "center", lineHeight: 1.3 }}>
                                     {tradeSide === "buy"
-                                        ? `Mint: matches if a buy order on the opposite option has price >= ${formatQubicAmount(WHOLE_SHARE_PRICE - tradePrice)}`
-                                        : `Trade: matches if a buy order on same option has price >= your sell price`
+                                        ? t("eventDetails.mintHint", { price: formatQubicAmount(WHOLE_SHARE_PRICE - tradePrice) })
+                                        : t("eventDetails.sellHint")
                                     }
                                 </Typography>
                             </Stack>

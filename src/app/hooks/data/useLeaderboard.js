@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getLeaderboard } from "../../api/quotteryApi";
 
 export default function useLeaderboard(metric, { limit = 1000, enabled = true } = {}) {
+  const { t } = useTranslation();
   const [leaders, setLeaders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -23,12 +25,12 @@ export default function useLeaderboard(metric, { limit = 1000, enabled = true } 
       return nextLeaders;
     } catch (err) {
       setLeaders([]);
-      setError(err.message || "Failed to load leaderboard");
+      setError(err.message || t("leaderboard.failedLoad"));
       return [];
     } finally {
       setLoading(false);
     }
-  }, [enabled, limit, metric]);
+  }, [enabled, limit, metric, t]);
 
   useEffect(() => {
     refetch();

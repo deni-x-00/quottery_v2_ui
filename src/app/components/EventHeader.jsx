@@ -2,16 +2,19 @@ import React from "react";
 import { Box, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import HelpIcon from "@mui/icons-material/Help";
-import { getTagGroupInfo, getTagInfo } from "./qubic/util/tagMap";
+import { getTagGroupInfo, getTagInfo, getTagSlug } from "./qubic/util/tagMap";
 import { isEventClosed } from "./qubic/util/tradeValidation";
 import EventCountdown from "./EventCountdown";
+import { useTranslation } from "react-i18next";
 
 function EventHeader({ event, onBack, resolveThumbnail }) {
+    const { t } = useTranslation();
     const theme = useTheme();
     const tagInfo = getTagInfo(event?.tag);
     const groupInfo = getTagGroupInfo(event?.tag);
     const thumbSrc = tagInfo.thumbnail && resolveThumbnail ? resolveThumbnail(tagInfo.thumbnail) : null;
-    const topicLabel = tagInfo.label === "General" ? "General" : tagInfo.label;
+    const groupLabel = t(`markets.groups.${groupInfo.id}`, { defaultValue: groupInfo.label });
+    const topicLabel = t(`markets.tags.${getTagSlug(event?.tag)}`, { defaultValue: tagInfo.label });
     const hasEnded = Boolean(event && isEventClosed(event));
 
     return (
@@ -30,7 +33,7 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
             }}
         >
             <IconButton
-                aria-label="go back"
+                aria-label={t("eventDetails.goBack")}
                 onClick={onBack}
                 sx={{
                     alignSelf: "center",
@@ -67,7 +70,7 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
                     {thumbSrc ? (
                         <img
                             src={thumbSrc}
-                            alt={event?.desc || "event"}
+                            alt={event?.desc || t("eventDetails.event")}
                             style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                         />
                     ) : (
@@ -89,7 +92,7 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
                             whiteSpace: "nowrap",
                         }}
                     >
-                        {groupInfo.label} <Box component="span" sx={{ opacity: 0.55 }}>·</Box> {topicLabel}
+                        {groupLabel} <Box component="span" sx={{ opacity: 0.55 }}>·</Box> {topicLabel}
                     </Typography>
                     <Typography
                         component="h1"

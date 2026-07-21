@@ -2,15 +2,21 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Link as RouterLink, useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Chip,
   Divider,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Pagination,
   Paper,
   Stack,
   Tab,
   Tabs,
+  TextField,
   Tooltip,
   Typography,
 } from "@mui/material";
@@ -19,8 +25,12 @@ import AccountCircleIcon from "@mui/icons-material/AccountCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import EditIcon from "@mui/icons-material/Edit";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import PhotoCameraOutlinedIcon from "@mui/icons-material/PhotoCameraOutlined";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
+import { checkProfileNameAvailability, profileAvatarUrl, saveProfile as saveProfileRequest } from "../api/quotteryApi";
 import { useQubicConnect } from "../components/qubic/connect/QubicConnectContext";
 import { useConfig } from "../contexts/ConfigContext";
 import { useQuotteryContext } from "../contexts/QuotteryContext";
@@ -29,9 +39,10 @@ import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import usePageTitle from "../hooks/usePageTitle";
 import { useIndexerStatus, usePortfolio } from "../hooks/data";
 import { useTxTracker } from "../hooks/useTxTracker";
-import { broadcastTransaction, getBasicInfo } from "../components/qubic/util/bobApi";
+import { broadcastTransaction, getBasicInfo, identityToPubkey } from "../components/qubic/util/bobApi";
 import { byteArrayToHexString } from "../components/qubic/util";
 import {
+  buildContractTx,
   buildQuotteryTx,
   packEventIdPayload,
   packOrderPayload,
@@ -51,6 +62,7 @@ import {
   shortMiddle,
 } from "../utils/format";
 import { ActionIconButton, DataTable, LoadingSkeleton, MetricGrid, PageHeader, PageShell } from "../components/ui";
+import { useTranslation } from "react-i18next";
 
 const IDENTITY_RE = /^[A-Z]{56,60}$/;
 const MAIN_TABS = {
@@ -64,16 +76,19 @@ const SUB_TABS = {
 };
 const PAGE_SIZE = 50;
 const CLAIM_REWARD_QUBIC_FEE = 1000000;
+const PROFILE_NAME_FIRST_FEE = 1;
+const PROFILE_NAME_CHANGE_FEE = 100000;
 const WHOLE_SHARE_PRICE = 100000;
 const PENDING_CLAIM_TTL_MS = 24 * 60 * 60 * 1000;
+const DISPLAY_NAME_CONTROL_RE = /[\p{Cc}\p{Cs}]/u;
 const ORDER_STATUS_META = {
-  open: { label: "Open", color: "open" },
-  partially_matched: { label: "Partially matched", color: "closed" },
-  pending: { label: "Pending", color: "open" },
-  matched: { label: "Matched", color: "resolved" },
-  missing_matched: { label: "Matched", color: "resolved" },
-  removed_by_user: { label: "Canceled", color: "closed" },
-  removed_by_system: { label: "Returned", color: "open" },
+  open: { labelKey: "status.open", color: "open" },
+  partially_matched: { labelKey: "status.partiallyMatched", color: "closed" },
+  pending: { labelKey: "status.pending", color: "open" },
+  matched: { labelKey: "status.matched", color: "resolved" },
+  missing_matched: { labelKey: "status.matched", color: "resolved" },
+  removed_by_user: { labelKey: "status.canceled", color: "closed" },
+  removed_by_system: { labelKey: "status.returned", color: "open" },
 };
 
 const isValidIdentity = (identity) => IDENTITY_RE.test(identity);
@@ -114,11 +129,11 @@ function writePendingClaimIds(identity, eventIds) {
   }
 }
 
-function optionLabel(row) {
+function optionLabel(row, t) {
   if (row.option === null || row.option === undefined) return "-";
-  if (Number(row.option) === 0) return row.option0 || "Yes";
-  if (Number(row.option) === 1) return row.option1 || "No";
-  return `Option ${row.option}`;
+  if (Number(row.option) === 0) return row.option0 || t("portfolio.yes");
+  if (Number(row.option) === 1) return row.option1 || t("portfolio.no");
+  return t("portfolio.optionFallback", { option: row.option });
 }
 
 const shortLinkText = shortMiddle;
@@ -198,6 +213,45 @@ function positionPnlPercent(position) {
   return (Number(position?.realized_pnl || 0) / invested) * 100;
 }
 
+function isValidDisplayName(value) {
+  const name = String(value || "").trim().replace(/\s+/g, " ");
+  const length = Array.from(name).length;
+  return length >= 2 && length <= 32 && !DISPLAY_NAME_CONTROL_RE.test(name);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function prepareAvatarDataUrl(file) {
+  if (!file?.type?.match(/^image\/(png|jpeg|webp)$/i)) {
+    throw new Error("Choose a PNG, JPEG, or WebP image");
+  }
+  if (file.size > 5 * 1024 * 1024) throw new Error("Image must be smaller than 5 MB");
+
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = await new Promise((resolve, reject) => {
+      const nextImage = new Image();
+      nextImage.onload = () => resolve(nextImage);
+      nextImage.onerror = () => reject(new Error("Image could not be opened"));
+      nextImage.src = sourceUrl;
+    });
+    const size = 256;
+    const cropSize = Math.min(image.naturalWidth, image.naturalHeight);
+    const sourceX = Math.floor((image.naturalWidth - cropSize) / 2);
+    const sourceY = Math.floor((image.naturalHeight - cropSize) / 2);
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const context = canvas.getContext("2d");
+    context.drawImage(image, sourceX, sourceY, cropSize, cropSize, 0, 0, size, size);
+    return canvas.toDataURL("image/webp", 0.86);
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
 function rowSortTick(row) {
   const candidates = [
     row?.tick,
@@ -268,6 +322,7 @@ function flattenEventGroups(rows) {
 }
 
 const ProfilePage = () => {
+  const { t } = useTranslation();
   const theme = useTheme();
   const navigate = useNavigate();
   const { identity: routeIdentity } = useParams();
@@ -282,7 +337,7 @@ const ProfilePage = () => {
     () => normalizeIdentity(routeIdentity || walletPublicIdentity),
     [routeIdentity, walletPublicIdentity]
   );
-  usePageTitle(activeIdentity ? `${shortLinkText(activeIdentity)} portfolio` : "Portfolio");
+  usePageTitle(activeIdentity ? `${shortLinkText(activeIdentity)} ${t("portfolio.pageTitle")}` : t("portfolio.pageTitle"));
 
   const [tab, setTab] = useState(MAIN_TABS.POSITIONS);
   const [subTab, setSubTab] = useState(SUB_TABS.ACTIVE);
@@ -291,6 +346,13 @@ const ProfilePage = () => {
   const [cancellingOrderUid, setCancellingOrderUid] = useState("");
   const [claimingEventId, setClaimingEventId] = useState("");
   const [pendingClaimEventIds, setPendingClaimEventIds] = useState([]);
+  const [profileDialogOpen, setProfileDialogOpen] = useState(false);
+  const [displayNameDraft, setDisplayNameDraft] = useState("");
+  const [avatarDraft, setAvatarDraft] = useState(undefined);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileGameOperator, setProfileGameOperator] = useState("");
+  const [profileNameAvailable, setProfileNameAvailable] = useState(null);
+  const [checkingProfileName, setCheckingProfileName] = useState(false);
   const {
     data: profile,
     loading,
@@ -345,6 +407,189 @@ const ProfilePage = () => {
 
   const account = profile?.account;
   const isOwnProfile = activeIdentity && walletPublicIdentity && activeIdentity === normalizeIdentity(walletPublicIdentity);
+
+  useEffect(() => {
+    if (!profileDialogOpen) return;
+    setDisplayNameDraft(account?.display_name || "");
+    setAvatarDraft(undefined);
+    setProfileNameAvailable(null);
+    setCheckingProfileName(false);
+  }, [account?.avatar_updated_at, account?.display_name, profileDialogOpen]);
+
+  useEffect(() => {
+    if (!profileDialogOpen || !bobUrl) return undefined;
+    let cancelled = false;
+    getBasicInfo(bobUrl)
+      .then((info) => {
+        if (!cancelled) setProfileGameOperator(info?.gameOperator || "");
+      })
+      .catch(() => {
+        if (!cancelled) setProfileGameOperator("");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [bobUrl, profileDialogOpen]);
+
+  const profileAvatar = account?.has_avatar
+    ? profileAvatarUrl(activeIdentity, account?.avatar_updated_at)
+    : "";
+  const displayedProfileName = account?.display_name || (isOwnProfile ? t("portfolio.myPortfolio") : t("portfolio.portfolio"));
+  const normalizedDraftName = displayNameDraft.trim().replace(/\s+/g, " ");
+  const hasExistingDisplayName = Boolean(account?.display_name);
+  const isDraftNameValid = isValidDisplayName(normalizedDraftName);
+  const isDraftNameAllowed = isDraftNameValid || (!normalizedDraftName && !hasExistingDisplayName);
+  const hasDraftNameError = !isDraftNameAllowed && (Boolean(displayNameDraft) || hasExistingDisplayName);
+  const nameWillChange = Boolean(normalizedDraftName)
+    && normalizedDraftName.localeCompare(account?.display_name || "", undefined, { sensitivity: "accent" }) !== 0;
+  const avatarWillChange = avatarDraft !== undefined && (avatarDraft !== null || Boolean(profileAvatar));
+  const hasProfileChanges = nameWillChange || avatarWillChange;
+  const profileUpdateFee = nameWillChange
+    ? Number(account?.name_change_count || 0) > 0 ? PROFILE_NAME_CHANGE_FEE : PROFILE_NAME_FIRST_FEE
+    : 0;
+
+  useEffect(() => {
+    if (!profileDialogOpen || !isDraftNameValid || !nameWillChange) {
+      setCheckingProfileName(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setCheckingProfileName(true);
+      try {
+        const result = await checkProfileNameAvailability(normalizedDraftName, activeIdentity, { signal: controller.signal });
+        if (!cancelled) setProfileNameAvailable(Boolean(result.available));
+      } catch {
+        if (!cancelled) setProfileNameAvailable(null);
+      } finally {
+        if (!cancelled) setCheckingProfileName(false);
+      }
+    }, 320);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [activeIdentity, isDraftNameValid, nameWillChange, normalizedDraftName, profileDialogOpen]);
+
+  const selectAvatar = useCallback(async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      setAvatarDraft(await prepareAvatarDataUrl(file));
+    } catch (error) {
+      showSnackbar(error.message || String(error), "error");
+    }
+  }, [showSnackbar]);
+
+  const submitProfile = useCallback(async () => {
+    if (savingProfile) return;
+    if (!connected) {
+      toggleConnectModal();
+      return;
+    }
+    if (!isOwnProfile || !activeIdentity || !walletPublicKeyBytes) {
+      showSnackbar(t("portfolio.ownProfile"), "error");
+      return;
+    }
+    if (!isDraftNameAllowed) {
+      showSnackbar(t("portfolio.profileNameInvalid"), "error");
+      return;
+    }
+    if (!hasProfileChanges) return;
+    if (nameWillChange && profileNameAvailable !== true) {
+      showSnackbar(t(profileNameAvailable === false ? "portfolio.profileNameTaken" : "portfolio.profileNameChecking"), "error");
+      return;
+    }
+    if (!getSignedTx || !getScheduledTick || !bobUrl) {
+      showSnackbar(t("portfolio.walletNotReady"), "error");
+      return;
+    }
+    if (profileUpdateFee > 0 && quBalance !== null && quBalance !== undefined && Number(quBalance) < profileUpdateFee) {
+      showSnackbar(t("portfolio.profileFeeLow", { amount: formatAmount(profileUpdateFee) }), "error");
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const [tickInfo, basicInfo] = await Promise.all([getScheduledTick(), getBasicInfo(bobUrl)]);
+      if (!tickInfo) throw new Error(t("portfolio.currentTickFailed"));
+      if (!basicInfo?.gameOperator) throw new Error(t("portfolio.contractInfoFailed"));
+
+      const packet = buildContractTx(
+        walletPublicKeyBytes,
+        identityToPubkey(basicInfo.gameOperator),
+        tickInfo.scheduledTick,
+        0,
+        profileUpdateFee,
+        null
+      );
+      showSnackbar(t("portfolio.signProfile"), "info");
+      const confirmed = await getSignedTx(packet);
+      if (!confirmed) return;
+
+      const txHex = typeof confirmed.tx === "string" ? confirmed.tx : byteArrayToHexString(confirmed.tx);
+      const broadcast = await broadcastTransaction(bobUrl, txHex);
+      if (!broadcast?.txHash || broadcast.error) {
+        throw new Error(broadcast?.error || t("portfolio.profileBroadcastFailed"));
+      }
+
+      const payload = {
+        txHash: broadcast.txHash,
+        scheduledTick: tickInfo.scheduledTick,
+      };
+      if (nameWillChange) payload.displayName = normalizedDraftName;
+      if (avatarDraft !== undefined) payload.avatarDataUrl = avatarDraft;
+
+      let saved = null;
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        try {
+          saved = await saveProfileRequest(activeIdentity, payload);
+          break;
+        } catch (error) {
+          const message = String(error?.message || error);
+          if (!/not confirmed yet/i.test(message) || attempt === 23) throw error;
+          await delay(2000);
+        }
+      }
+      if (!saved) throw new Error(t("portfolio.profileConfirmationTimeout"));
+
+      scheduleBalanceRefresh(2000);
+      await loadProfile();
+      setProfileDialogOpen(false);
+      showSnackbar(t("portfolio.profileSaved"), "success");
+    } catch (error) {
+      showSnackbar(t("portfolio.profileSaveFailed", { error: error.message || error }), "error");
+    } finally {
+      setSavingProfile(false);
+    }
+  }, [
+    activeIdentity,
+    avatarDraft,
+    bobUrl,
+    connected,
+    getScheduledTick,
+    getSignedTx,
+    hasProfileChanges,
+    isOwnProfile,
+    isDraftNameAllowed,
+    loadProfile,
+    normalizedDraftName,
+    nameWillChange,
+    profileNameAvailable,
+    profileUpdateFee,
+    quBalance,
+    savingProfile,
+    scheduleBalanceRefresh,
+    showSnackbar,
+    t,
+    toggleConnectModal,
+    walletPublicKeyBytes,
+  ]);
   const claimReward = useCallback(async (row) => {
     if (claimingEventId) return;
     if (!connected) {
@@ -352,32 +597,32 @@ const ProfilePage = () => {
       return;
     }
     if (!isOwnProfile) {
-      showSnackbar("Connect the wallet that owns this position.", "error");
+      showSnackbar(t("portfolio.ownPosition"), "error");
       return;
     }
     if (!walletPublicKeyBytes) {
-      showSnackbar("Wallet public key not found.", "error");
+      showSnackbar(t("portfolio.walletKeyMissing"), "error");
       return;
     }
     if (!getSignedTx || !getScheduledTick || !bobUrl) {
-      showSnackbar("Wallet or network connection is not ready.", "error");
+      showSnackbar(t("portfolio.walletNotReady"), "error");
       return;
     }
     if (quBalance !== null && quBalance !== undefined && Number(quBalance) < CLAIM_REWARD_QUBIC_FEE) {
-      showSnackbar(`Claim requires ${formatAmount(CLAIM_REWARD_QUBIC_FEE)} QU deposit.`, "error");
+      showSnackbar(t("portfolio.claimDeposit", { amount: formatAmount(CLAIM_REWARD_QUBIC_FEE) }), "error");
       return;
     }
 
     const eventId = Number(row.event_id);
     if (!Number.isInteger(eventId) || eventId < 0) {
-      showSnackbar("Invalid event ID.", "error");
+      showSnackbar(t("portfolio.invalidEvent"), "error");
       return;
     }
 
     setClaimingEventId(String(eventId));
     try {
       const tickInfo = await getScheduledTick();
-      if (!tickInfo) throw new Error("Failed to get current tick from network.");
+      if (!tickInfo) throw new Error(t("portfolio.currentTickFailed"));
 
       const payload = packEventIdPayload(eventId);
       const packet = buildQuotteryTx(
@@ -388,7 +633,7 @@ const ProfilePage = () => {
         payload
       );
 
-      showSnackbar("Sign claim transaction in wallet.", "info");
+      showSnackbar(t("portfolio.signClaim"), "info");
       const confirmed = await getSignedTx(packet);
       if (!confirmed) return;
 
@@ -396,12 +641,14 @@ const ProfilePage = () => {
         ? confirmed.tx
         : byteArrayToHexString(confirmed.tx);
       const res = await broadcastTransaction(bobUrl, txHex);
-      if (!res || res.error) throw new Error(res?.error || "Transaction broadcast failed");
+      if (!res || res.error) throw new Error(res?.error || t("portfolio.claimFailed", { error: "Transaction broadcast failed" }));
 
       trackTx({
         txHash: res.txHash,
         scheduledTick: tickInfo.scheduledTick,
-        description: `Claim reward for ${row.description || `event ${eventId}`}`,
+        description: t("portfolio.claimTrack", {
+          event: row.description || t("portfolio.eventFallback", { id: eventId }),
+        }),
         inputType: QTRY_USER_CLAIM_REWARD,
         eventId,
         txAmount: CLAIM_REWARD_QUBIC_FEE,
@@ -415,7 +662,7 @@ const ProfilePage = () => {
       scheduleBalanceRefresh(2000);
       window.setTimeout(loadProfile, 5000);
     } catch (err) {
-      showSnackbar(`Claim failed: ${err.message || err}`, "error");
+      showSnackbar(t("portfolio.claimFailed", { error: err.message || err }), "error");
     } finally {
       setClaimingEventId("");
     }
@@ -434,6 +681,7 @@ const ProfilePage = () => {
     showSnackbar,
     toggleConnectModal,
     trackTx,
+    t,
     walletPublicKeyBytes,
   ]);
 
@@ -444,15 +692,15 @@ const ProfilePage = () => {
       return;
     }
     if (!isOwnProfile) {
-      showSnackbar("Connect the wallet that owns this order.", "error");
+      showSnackbar(t("portfolio.ownOrder"), "error");
       return;
     }
     if (!walletPublicKeyBytes) {
-      showSnackbar("Wallet public key not found.", "error");
+      showSnackbar(t("portfolio.walletKeyMissing"), "error");
       return;
     }
     if (!getSignedTx || !getScheduledTick || !bobUrl) {
-      showSnackbar("Wallet or network connection is not ready.", "error");
+      showSnackbar(t("portfolio.walletNotReady"), "error");
       return;
     }
 
@@ -461,7 +709,7 @@ const ProfilePage = () => {
     const amount = integerString(row.open_amount || row.original_amount);
     const price = integerString(row.price);
     if (amount === "0") {
-      showSnackbar("This order has no open amount to cancel.", "warning");
+      showSnackbar(t("portfolio.noOpenAmount"), "warning");
       return;
     }
 
@@ -471,8 +719,8 @@ const ProfilePage = () => {
         getScheduledTick(),
         getBasicInfo(bobUrl),
       ]);
-      if (!tickInfo) throw new Error("Failed to get current tick from network.");
-      if (!basicInfo) throw new Error("Failed to get contract info.");
+      if (!tickInfo) throw new Error(t("portfolio.currentTickFailed"));
+      if (!basicInfo) throw new Error(t("portfolio.contractInfoFailed"));
 
       const inputType = row.side === "bid" ? QTRY_REMOVE_BID_ORDER : QTRY_REMOVE_ASK_ORDER;
       const antiSpamAmount = basicInfo.antiSpamAmount || 0;
@@ -485,7 +733,7 @@ const ProfilePage = () => {
         payload
       );
 
-      showSnackbar("Sign cancellation transaction in wallet.", "info");
+      showSnackbar(t("portfolio.signCancel"), "info");
       const confirmed = await getSignedTx(packet);
       if (!confirmed) return;
 
@@ -498,7 +746,12 @@ const ProfilePage = () => {
       trackTx({
         txHash: res.txHash,
         scheduledTick: tickInfo.scheduledTick,
-        description: `Cancel ${row.side === "bid" ? "buy" : "sell"} ${formatAmount(amount)} ${optionLabel(row)} @ ${formatPrice(price)}`,
+        description: t("portfolio.cancelTrack", {
+          side: row.side === "bid" ? t("eventDetails.buy") : t("eventDetails.sell"),
+          amount: formatAmount(amount),
+          option: optionLabel(row, t),
+          price: formatPrice(price),
+        }),
         inputType,
         type: "order",
         action: "remove",
@@ -511,7 +764,7 @@ const ProfilePage = () => {
       scheduleBalanceRefresh(2000);
       window.setTimeout(loadProfile, 5000);
     } catch (err) {
-      showSnackbar(`Failed to cancel order: ${err.message || err}`, "error");
+      showSnackbar(t("portfolio.cancelFailed", { error: err.message || err }), "error");
     } finally {
       setCancellingOrderUid("");
     }
@@ -527,6 +780,7 @@ const ProfilePage = () => {
     showSnackbar,
     toggleConnectModal,
     trackTx,
+    t,
     walletPublicKeyBytes,
   ]);
   const panelSx = {
@@ -646,7 +900,7 @@ const ProfilePage = () => {
         <Stack direction="row" spacing={0.55} alignItems="center" justifyContent="center" sx={{ color }}>
           <Icon sx={{ fontSize: 16 }} />
           <Typography component="span" sx={{ color, fontWeight: 720, fontSize: "0.88rem", letterSpacing: 0 }}>
-            {isWin ? "Win" : "Lose"}
+            {isWin ? t("status.win") : t("status.lose")}
           </Typography>
         </Stack>
       );
@@ -658,7 +912,7 @@ const ProfilePage = () => {
       return (
         <Chip
           size="small"
-          label={meta.label}
+          label={t(meta.labelKey)}
           variant="outlined"
           sx={{
             height: 25,
@@ -705,21 +959,21 @@ const ProfilePage = () => {
   const indexerIsBehind = Number.isFinite(indexerLag) && indexerLag > 100;
 
   const orderColumns = [
-    { key: "description", label: "Event", minWidth: 340, wrap: true, render: renderGroupedEventLink },
+    { key: "description", label: t("portfolio.event"), minWidth: 340, wrap: true, render: renderGroupedEventLink },
     {
       key: "status",
-      label: "Status",
+      label: t("portfolio.status"),
       minWidth: 96,
       render: (row) => renderStatus(row.status),
     },
-    { key: "option", label: "Option", minWidth: 92, render: optionLabel },
-    { key: "side", label: "Side", minWidth: 64, render: (row) => row.side || "-" },
+    { key: "option", label: t("portfolio.option"), minWidth: 92, render: (row) => optionLabel(row, t) },
+    { key: "side", label: t("portfolio.side"), minWidth: 64, render: (row) => row.side === "bid" ? t("portfolio.bid") : row.side === "ask" ? t("portfolio.ask") : "-" },
     {
       key: "amount",
-      label: "Amount",
+      label: t("portfolio.amount"),
       render: (row) => formatAmount(isActiveOrder(row) ? row.open_amount : row.original_amount),
     },
-    { key: "price", label: "Price", minWidth: 116, render: (row) => formatPriceWithPercent(row.price) },
+    { key: "price", label: t("portfolio.price"), minWidth: 116, render: (row) => formatPriceWithPercent(row.price) },
   ];
 
   const activeOrderColumns = [
@@ -732,7 +986,7 @@ const ProfilePage = () => {
         if (!isOwnProfile) return <Box component="span" sx={{ display: "block", minHeight: 24 }} />;
         const isCancelling = cancellingOrderUid === row.order_uid;
         return (
-          <Tooltip title={connected ? "Cancel order" : "Connect wallet to cancel"}>
+          <Tooltip title={connected ? t("portfolio.cancelOrder") : t("portfolio.connectToCancel")}>
             <span>
               <Button
                 size="small"
@@ -749,7 +1003,7 @@ const ProfilePage = () => {
                   fontSize: "0.78rem",
                 }}
               >
-                {isCancelling ? "..." : "Cancel"}
+                {isCancelling ? "..." : t("portfolio.cancel")}
               </Button>
             </span>
           </Tooltip>
@@ -764,32 +1018,32 @@ const ProfilePage = () => {
   ];
 
   const positionColumns = [
-    { key: "description", label: "Event", minWidth: 340, wrap: true, render: renderGroupedEventLink },
-    { key: "option", label: "Option", minWidth: 92, render: optionLabel },
-    { key: "amount", label: "Amount", render: (row) => formatAmount(row.amount) },
-    { key: "avg_entry_price", label: "Avg price", minWidth: 116, render: (row) => formatPriceWithPercent(row.avg_entry_price) },
-    { key: "possible_profit", label: "Possible profit", minWidth: 128, render: possiblePositionProfit },
+    { key: "description", label: t("portfolio.event"), minWidth: 340, wrap: true, render: renderGroupedEventLink },
+    { key: "option", label: t("portfolio.option"), minWidth: 92, render: (row) => optionLabel(row, t) },
+    { key: "amount", label: t("portfolio.amount"), render: (row) => formatAmount(row.amount) },
+    { key: "avg_entry_price", label: t("portfolio.avgPrice"), minWidth: 116, render: (row) => formatPriceWithPercent(row.avg_entry_price) },
+    { key: "possible_profit", label: t("portfolio.possibleProfit"), minWidth: 128, render: possiblePositionProfit },
   ];
 
   const closedPositionBaseColumns = [
-    { key: "description", label: "Event", minWidth: 340, wrap: true, render: renderGroupedResolvedEventLink },
+    { key: "description", label: t("portfolio.event"), minWidth: 340, wrap: true, render: renderGroupedResolvedEventLink },
     {
       key: "status",
-      label: "Status",
+      label: t("portfolio.status"),
       minWidth: 96,
       render: (row) => renderStatus(row.status),
     },
-    { key: "option", label: "Option", minWidth: 92, render: optionLabel },
-    { key: "amount", label: "Amount", render: (row) => formatAmount(row.amount) },
-    { key: "avg_entry_price", label: "Avg price", minWidth: 116, render: (row) => formatPriceWithPercent(row.avg_entry_price) },
+    { key: "option", label: t("portfolio.option"), minWidth: 92, render: (row) => optionLabel(row, t) },
+    { key: "amount", label: t("portfolio.amount"), render: (row) => formatAmount(row.amount) },
+    { key: "avg_entry_price", label: t("portfolio.avgPrice"), minWidth: 116, render: (row) => formatPriceWithPercent(row.avg_entry_price) },
   ];
 
   const closedPositionColumns = [
     ...closedPositionBaseColumns,
-    { key: "realized_pnl", label: "PnL", render: (row) => renderPnl(row.realized_pnl, positionPnlPercent(row)) },
+    { key: "realized_pnl", label: t("portfolio.pnl"), render: (row) => renderPnl(row.realized_pnl, positionPnlPercent(row)) },
     {
       key: "payout",
-      label: "Net payout",
+      label: t("portfolio.netPayout"),
       render: (row) => {
         const payout = payoutForPosition(row, profile?.payouts || []);
         if (payout.amount <= 0) return "-";
@@ -798,7 +1052,7 @@ const ProfilePage = () => {
             <Box component="span">{formatAmount(payout.amount)}</Box>
             {payout.estimated && (
               <Box component="span" sx={{ color: "text.secondary", fontSize: "0.75rem", fontWeight: 650 }}>
-                est.
+                {t("portfolio.estimated")}
               </Box>
             )}
           </Stack>
@@ -821,7 +1075,7 @@ const ProfilePage = () => {
           return (
             <Chip
               size="small"
-              label="Pending"
+              label={t("portfolio.pending")}
               variant="outlined"
               sx={{
                 height: 25,
@@ -836,7 +1090,7 @@ const ProfilePage = () => {
 
         const isClaiming = claimingEventId === String(row.event_id);
         return (
-          <Tooltip title={connected ? "Claim reward" : "Connect wallet to claim"}>
+          <Tooltip title={connected ? t("portfolio.claimReward") : t("portfolio.connectToClaim")}>
             <span>
               <Button
                 size="small"
@@ -853,7 +1107,7 @@ const ProfilePage = () => {
                   fontSize: "0.78rem",
                 }}
               >
-                {isClaiming ? "..." : "Claim"}
+                {isClaiming ? "..." : t("portfolio.claim")}
               </Button>
             </span>
           </Tooltip>
@@ -863,11 +1117,11 @@ const ProfilePage = () => {
   ];
 
   const transferColumns = [
-    { key: "token", label: "Token", minWidth: 72 },
-    { key: "amount", label: "Amount", render: (row) => formatAmount(row.amount) },
+    { key: "token", label: t("portfolio.token"), minWidth: 72 },
+    { key: "amount", label: t("portfolio.amount"), render: (row) => formatAmount(row.amount) },
     {
       key: "source",
-      label: "Source",
+      label: t("portfolio.source"),
       render: (row) => row.source ? (
         <Button size="small" variant="text" onClick={() => navigate(`/portfolio/${row.source}`)} sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
           {shortLinkText(row.source)}
@@ -876,7 +1130,7 @@ const ProfilePage = () => {
     },
     {
       key: "destination",
-      label: "Destination",
+      label: t("portfolio.destination"),
       render: (row) => row.destination ? (
         <Button size="small" variant="text" onClick={() => navigate(`/portfolio/${row.destination}`)} sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
           {shortLinkText(row.destination)}
@@ -885,7 +1139,7 @@ const ProfilePage = () => {
     },
     {
       key: "tx_hash",
-      label: "Hash",
+      label: t("portfolio.hash"),
       render: (row) => row.tx_hash ? (
         <Button size="small" variant="text" component="a" href={`https://explorer.qubic.org/network/tx/${row.tx_hash}`} target="_blank" rel="noreferrer" sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
           {shortLinkText(row.tx_hash)}
@@ -894,14 +1148,14 @@ const ProfilePage = () => {
     },
     {
       key: "tick",
-      label: "Tick",
+      label: t("portfolio.tick"),
       render: (row) => row.tick ? (
         <Button size="small" variant="text" component="a" href={explorerTickOrTxUrl(row.tick_ref || row.tick)} target="_blank" rel="noreferrer" sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 700 }}>
           {explorerTickOrTxLabel(row.tick_ref || row.tick, formatAmount)}
         </Button>
       ) : "-",
     },
-    { key: "tx_timestamp", label: "Time", minWidth: 170, render: (row) => formatDateUtc(row.tx_timestamp || row.created_at) },
+    { key: "tx_timestamp", label: t("portfolio.time"), minWidth: 170, render: (row) => formatDateUtc(row.tx_timestamp || row.created_at) },
   ];
 
   const positions = profile?.positions || [];
@@ -932,27 +1186,27 @@ const ProfilePage = () => {
       : 760;
 
   const emptyText = tab === MAIN_TABS.POSITIONS
-    ? `No ${subTab} positions found.`
+    ? t("portfolio.noPositions", { state: t(`portfolio.${subTab}State`) })
     : tab === MAIN_TABS.ORDERS
-      ? `No ${subTab} orders found.`
-      : "No transfers found.";
+      ? t("portfolio.noOrders", { state: t(`portfolio.${subTab}State`) })
+      : t("portfolio.noTransfers");
   const accountMetricBaseSx = { minHeight: 96, display: "flex", flexDirection: "column", justifyContent: "center" };
   const accountMetrics = [
     {
-      label: "PnL",
+      label: t("portfolio.pnl"),
       value: account?.realized_pnl === null || account?.realized_pnl === undefined ? "-" : formatSignedAmount(account?.realized_pnl),
       secondaryValue: formatSignedPercent(account?.pnl_percent) || undefined,
       tone: pnlTone(account?.realized_pnl),
       align: "center",
       sx: accountMetricBaseSx,
     },
-    { label: "Traded volume", value: formatAmount(account?.traded_volume), align: "center", sx: accountMetricBaseSx },
-    { label: "Open bid volume", value: formatAmount(account?.open_bid_volume), align: "center", sx: accountMetricBaseSx },
-    { label: "Open ask volume", value: formatAmount(account?.open_ask_volume), align: "center", sx: accountMetricBaseSx },
-    { label: "Trades", value: formatAmount(account?.trade_count), align: "center", sx: accountMetricBaseSx },
-    { label: "Transfers", value: formatAmount(account?.transfer_count), align: "center", sx: accountMetricBaseSx },
-    { label: "First seen tick", value: renderTickStat(account?.first_seen_tick, account?.first_seen_tick_ref), align: "center", sx: accountMetricBaseSx },
-    { label: "Last seen tick", value: renderTickStat(account?.last_seen_tick, account?.last_seen_tick_ref), align: "center", sx: accountMetricBaseSx },
+    { label: t("portfolio.tradedVolume"), value: formatAmount(account?.traded_volume), align: "center", sx: accountMetricBaseSx },
+    { label: t("portfolio.openBidVolume"), value: formatAmount(account?.open_bid_volume), align: "center", sx: accountMetricBaseSx },
+    { label: t("portfolio.openAskVolume"), value: formatAmount(account?.open_ask_volume), align: "center", sx: accountMetricBaseSx },
+    { label: t("portfolio.trades"), value: formatAmount(account?.trade_count), align: "center", sx: accountMetricBaseSx },
+    { label: t("portfolio.transfers"), value: formatAmount(account?.transfer_count), align: "center", sx: accountMetricBaseSx },
+    { label: t("portfolio.firstSeenTick"), value: renderTickStat(account?.first_seen_tick, account?.first_seen_tick_ref), align: "center", sx: accountMetricBaseSx },
+    { label: t("portfolio.lastSeenTick"), value: renderTickStat(account?.last_seen_tick, account?.last_seen_tick_ref), align: "center", sx: accountMetricBaseSx },
   ];
   const pageCount = Math.max(1, Math.ceil(currentRows.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -969,13 +1223,22 @@ const ProfilePage = () => {
   return (
     <PageShell>
       <PageHeader
-        eyebrow={isOwnProfile ? "Connected wallet" : "Account"}
-        title={isOwnProfile ? "My Portfolio" : "Portfolio"}
-        icon={<AccountCircleIcon />}
+        eyebrow={isOwnProfile ? t("portfolio.connectedWallet") : t("portfolio.account")}
+        title={displayedProfileName}
+        icon={profileAvatar ? (
+          <Avatar src={profileAvatar} alt={displayedProfileName} sx={{ width: 30, height: 30 }} />
+        ) : <AccountCircleIcon />}
         actions={(
-          <ActionIconButton label="Refresh portfolio" tooltip="Refresh" onClick={loadProfile} disabled={loading || !activeIdentity}>
-            <RefreshIcon fontSize="small" />
-          </ActionIconButton>
+          <Stack direction="row" spacing={0.75}>
+            {isOwnProfile && (
+              <ActionIconButton label={t("portfolio.editProfile")} tooltip={t("portfolio.editProfile")} onClick={() => setProfileDialogOpen(true)}>
+                <EditIcon fontSize="small" />
+              </ActionIconButton>
+            )}
+            <ActionIconButton label={t("portfolio.refresh")} tooltip={t("portfolio.refresh")} onClick={loadProfile} disabled={loading || !activeIdentity}>
+              <RefreshIcon fontSize="small" />
+            </ActionIconButton>
+          </Stack>
         )}
       >
         <Stack
@@ -1004,20 +1267,20 @@ const ProfilePage = () => {
                   maxWidth: { xs: "100%", md: "calc(100% - 96px)" },
                 }}
               >
-                {activeIdentity || "Connect wallet to open your portfolio"}
+                {activeIdentity || t("portfolio.connectToOpen")}
               </Typography>
               {activeIdentity && (
                 <Stack direction="row" spacing={0.65} alignItems="center" sx={{ flexShrink: 0 }}>
                   <ActionIconButton
-                      label="Copy address"
-                      tooltip={copiedAddress ? "Copied" : "Copy address"}
+                      label={t("portfolio.copyAddress")}
+                      tooltip={copiedAddress ? t("portfolio.copied") : t("portfolio.copyAddress")}
                       onClick={copyActiveIdentity}
                       size={36}
                   >
                       <ContentCopyIcon sx={{ fontSize: 16 }} />
                   </ActionIconButton>
                   <ActionIconButton
-                      label="Open address in explorer"
+                      label={t("portfolio.openExplorer")}
                       component="a"
                       href={`https://explorer.qubic.org/network/address/${activeIdentity}`}
                       target="_blank"
@@ -1033,13 +1296,13 @@ const ProfilePage = () => {
 
       {!activeIdentity && (
         <Alert severity="info" sx={{ mb: 2, borderRadius: 1.5, bgcolor: alpha(theme.palette.primary.main, 0.08), border: `1px solid ${alpha(theme.palette.primary.main, 0.22)}` }}>
-          Connect your wallet to open your portfolio, or search an identity from the leaderboard.
+          {t("portfolio.connectHint")}
         </Alert>
       )}
 
       {activeIdentity && !IDENTITY_RE.test(activeIdentity) && (
         <Alert severity="warning" sx={{ mb: 2, borderRadius: 1.5 }}>
-          Invalid identity format.
+          {t("portfolio.invalidIdentity")}
         </Alert>
       )}
 
@@ -1058,10 +1321,10 @@ const ProfilePage = () => {
           <Stack direction={{ xs: "column", sm: "row" }} spacing={1.25} alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between">
             <Box sx={{ minWidth: 0 }}>
               <Typography sx={{ fontWeight: 850, color: "text.primary", lineHeight: 1.25 }}>
-                Transfers, reward claiming, and wallet tools
+                {t("portfolio.utilitiesTitle")}
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.25 }}>
-                Utilities contains the actions connected to this portfolio.
+                {t("portfolio.utilitiesDescription")}
               </Typography>
             </Box>
             <Button
@@ -1071,7 +1334,7 @@ const ProfilePage = () => {
               variant="outlined"
               sx={{ borderRadius: 1, minHeight: 34, px: 1.5, textTransform: "none", fontWeight: 900, flexShrink: 0 }}
             >
-              Go to Utilities
+              {t("portfolio.goToUtilities")}
             </Button>
           </Stack>
         </Paper>
@@ -1111,19 +1374,19 @@ const ProfilePage = () => {
               >
                 <Stack direction={{ xs: "column", sm: "row" }} spacing={{ xs: 0.25, sm: 1.25 }} alignItems={{ xs: "flex-start", sm: "center" }} flexWrap="wrap">
                   <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                    Indexed: {renderTickStat(indexedTick)}
+                    {t("portfolio.indexed", { tick: "" })} {renderTickStat(indexedTick)}
                   </Typography>
                   <Typography variant="caption" sx={{ fontWeight: 700 }}>
-                    Live: {liveTick ? renderTickStat(liveTick) : "-"}
+                    {t("portfolio.live", { tick: "" })} {liveTick ? renderTickStat(liveTick) : "-"}
                   </Typography>
                   {Number.isFinite(indexerLag) && (
                     <Typography variant="caption" sx={{ fontWeight: 700, color: indexerIsBehind ? "warning.main" : "text.secondary" }}>
-                      Lag: {formatAmount(indexerLag)}
+                      {t("portfolio.lag", { value: formatAmount(indexerLag) })}
                     </Typography>
                   )}
                   {indexerIsBehind && (
                     <Typography variant="caption" color="text.secondary">
-                      Txs after {formatAmount(indexedTick)} will appear after indexing catches up.
+                      {t("portfolio.lagHint", { tick: formatAmount(indexedTick) })}
                     </Typography>
                   )}
                 </Stack>
@@ -1131,7 +1394,7 @@ const ProfilePage = () => {
             )}
             {!account && activeIdentity && !loading && (
               <Alert severity="info">
-                This identity is not indexed yet.
+                {t("portfolio.notIndexed")}
               </Alert>
             )}
           </Stack>
@@ -1162,11 +1425,11 @@ const ProfilePage = () => {
                 },
               }}
             >
-              <Tab value={MAIN_TABS.POSITIONS} label="Positions" />
-              <Tab value={MAIN_TABS.ORDERS} label="Orders" />
-              <Tab value={MAIN_TABS.TRANSFERS} label="Transfers" />
+              <Tab value={MAIN_TABS.POSITIONS} label={t("portfolio.positions")} />
+              <Tab value={MAIN_TABS.ORDERS} label={t("portfolio.orders")} />
+              <Tab value={MAIN_TABS.TRANSFERS} label={t("portfolio.transfers")} />
             </Tabs>
-            {loading && <Chip label="Refreshing" size="small" variant="outlined" />}
+            {loading && <Chip label={t("portfolio.refreshing")} size="small" variant="outlined" />}
           </Stack>
 
           {tab !== MAIN_TABS.TRANSFERS && (
@@ -1195,11 +1458,11 @@ const ProfilePage = () => {
             >
               <Tab
                 value={SUB_TABS.ACTIVE}
-                label={`Active (${tab === MAIN_TABS.POSITIONS ? activePositions.length : activeOrders.length})`}
+                label={t("portfolio.active", { count: tab === MAIN_TABS.POSITIONS ? activePositions.length : activeOrders.length })}
               />
               <Tab
                 value={SUB_TABS.CLOSED}
-                label={`Closed (${tab === MAIN_TABS.POSITIONS ? closedPositions.length : closedOrders.length})`}
+                label={t("portfolio.closed", { count: tab === MAIN_TABS.POSITIONS ? closedPositions.length : closedOrders.length })}
               />
             </Tabs>
           )}
@@ -1226,6 +1489,122 @@ const ProfilePage = () => {
           </Stack>
         )}
       </Paper>
+
+      <Dialog
+        open={profileDialogOpen}
+        onClose={() => !savingProfile && setProfileDialogOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{
+          sx: {
+            borderRadius: 1.5,
+            border: `1px solid ${theme.palette.border.default}`,
+            bgcolor: theme.palette.background.paper,
+            backgroundImage: "none",
+            opacity: 1,
+          },
+        }}
+        slotProps={{
+          backdrop: {
+            sx: {
+              bgcolor: "rgba(0, 0, 0, 0.72)",
+              backdropFilter: "blur(3px)",
+            },
+          },
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 900, pb: 1 }}>{t("portfolio.editProfile")}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2.25} sx={{ pt: 1 }}>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Avatar
+                src={avatarDraft === undefined ? profileAvatar : avatarDraft || undefined}
+                alt={displayedProfileName}
+                sx={{ width: 72, height: 72, bgcolor: alpha(theme.palette.primary.main, 0.16), color: "primary.main" }}
+              >
+                {displayedProfileName?.slice(0, 1)?.toUpperCase() || <AccountCircleIcon />}
+              </Avatar>
+              <Stack spacing={0.65} alignItems="flex-start">
+                <Button
+                  component="label"
+                  size="small"
+                  variant="outlined"
+                  startIcon={<PhotoCameraOutlinedIcon />}
+                  disabled={savingProfile}
+                  sx={{ borderRadius: 1, textTransform: "none", fontWeight: 800 }}
+                >
+                  {t("portfolio.uploadPhoto")}
+                  <input hidden accept="image/png,image/jpeg,image/webp" type="file" onChange={selectAvatar} />
+                </Button>
+                {(avatarDraft !== undefined || profileAvatar) && (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    disabled={savingProfile}
+                    onClick={() => setAvatarDraft(null)}
+                    sx={{ minWidth: 0, p: 0, textTransform: "none", fontSize: "0.78rem", color: "text.secondary" }}
+                  >
+                    {t("portfolio.removePhoto")}
+                  </Button>
+                )}
+              </Stack>
+            </Stack>
+
+            <TextField
+              fullWidth
+              autoFocus
+              label={t("portfolio.displayName")}
+              value={displayNameDraft}
+              disabled={savingProfile}
+              onChange={(event) => {
+                setProfileNameAvailable(null);
+                setDisplayNameDraft(event.target.value);
+              }}
+              error={hasDraftNameError || (nameWillChange && profileNameAvailable === false)}
+              helperText={hasDraftNameError
+                ? t("portfolio.profileNameInvalid")
+                : nameWillChange && profileNameAvailable === false
+                  ? t("portfolio.profileNameTaken")
+                  : nameWillChange && checkingProfileName
+                  ? t("portfolio.profileNameChecking")
+                    : t(hasExistingDisplayName ? "portfolio.displayNameHint" : "portfolio.displayNameOptionalHint")}
+            />
+
+            <Paper
+              elevation={0}
+              sx={{
+                p: 1.25,
+                borderRadius: 1,
+                bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "light" ? 0.08 : 0.1),
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.28)}`,
+              }}
+            >
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", fontWeight: 700 }}>
+                {t("portfolio.profilePaymentTo", { address: profileGameOperator ? shortMiddle(profileGameOperator) : "..." })}
+              </Typography>
+              <Typography sx={{ mt: 0.35, fontWeight: 850, color: "text.primary" }}>
+                {profileUpdateFee > 0
+                  ? t("portfolio.profileFee", { amount: formatAmount(profileUpdateFee) })
+                  : t("portfolio.profileAuthorization")}
+              </Typography>
+            </Paper>
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.5, pt: 1.5 }}>
+          <Button disabled={savingProfile} onClick={() => setProfileDialogOpen(false)} sx={{ textTransform: "none", fontWeight: 800 }}>
+            {t("portfolio.cancel")}
+          </Button>
+          <Button
+            variant="contained"
+            disabled={savingProfile || !isDraftNameAllowed || !hasProfileChanges || (nameWillChange && (checkingProfileName || profileNameAvailable !== true))}
+            onClick={submitProfile}
+            startIcon={<SaveOutlinedIcon />}
+            sx={{ borderRadius: 1, textTransform: "none", fontWeight: 900 }}
+          >
+            {savingProfile ? t("portfolio.savingProfile") : t("portfolio.saveProfile")}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </PageShell>
   );
 };

@@ -34,6 +34,7 @@ import { isEventClosed, parseQubicUtcDate } from "../components/qubic/util/trade
 import { fetchCachedEventVolumes, fetchEventVolumesByIds, formatCompactAmount, getEventId } from "../utils/eventVolumes";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
 import { formatDateUtc, formatInteger } from "../utils/format";
+import { useTranslation } from "react-i18next";
 
 const SORT_MODES = {
   VOLUME: "volume",
@@ -48,17 +49,17 @@ const SORT_DIRECTIONS = {
   ASC: "asc",
 };
 
-const SORT_LABELS = {
-  [SORT_MODES.VOLUME]: "Traded volume",
-  [SORT_MODES.OPEN_VOLUME]: "Open orders volume",
-  [SORT_MODES.NEWEST]: "Newest",
-  [SORT_MODES.ENDING_SOON]: "Ending soon",
-  [SORT_MODES.CREATED_DATE]: "Created date",
-  [SORT_MODES.ARCHIVED_DATE]: "Archived date",
+const SORT_LABEL_KEYS = {
+  [SORT_MODES.VOLUME]: "markets.sortTraded",
+  [SORT_MODES.OPEN_VOLUME]: "markets.sortOpen",
+  [SORT_MODES.NEWEST]: "markets.sortNewest",
+  [SORT_MODES.ENDING_SOON]: "markets.sortEnding",
+  [SORT_MODES.CREATED_DATE]: "markets.sortCreated",
+  [SORT_MODES.ARCHIVED_DATE]: "markets.sortArchived",
 };
-const SORT_DIRECTION_LABELS = {
-  [SORT_DIRECTIONS.DESC]: "Newest",
-  [SORT_DIRECTIONS.ASC]: "Oldest",
+const SORT_DIRECTION_LABEL_KEYS = {
+  [SORT_DIRECTIONS.DESC]: "markets.directionNewest",
+  [SORT_DIRECTIONS.ASC]: "markets.directionOldest",
 };
 
 const EVENT_VIEW = {
@@ -69,10 +70,10 @@ const PAGE_SIZE = 50;
 const EVENT_METRICS_REFRESH_MS = 15000;
 const EVENT_METRICS_DUPLICATE_WINDOW_MS = 5000;
 
-function winnerLabel(event) {
-  if (event?.result === null || event?.result === undefined) return "Pending";
-  if (Number(event.result) === 0) return event.option0 || "Yes";
-  if (Number(event.result) === 1) return event.option1 || "No";
+function winnerLabel(event, t) {
+  if (event?.result === null || event?.result === undefined) return t("markets.pending");
+  if (Number(event.result) === 0) return event.option0 || t("markets.yes");
+  if (Number(event.result) === 1) return event.option1 || t("markets.no");
   return String(event.result);
 }
 
@@ -108,6 +109,7 @@ const getValidTopicId = (topicId, groupId = null) => {
 };
 
 function EventsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -132,7 +134,7 @@ function EventsPage() {
   const lastImmediateMetricsRef = useRef({ key: "", at: 0 });
   const requestedGroupId = getValidGroupId(searchParams.get("group"));
   const selectedView = searchParams.get("view") === EVENT_VIEW.ARCHIVE ? EVENT_VIEW.ARCHIVE : EVENT_VIEW.ACTIVE;
-  usePageTitle(selectedView === EVENT_VIEW.ARCHIVE ? "Archived markets" : "Markets");
+  usePageTitle(selectedView === EVENT_VIEW.ARCHIVE ? t("markets.archivePageTitle") : t("markets.pageTitle"));
   const selectedTopicId = getValidTopicId(searchParams.get("topic"), requestedGroupId);
   const selectedGroupId = selectedTopicId
       ? getTagGroupId(Number(selectedTopicId))
@@ -276,16 +278,27 @@ function EventsPage() {
   }, [baseEventsToDisplay, visibleTags]);
 
   const groupOptions = React.useMemo(() => [
-    { id: "all", label: "All" },
-    ...TAG_GROUPS,
-  ], []);
+    { id: "all", label: t("markets.all") },
+    ...TAG_GROUPS.map((group) => ({
+      ...group,
+      label: t(`markets.groups.${group.id}`, { defaultValue: group.label }),
+    })),
+  ], [t]);
+
+  const translateTag = React.useCallback((tag) => (
+    t(`markets.tags.${getTagSlug(tag.id)}`, { defaultValue: tag.label })
+  ), [t]);
 
   const sidebarItems = React.useMemo(() => {
     if (selectedGroupId === "all") {
-      const items = [{ type: "all", id: "", label: "All Markets" }];
+      const items = [{ type: "all", id: "", label: t("markets.allMarkets") }];
 
       for (const group of TAG_GROUPS) {
-        items.push({ type: "group", id: group.id, label: group.label });
+        items.push({
+          type: "group",
+          id: group.id,
+          label: t(`markets.groups.${group.id}`, { defaultValue: group.label }),
+        });
         if (expandedGroupIds[group.id]) {
           items.push(
               ...getTagsForGroup(group.id).map((tag) => ({
@@ -293,6 +306,7 @@ function EventsPage() {
                 groupId: group.id,
                 nested: true,
                 ...tag,
+                label: translateTag(tag),
               }))
           );
         }
@@ -302,10 +316,21 @@ function EventsPage() {
     }
 
     return [
-      { type: "all", id: "", label: `All ${groupOptions.find((group) => group.id === selectedGroupId)?.label || "Markets"}` },
-      ...getTagsForGroup(selectedGroupId).map((tag) => ({ type: "tag", groupId: selectedGroupId, ...tag })),
+      {
+        type: "all",
+        id: "",
+        label: t("markets.allGroup", {
+          group: groupOptions.find((group) => group.id === selectedGroupId)?.label || t("markets.title"),
+        }),
+      },
+      ...getTagsForGroup(selectedGroupId).map((tag) => ({
+        type: "tag",
+        groupId: selectedGroupId,
+        ...tag,
+        label: translateTag(tag),
+      })),
     ];
-  }, [expandedGroupIds, groupOptions, selectedGroupId]);
+  }, [expandedGroupIds, groupOptions, selectedGroupId, t, translateTag]);
 
   const eventsToDisplay = React.useMemo(() => {
     const compareEndingSoon = (a, b) => {
@@ -522,18 +547,18 @@ function EventsPage() {
   const pagedArchivedEvents = archivedEventsToDisplay.slice((safeArchivePage - 1) * PAGE_SIZE, safeArchivePage * PAGE_SIZE);
   const marketMetrics = [
     {
-      label: selectedView === EVENT_VIEW.ARCHIVE ? "Archived markets" : "Active markets",
+      label: selectedView === EVENT_VIEW.ARCHIVE ? t("markets.archivedMarkets") : t("markets.activeMarkets"),
       value: selectedView === EVENT_VIEW.ARCHIVE ? archivedEventsToDisplay.length : activeMarketStats.count,
       tone: "cyan",
     },
     {
-      label: "Traded volume",
+      label: t("markets.tradedVolume"),
       value: formatCompactAmount(selectedView === EVENT_VIEW.ARCHIVE
         ? archivedEventsToDisplay.reduce((sum, event) => sum + Number(event.traded_volume || 0), 0)
         : activeMarketStats.tradedVolume),
     },
     {
-      label: "Open orders",
+      label: t("markets.openOrders"),
       value: selectedView === EVENT_VIEW.ARCHIVE ? "-" : formatCompactAmount(activeMarketStats.openOrderVolume),
       tone: "muted",
     },
@@ -585,7 +610,7 @@ function EventsPage() {
     if (archiveError) {
       return (
           <EmptyState
-            title="Failed to load archived markets"
+            title={t("markets.failedArchive")}
             description={archiveError}
             sx={{ color: "error.main" }}
           />
@@ -595,8 +620,8 @@ function EventsPage() {
     if (archivedEventsToDisplay.length === 0) {
       return (
           <EmptyState
-            title="No archived markets found"
-            description="Try changing search, sort, or zero-volume filter."
+            title={t("markets.noArchive")}
+            description={t("markets.noArchiveHint")}
           />
       );
     }
@@ -605,7 +630,7 @@ function EventsPage() {
       { key: "event_id", label: "ID", numeric: true, render: (event) => event.event_id },
       {
         key: "event",
-        label: "Event",
+        label: t("markets.event"),
         minWidth: 280,
         wrap: true,
         render: (event) => (
@@ -632,25 +657,25 @@ function EventsPage() {
                 "&:hover": { bgcolor: "transparent", textDecoration: "underline" },
               }}
             >
-              {event.description || `Event #${event.event_id}`}
+              {event.description || t("markets.eventFallback", { id: event.event_id })}
             </Button>
             <Typography variant="caption" color="text.secondary">
-              {event.option0 || "Yes"} | {event.option1 || "No"}
+              {event.option0 || t("markets.yes")} | {event.option1 || t("markets.no")}
             </Typography>
           </Stack>
         ),
       },
       {
         key: "winner",
-        label: "Winner",
-        render: (event) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{winnerLabel(event)}</Typography>,
+        label: t("markets.winner"),
+        render: (event) => <Typography variant="body2" sx={{ fontWeight: 800 }}>{winnerLabel(event, t)}</Typography>,
       },
-      { key: "traded_volume", label: "Volume", numeric: true, render: (event) => formatInteger(event.traded_volume) },
-      { key: "created_tick", label: "Created tick", numeric: true, render: (event) => renderTickWithDate(event.created_tick, event.created_tx_timestamp) },
-      { key: "finalized_tick", label: "Finalized tick", numeric: true, render: (event) => renderTickWithDate(event.finalized_tick, event.finalized_tx_timestamp) },
+      { key: "traded_volume", label: t("markets.volume"), numeric: true, render: (event) => formatInteger(event.traded_volume) },
+      { key: "created_tick", label: t("markets.createdTick"), numeric: true, render: (event) => renderTickWithDate(event.created_tick, event.created_tx_timestamp) },
+      { key: "finalized_tick", label: t("markets.finalizedTick"), numeric: true, render: (event) => renderTickWithDate(event.finalized_tick, event.finalized_tx_timestamp) },
       {
         key: "archived_tick",
-        label: "Archived tick",
+        label: t("markets.archivedTick"),
         numeric: true,
         render: (event) => renderTickWithDate(
           event.archived_tick,
@@ -665,7 +690,7 @@ function EventsPage() {
         <DataTable
           columns={archiveColumns}
           rows={pagedArchivedEvents}
-          emptyText="No archived markets found."
+          emptyText={t("markets.noArchive")}
           minWidth={940}
           getRowKey={(event) => event.event_id}
         />
@@ -698,14 +723,14 @@ function EventsPage() {
         <PageShell bottom={0}>
           <Stack spacing={3} sx={{ mb: { xs: 3, md: 4 } }}>
             <PageHeader
-              eyebrow="Qubic-native prediction markets"
-              title="Markets"
-              description="Discover active outcomes, compare market depth, and review archived settlement history."
+              eyebrow={t("markets.eyebrow")}
+              title={t("markets.title")}
+              description={t("markets.description")}
               icon={<EventAvailableIcon />}
               actions={(
                   <ActionIconButton
-                    label="Refresh markets"
-                    aria-label="refresh markets"
+                    label={t("markets.refresh")}
+                    aria-label={t("markets.refresh")}
                     onClick={handleRefresh}
                     disabled={isLoadingOverall}
                   >
@@ -736,15 +761,15 @@ function EventsPage() {
                   },
                 }}
             >
-              <Tab value={EVENT_VIEW.ACTIVE} label="Active" />
-              <Tab value={EVENT_VIEW.ARCHIVE} label={`Archive (${archivedEvents.length || 0})`} />
+              <Tab value={EVENT_VIEW.ACTIVE} label={t("markets.active")} />
+              <Tab value={EVENT_VIEW.ARCHIVE} label={t("markets.archive", { count: archivedEvents.length || 0 })} />
             </Tabs>
           </Stack>
 
           {selectedView === EVENT_VIEW.ACTIVE && !isConnected ? (
               <EmptyState
-                title="Connect wallet to browse markets"
-                description="Market data is loaded through your configured Qubic connection."
+                title={t("markets.connectTitle")}
+                description={t("markets.connectDescription")}
               />
           ) : selectedView === EVENT_VIEW.ARCHIVE ? (
               <>
@@ -772,7 +797,7 @@ function EventsPage() {
                           flexShrink: 0,
                         }}
                     >
-                      Sort: {SORT_LABELS[archiveSortMode]}
+                      {t("markets.sort", { value: t(SORT_LABEL_KEYS[archiveSortMode]) })}
                     </Button>
                   </Box>
                   <Menu
@@ -793,7 +818,7 @@ function EventsPage() {
                             selected={archiveSortMode === sortMode}
                             onClick={() => handleSortChange(sortMode)}
                         >
-                          {SORT_LABELS[sortMode]}
+                          {t(SORT_LABEL_KEYS[sortMode])}
                         </MenuItem>
                     ))}
                   </Menu>
@@ -813,7 +838,7 @@ function EventsPage() {
                             fontWeight: 800,
                           }}
                         >
-                          {SORT_DIRECTION_LABELS[direction]}
+                          {t(SORT_DIRECTION_LABEL_KEYS[direction])}
                         </Button>
                       ))}
                     </Stack>
@@ -832,7 +857,7 @@ function EventsPage() {
                           }}
                         />
                       )}
-                      label="Show zero volume markets"
+                      label={t("markets.showZero")}
                       sx={{
                         m: 0,
                         color: "text.secondary",
@@ -897,7 +922,7 @@ function EventsPage() {
                           flexShrink: 0,
                         }}
                     >
-                      Sort: {SORT_LABELS[activeSortMode]}
+                      {t("markets.sort", { value: t(SORT_LABEL_KEYS[activeSortMode]) })}
                     </Button>
                     <Menu
                         anchorEl={sortMenuAnchorEl}
@@ -917,7 +942,7 @@ function EventsPage() {
                               selected={activeSortMode === sortMode}
                               onClick={() => handleSortChange(sortMode)}
                           >
-                            {SORT_LABELS[sortMode]}
+                            {t(SORT_LABEL_KEYS[sortMode])}
                           </MenuItem>
                       ))}
                     </Menu>
@@ -1006,7 +1031,7 @@ function EventsPage() {
                                   </Box>
                                   {item.type === "group" && (
                                       <IconButton
-                                          aria-label={isExpanded ? `Collapse ${item.label}` : `Expand ${item.label}`}
+                                          aria-label={t(isExpanded ? "markets.collapse" : "markets.expand", { label: item.label })}
                                           size="small"
                                           onClick={() => toggleGroupExpansion(item.id)}
                                           sx={{ color: theme.palette.text.secondary, width: 26, height: 26 }}
@@ -1048,8 +1073,8 @@ function EventsPage() {
                             </Grid>
                         ) : (
                             <EmptyState
-                              title="No markets found"
-                              description="Try changing search, category, or sort filters."
+                              title={t("markets.noMarkets")}
+                              description={t("markets.noMarketsHint")}
                             />
                         )}
                       </Box>

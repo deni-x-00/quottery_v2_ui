@@ -7,6 +7,7 @@ import {
     Typography,
 } from "@mui/material";
 import { formatQubicAmount } from "./qubic/util";
+import { useTranslation } from "react-i18next";
 
 const AMOUNT_PRESETS = [10, 25, 50, 75, 100];
 
@@ -15,22 +16,20 @@ const toPositiveInt = (value) => {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
 
-const availableLabel = (value, unit) => (
-    value === null || value === undefined
-        ? "Available: unavailable"
-        : `Available: ${formatQubicAmount(value)} ${unit}`
-);
-
 export default function TradeAmountSlider({
-    label = "Shares",
+    label,
     value,
     max,
-    unit = "shares",
+    unit,
     availableValue,
     availableUnit,
     onChange,
     disabled,
 }) {
+    const { t } = useTranslation();
+    const visibleLabel = label || t("eventDetails.shares");
+    const visibleUnit = unit || t("eventDetails.shareUnit");
+    const resolvedAvailable = availableValue ?? max;
     const numericValue = toPositiveInt(value);
     const numericMax = Number(max || 0);
     const controlsDisabled = disabled || numericMax <= 0;
@@ -63,19 +62,26 @@ export default function TradeAmountSlider({
         <Stack spacing={1.25}>
             <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
                 <Typography variant="body2" color="text.secondary">
-                    {label}
+                    {visibleLabel}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                    {availableLabel(availableValue ?? max, availableUnit ?? unit)}
+                    {resolvedAvailable === null || resolvedAvailable === undefined
+                        ? t("eventDetails.availableUnavailable")
+                        : t("eventDetails.available", {
+                            value: formatQubicAmount(resolvedAvailable),
+                            unit: availableUnit ?? visibleUnit,
+                        })}
                 </Typography>
             </Box>
             <TextField
-                label={label}
+                label={visibleLabel}
                 value={value}
                 onChange={(e) => handleInputChange(e.target.value)}
                 fullWidth
                 size="small"
-                placeholder={numericMax > 0 ? `Max ${formatQubicAmount(numericMax)} shares` : "Unavailable"}
+                placeholder={numericMax > 0
+                    ? t("eventDetails.maxShares", { value: formatQubicAmount(numericMax) })
+                    : t("eventDetails.unavailable")}
                 inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
                 disabled={disabled}
             />

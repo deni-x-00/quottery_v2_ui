@@ -12,6 +12,7 @@ import {
   Clear as ClearIcon,
 } from "@mui/icons-material";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
 /**
  *  Search and filter component
@@ -21,6 +22,7 @@ const SearchFilter = ({
   onSearchChange,
 }) => {
   const theme = useTheme();
+  const { t } = useTranslation();
 
   const handleClearSearch = useCallback(() => {
     onSearchChange("");
@@ -37,7 +39,7 @@ const SearchFilter = ({
       <TextField
         fullWidth
         variant='outlined'
-        placeholder='Search markets...'
+        placeholder={t('markets.search')}
         value={searchTerm}
         onChange={(e) => onSearchChange(e.target.value)}
         InputProps={{
@@ -48,7 +50,7 @@ const SearchFilter = ({
           ),
           endAdornment: searchTerm && (
             <InputAdornment position='end'>
-              <Tooltip title='Clear search'>
+              <Tooltip title={t('markets.clearSearch')}>
                 <IconButton
                   size='small'
                   onClick={handleClearSearch}

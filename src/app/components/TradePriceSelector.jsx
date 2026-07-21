@@ -7,6 +7,7 @@ import {
     Typography,
 } from "@mui/material";
 import { formatQubicAmount } from "./qubic/util";
+import { useTranslation } from "react-i18next";
 
 const PRICE_PRESETS = [10, 25, 50, 75, 90];
 const WHOLE_SHARE_PRICE = 100000;
@@ -21,8 +22,10 @@ export default function TradePriceSelector({
     value,
     onChange,
     disabled,
-    label = "Price",
+    label,
 }) {
+    const { t } = useTranslation();
+    const visibleLabel = label || t("eventDetails.price");
     const numericValue = toPrice(value);
     const probability = ((numericValue / WHOLE_SHARE_PRICE) * 100).toFixed(2);
 
@@ -45,14 +48,14 @@ export default function TradePriceSelector({
         <Stack spacing={1.25}>
             <Box display="flex" justifyContent="space-between" alignItems="center" gap={2}>
                 <Typography variant="body2" color="text.secondary">
-                    {label}
+                    {visibleLabel}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                    Probability: {probability}%
+                    {t("eventDetails.probability", { value: probability })}
                 </Typography>
             </Box>
             <TextField
-                label="Price (out of 100,000)"
+                label={t("eventDetails.priceOutOf")}
                 value={value}
                 onChange={(e) => handleInputChange(e.target.value)}
                 fullWidth

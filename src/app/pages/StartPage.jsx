@@ -17,12 +17,14 @@ import { useQuotteryContext } from "../contexts/QuotteryContext";
 import { useTxTracker } from "../hooks/useTxTracker";
 import usePageTitle from "../hooks/usePageTitle";
 import { fetchCachedEventVolumes, fetchEventVolumesByIds, getEventId } from "../utils/eventVolumes";
+import { useTranslation } from "react-i18next";
 
 const RECENT_EVENT_LIMIT = 6;
 const EVENT_METRICS_REFRESH_MS = 15000;
 
 function StartPage() {
   usePageTitle();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const theme = useTheme();
   const { bobUrl, isConnected } = useConfig();
@@ -146,7 +148,7 @@ function StartPage() {
                 textTransform: "uppercase",
               }}
             >
-              Qubic-native prediction markets
+              {t("home.eyebrow")}
             </Typography>
             <Typography
                 variant="h2"
@@ -166,9 +168,9 @@ function StartPage() {
                   maxWidth: 760,
                 }}
             >
-              Predict to{" "}
+              {t("home.titleStart")}{" "}
               <Box component="span" sx={{ color: "primary.main", fontSize: "inherit" }} fontWeight="bold">
-                profit
+                {t("home.titleAccent")}
               </Box>
             </Typography>
             <Typography
@@ -185,8 +187,7 @@ function StartPage() {
                   lineHeight: 1.55,
                 }}
             >
-              Trade YES and NO outcome shares through transparent order books,
-              indexed portfolios, and on-chain settlement powered by Qubic.
+              {t("home.description")}
             </Typography>
             <Box sx={{
               display: "grid",
@@ -197,12 +198,12 @@ function StartPage() {
               mt: { xs: 2.5, sm: 3 },
             }}>
               {[
-                ["Whole share", "100,000 GARTH"],
-                ["Settlement", "On-chain"],
-                ["Data", "Live indexed"],
-              ].map(([label, value]) => (
+                ["whole-share", t("home.wholeShare"), "100,000 GARTH"],
+                ["settlement", t("home.settlement"), t("home.settlementValue")],
+                ["data", t("home.data"), t("home.dataValue")],
+              ].map(([key, label, value]) => (
                 <Box
-                  key={label}
+                  key={key}
                   sx={{
                     p: 1.5,
                     borderRadius: 1.5,
@@ -228,7 +229,7 @@ function StartPage() {
                   color="primary"
                   sx={{ borderRadius: 1, textTransform: "none", fontWeight: 900, minHeight: 44 }}
               >
-                Explore Markets
+                {t("home.explore")}
               </Button>
               <Button
                   onClick={() => navigate("/about")}
@@ -237,7 +238,7 @@ function StartPage() {
                   color="primary"
                   sx={{ borderRadius: 1, textTransform: "none", fontWeight: 900, minHeight: 44 }}
               >
-                About
+                {t("home.about")}
               </Button>
             </Box>
           </Box>
@@ -247,10 +248,10 @@ function StartPage() {
                 <Box sx={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", alignItems: "center", gap: 2, mb: 2.5 }}>
                   <Box />
                   <Typography variant="h4" color="text.primary" sx={{ fontWeight: 700, fontSize: { xs: "1.5rem", md: "2rem" } }}>
-                    Recent Markets
+                    {t("home.recent")}
                   </Typography>
                   <Button component={RouterLink} to="/markets" size="small" variant="text" sx={{ justifySelf: "end", textTransform: "none", fontWeight: 700 }}>
-                    All Markets
+                    {t("home.all")}
                   </Button>
                 </Box>
 
@@ -284,8 +285,8 @@ function StartPage() {
                 ) : (
                     <EmptyState
                       compact
-                      title="No markets found"
-                      description="Markets will appear here once the indexer returns active events."
+                      title={t("home.emptyTitle")}
+                      description={t("home.emptyDescription")}
                     />
                 )}
               </Box>

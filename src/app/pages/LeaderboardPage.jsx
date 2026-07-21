@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   Alert,
   Autocomplete,
+  Avatar,
   Box,
   Button,
   Chip,
@@ -22,11 +23,13 @@ import LeaderboardIcon from "@mui/icons-material/Leaderboard";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
+import { profileAvatarUrl } from "../api/quotteryApi";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
 import { useIdentitySearch, useLeaderboard } from "../hooks/data";
 import usePageTitle from "../hooks/usePageTitle";
 import { formatNumeric, formatSignedAmount, normalizeIdentity, shortIdentity } from "../utils/format";
 import { ActionIconButton, DataTable, MetricGrid, PageHeader, PageShell } from "../components/ui";
+import { useTranslation } from "react-i18next";
 
 const METRICS = {
   PNL: "pnl",
@@ -37,7 +40,8 @@ const SEARCH_RESET_REASON = "reset";
 const IDENTITY_RE = /^[A-Z]{56,60}$/;
 
 const LeaderboardPage = () => {
-  usePageTitle("Leaderboard");
+  const { t } = useTranslation();
+  usePageTitle(t("leaderboard.pageTitle"));
   const theme = useTheme();
   const navigate = useNavigate();
   const [metric, setMetric] = useState(METRICS.PNL);
@@ -60,7 +64,11 @@ const LeaderboardPage = () => {
 
   const handleSearch = (event) => {
     event.preventDefault();
-    openPortfolio(search);
+    if (IDENTITY_RE.test(normalizeIdentity(search))) {
+      openPortfolio(search);
+      return;
+    }
+    if (searchOptions[0]?.identity) openPortfolio(searchOptions[0].identity);
   };
 
   const topStats = useMemo(() => {
@@ -97,9 +105,9 @@ const LeaderboardPage = () => {
     );
   };
   const leaderboardMetrics = [
-    { label: "Accounts", value: formatNumeric(topStats.totalAccounts) },
-    { label: "Top realized PnL", value: renderPnl(topStats.topPnl) },
-    { label: "Top traded volume", value: formatNumeric(topStats.topVolume) },
+    { label: t("leaderboard.accounts"), value: formatNumeric(topStats.totalAccounts) },
+    { label: t("leaderboard.topRealizedPnl"), value: renderPnl(topStats.topPnl) },
+    { label: t("leaderboard.topTradedVolume"), value: formatNumeric(topStats.topVolume) },
   ];
   const pageCount = Math.max(1, Math.ceil(leaders.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -134,32 +142,60 @@ const LeaderboardPage = () => {
   const leaderboardColumns = [
     {
       key: "rank",
-      label: "#",
+      label: t("leaderboard.rank"),
       numeric: true,
       render: (row, index) => row.rank || ((safePage - 1) * PAGE_SIZE) + index + 1,
     },
     {
       key: "identity",
-      label: "Address",
-      minWidth: 180,
+      label: t("leaderboard.address"),
+      minWidth: 220,
       render: (row) => (
-        <Stack direction="row" spacing={0.5} alignItems="center" justifyContent="center">
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="flex-start"
+          sx={{ width: 210, maxWidth: "100%", minWidth: 0, mx: "auto", gap: 0.75 }}
+        >
+          <Avatar
+            src={row.has_avatar ? profileAvatarUrl(row.identity, row.avatar_updated_at) : undefined}
+            sx={{
+              width: 28,
+              height: 28,
+              flexShrink: 0,
+              fontSize: "0.75rem",
+              bgcolor: alpha(theme.palette.primary.main, 0.16),
+              color: "primary.main",
+            }}
+          >
+            {(row.display_name || row.identity || "?").slice(0, 1).toUpperCase()}
+          </Avatar>
           <Button
             size="small"
             variant="text"
             onClick={() => navigate(`/portfolio/${row.identity}`)}
-            sx={{ minWidth: 0, px: 0, textTransform: "none", fontWeight: 900 }}
+            title={row.display_name ? `${row.display_name} - ${row.identity}` : row.identity}
+            sx={{
+              minWidth: 0,
+              justifyContent: "flex-start",
+              px: 0,
+              textTransform: "none",
+              fontWeight: 900,
+              textAlign: "left",
+            }}
           >
-            {shortIdentity(row.identity)}
+            <Box component="span" sx={{ display: "block", maxWidth: 128, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {row.display_name || shortIdentity(row.identity)}
+            </Box>
           </Button>
-          <Tooltip title="Open address in explorer">
+          <Tooltip title={t("leaderboard.openExplorer")}>
             <IconButton
               size="small"
               component="a"
               href={`https://explorer.qubic.org/network/address/${row.identity}`}
               target="_blank"
               rel="noreferrer"
-              sx={{ width: 24, height: 24 }}
+              sx={{ width: 24, height: 24, flexShrink: 0 }}
             >
               <OpenInNewIcon sx={{ fontSize: 15 }} />
             </IconButton>
@@ -167,19 +203,19 @@ const LeaderboardPage = () => {
         </Stack>
       ),
     },
-    { key: "realized_pnl", label: "Realized PnL", render: (row) => renderPnl(row.realized_pnl) },
-    { key: "traded_volume", label: "Traded volume", numeric: true, cellSx: { fontWeight: 800 }, render: (row) => formatNumeric(row.traded_volume) },
-    { key: "trade_count", label: "Trades", numeric: true, render: (row) => formatNumeric(row.trade_count) },
-    { key: "transfer_count", label: "Transfers", numeric: true, render: (row) => formatNumeric(row.transfer_count) },
-    { key: "last_seen_tick", label: "Last seen tick", numeric: true, render: (row) => renderTick(row.last_seen_tick, row.last_seen_tick_ref) },
+    { key: "realized_pnl", label: t("leaderboard.realizedPnl"), render: (row) => renderPnl(row.realized_pnl) },
+    { key: "traded_volume", label: t("leaderboard.tradedVolume"), numeric: true, cellSx: { fontWeight: 800 }, render: (row) => formatNumeric(row.traded_volume) },
+    { key: "trade_count", label: t("leaderboard.trades"), numeric: true, render: (row) => formatNumeric(row.trade_count) },
+    { key: "transfer_count", label: t("leaderboard.transfers"), numeric: true, render: (row) => formatNumeric(row.transfer_count) },
+    { key: "last_seen_tick", label: t("leaderboard.lastSeenTick"), numeric: true, render: (row) => renderTick(row.last_seen_tick, row.last_seen_tick_ref) },
   ];
 
   return (
     <PageShell>
       <PageHeader
-        eyebrow="Accounts"
-        title="Leaderboard"
-        description="Ranked by realized PnL or traded volume"
+        eyebrow={t("leaderboard.eyebrow")}
+        title={t("leaderboard.title")}
+        description={t("leaderboard.description")}
         icon={<LeaderboardIcon />}
         actions={(
           <Box component="form" onSubmit={handleSearch} sx={{ display: "flex", gap: 1, minWidth: { xs: 0, md: 520 } }}>
@@ -194,7 +230,7 @@ const LeaderboardPage = () => {
             selectOnFocus={false}
             autoSelect={false}
             blurOnSelect
-            getOptionLabel={(option) => (typeof option === "string" ? option : option?.identity || "")}
+            getOptionLabel={(option) => (typeof option === "string" ? option : option?.display_name || option?.identity || "")}
             isOptionEqualToValue={(option, value) => option?.identity === value?.identity}
             onInputChange={(event, nextValue, reason) => {
               if (reason === SEARCH_RESET_REASON) return;
@@ -205,11 +241,25 @@ const LeaderboardPage = () => {
             }}
             renderOption={(props, option) => (
               <Box component="li" {...props} key={option.identity}>
-                <Stack spacing={0.25} sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontWeight: 700, fontFamily: "monospace" }}>{shortIdentity(option.identity)}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
-                    {option.source === "typed" ? "Open pasted address" : `Volume ${formatNumeric(option.traded_volume)} | PnL ${formatSignedAmount(option.realized_pnl)}`}
-                  </Typography>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                  <Avatar
+                    src={option.has_avatar ? profileAvatarUrl(option.identity, option.avatar_updated_at) : undefined}
+                    sx={{ width: 28, height: 28, fontSize: "0.78rem", bgcolor: alpha(theme.palette.primary.main, 0.16), color: "primary.main" }}
+                  >
+                    {(option.display_name || option.identity || "?").slice(0, 1).toUpperCase()}
+                  </Avatar>
+                  <Stack spacing={0.15} sx={{ minWidth: 0 }}>
+                    {option.display_name && <Typography sx={{ fontWeight: 800 }}>{option.display_name}</Typography>}
+                    <Typography sx={{ fontWeight: option.display_name ? 650 : 700, fontFamily: "monospace", fontSize: option.display_name ? "0.78rem" : "0.9rem" }}>{shortIdentity(option.identity)}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: "tabular-nums" }}>
+                      {option.source === "typed"
+                        ? t("leaderboard.typedAddress")
+                        : t("leaderboard.volumePnl", {
+                          volume: formatNumeric(option.traded_volume),
+                          pnl: formatSignedAmount(option.realized_pnl),
+                        })}
+                    </Typography>
+                  </Stack>
                 </Stack>
               </Box>
             )}
@@ -217,7 +267,7 @@ const LeaderboardPage = () => {
               <TextField
                 {...params}
                 size="small"
-                placeholder="Search address"
+                placeholder={t("leaderboard.searchName")}
                 inputProps={{
                   ...params.inputProps,
                   autoComplete: "off",
@@ -252,18 +302,18 @@ const LeaderboardPage = () => {
           />
           <Stack direction="row" spacing={1} alignItems="center">
             <ActionIconButton
-                  label="Open portfolio"
-                  tooltip="Open portfolio"
+                  label={t("leaderboard.openPortfolio")}
+                  tooltip={t("leaderboard.openPortfolio")}
                   type="submit"
                   color="primary"
-                  disabled={!normalizeIdentity(search)}
+                  disabled={!String(search || "").trim() || (!IDENTITY_RE.test(normalizeIdentity(search)) && searchOptions.length === 0)}
             >
                   <SearchIcon fontSize="small" />
             </ActionIconButton>
-          {loading && <Chip label="Refreshing" size="small" variant="outlined" />}
+          {loading && <Chip label={t("leaderboard.refreshing")} size="small" variant="outlined" />}
           <ActionIconButton
-                label="Refresh leaderboard"
-                tooltip="Refresh"
+                label={t("leaderboard.refresh")}
+                tooltip={t("leaderboard.refresh")}
                 onClick={loadLeaderboard}
                 disabled={loading}
           >
@@ -314,8 +364,8 @@ const LeaderboardPage = () => {
             },
           }}
         >
-          <Tab value={METRICS.PNL} label="Best PnL" />
-          <Tab value={METRICS.VOLUME} label="Top volume" />
+          <Tab value={METRICS.PNL} label={t("leaderboard.bestPnl")} />
+          <Tab value={METRICS.VOLUME} label={t("leaderboard.topVolume")} />
         </Tabs>
 
         {loading && !leaders.length ? (
@@ -331,7 +381,7 @@ const LeaderboardPage = () => {
             <DataTable
               columns={leaderboardColumns}
               rows={pagedLeaders}
-              emptyText="No indexed accounts found."
+              emptyText={t("leaderboard.noAccounts")}
               minWidth={920}
               getRowKey={(row) => row.identity}
             />

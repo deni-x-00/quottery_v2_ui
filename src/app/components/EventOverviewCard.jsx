@@ -15,17 +15,19 @@ import HelpIcon from "@mui/icons-material/Help";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import BarChartIcon from "@mui/icons-material/BarChart";
 import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
-import { getCanonicalTagId, getTagInfo } from "./qubic/util/tagMap";
+import { getCanonicalTagId, getTagInfo, getTagSlug } from "./qubic/util/tagMap";
 import { isEventClosed } from "./qubic/util/tradeValidation";
 import { formatCompactAmount } from "../utils/eventVolumes";
 import { formatPercent } from "../utils/format";
 import QuickBuyModal from "./QuickBuyModal";
 import { OutcomeButton, StatusBadge } from "./ui";
+import { useTranslation } from "react-i18next";
 
 const thumbnails = require.context("../../assets", true, /\.(png|jpe?g|svg|gif|webp)$/);
 
 function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroadcast }) {
     const theme = useTheme();
+    const { t } = useTranslation();
     const [isHovered, setIsHovered] = useState(false);
     const [quickBuyOpen, setQuickBuyOpen] = useState(false);
     const [quickBuyOption, setQuickBuyOption] = useState(0);
@@ -45,7 +47,7 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
         data?.resultByGO !== null &&
         data?.resultByGO !== undefined &&
         (resultOption === 0 || resultOption === 1);
-    const resultLabel = resultOption === 0 ? "YES" : "NO";
+    const resultLabel = resultOption === 0 ? t("marketCard.resultYes") : t("marketCard.resultNo");
     const hasTradedVolume = data?.tradedVolume !== undefined && data?.tradedVolume !== null;
     const hasOpenOrderVolume = data?.openOrderVolume !== undefined && data?.openOrderVolume !== null;
     const chancePercent = Number(data?.probability?.percent);
@@ -104,7 +106,7 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
                     <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1.5} sx={{ mb: 2 }}>
                         {tagId !== 0 ? (
                             <Chip
-                                label={tagInfo.label}
+                                label={t(`markets.tags.${getTagSlug(tagId)}`, { defaultValue: tagInfo.label })}
                                 size="small"
                                 sx={{
                                     height: 26,
@@ -122,7 +124,7 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
                             <Stack direction="row" alignItems="center" spacing={0.55} sx={{ minWidth: 0 }}>
                                 <StatusBadge
                                     status={resultOption === 0 ? "resolved" : "lose"}
-                                    label={`Result ${resultLabel}`}
+                                    label={resultLabel}
                                     size="xs"
                                 />
                                 <Typography component="span" variant="caption" sx={{ color: theme.palette.text.secondary, fontWeight: 750 }}>
@@ -208,7 +210,7 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
                                     [theme.breakpoints.down("sm")]: { fontSize: "0.8rem" },
                                 }}
                             >
-                                {hasEnded ? "Ended" : data.endDate}
+                                {hasEnded ? t("marketCard.ended") : data.endDate}
                             </Typography>
                         </Box>
                         {(hasTradedVolume || hasOpenOrderVolume) && (
@@ -223,7 +225,7 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
                             >
                                 <Stack direction="row" spacing={0.85} alignItems="center">
                                     {hasTradedVolume && (
-                                        <Tooltip title="Traded volume" arrow>
+                                        <Tooltip title={t("marketCard.tradedVolume")} arrow>
                                             <Box display="flex" alignItems="center" gap={0.35}>
                                                 <BarChartIcon sx={{ fontSize: "0.95rem", [theme.breakpoints.down("sm")]: { fontSize: "0.86rem" } }} />
                                                 <Typography
@@ -242,7 +244,7 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
                                         </Tooltip>
                                     )}
                                     {hasOpenOrderVolume && (
-                                        <Tooltip title="Open orders volume" arrow>
+                                        <Tooltip title={t("marketCard.openOrdersVolume")} arrow>
                                             <Box display="flex" alignItems="center" gap={0.35}>
                                                 <FormatListBulletedIcon sx={{ fontSize: "0.95rem", [theme.breakpoints.down("sm")]: { fontSize: "0.86rem" } }} />
                                                 <Typography

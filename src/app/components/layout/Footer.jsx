@@ -3,10 +3,12 @@ import pkg from "../../../../package.json";
 import logoShort from "../../../assets/logo/logo-text-short.svg";
 import { Box, Typography, Link, useTheme, Divider, IconButton, Tooltip } from "@mui/material";
 import { FaDiscord, FaXTwitter } from "react-icons/fa6";
+import { useTranslation } from "react-i18next";
 
 const Footer = () => {
   const { pathname } = useLocation();
   const theme = useTheme();
+  const { t } = useTranslation();
 
   if (pathname.includes("/market/") || pathname.includes("/event/")) {
     return null;
@@ -73,9 +75,9 @@ const Footer = () => {
           underline='hover'
           color='text.primary'
           variant='body2'
-          aria-label='Terms of service'
+          aria-label={t("footer.terms")}
         >
-          Terms of service
+          {t("footer.terms")}
         </Link>
         <Divider
           orientation='vertical'
@@ -90,9 +92,9 @@ const Footer = () => {
           underline='hover'
           color='text.primary'
           variant='body2'
-          aria-label='Privacy Policy'
+          aria-label={t("footer.privacy")}
         >
-          Privacy Policy
+          {t("footer.privacy")}
         </Link>
         <Divider
           orientation='vertical'
@@ -107,9 +109,9 @@ const Footer = () => {
           underline='hover'
           color='text.primary'
           variant='body2'
-          aria-label='Network status'
+          aria-label={t("footer.network")}
         >
-          Network Status
+          {t("footer.network")}
         </Link>
       </Box>
 
@@ -117,9 +119,9 @@ const Footer = () => {
         variant='body2'
         color='text.primary'
         sx={{ cursor: "pointer", mt: { xs: 2, sm: 0 } }}
-        aria-label={`Version ${pkg.version}`}
+        aria-label={t("footer.version", { version: pkg.version })}
       >
-        Version {pkg.version}
+        {t("footer.version", { version: pkg.version })}
       </Typography>
     </Box>
   );

@@ -37,6 +37,7 @@ import TokenIcon from "@mui/icons-material/Token";
 import usePageTitle from "../hooks/usePageTitle";
 import { PAGE_GUTTER_X, PAGE_MAX_WIDTH } from "../components/ui";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import { useTranslation } from "react-i18next";
 
 const getAccentTextColor = (theme) => (
     theme.palette.primary.main
@@ -211,8 +212,27 @@ const SectionHeader = ({ eyebrow, title, body }) => {
 };
 
 function AboutPage() {
-    usePageTitle("About");
+    const { t } = useTranslation();
+    usePageTitle(t("about.pageTitle"));
     const theme = useTheme();
+    const localizeRows = (rows, key) => rows.map((row, index) => ({
+        ...row,
+        title: t(`${key}.${index}.title`, { defaultValue: row.title }),
+        ...(row.body ? { body: t(`${key}.${index}.body`, { defaultValue: row.body }) } : {}),
+    }));
+    const localizedOverviewCards = localizeRows(overviewCards, "about.overviewCards");
+    const localizedStartTradingSteps = localizeRows(startTradingSteps, "about.startTradingSteps");
+    const localizedOrderBookRows = localizeRows(orderBookRows, "about.orderBookRows");
+    const localizedLifecycleSteps = localizeRows(lifecycleSteps, "about.lifecycleSteps");
+    const localizedFeeRows = feeRows.map((row, index) => ({
+        ...row,
+        label: t(`about.feeRows.${index}.label`, { defaultValue: row.label }),
+        body: t(`about.feeRows.${index}.body`, { defaultValue: row.body }),
+    }));
+    const localizedRoleRows = localizeRows(roleRows, "about.roleRows");
+    const localizedPredictionExamples = predictionExamples.map((item, index) => (
+        t(`about.predictionExamples.${index}`, { defaultValue: item })
+    ));
     const heroBackground = `radial-gradient(circle at 82% 12%, ${alpha(theme.palette.primary.main, 0.09)}, transparent 36%), ${theme.palette.background.default}`;
     const heroPanelBackground = theme.palette.surface[1];
     const accentTextColor = getAccentTextColor(theme);
@@ -264,7 +284,7 @@ function AboutPage() {
                             <Stack spacing={2.5}>
                                 <Chip
                                     icon={<TokenIcon />}
-                                    label="Powered by Qubic"
+                                    label={t("about.poweredBy")}
                                     color="primary"
                                     variant="outlined"
                                     sx={{
@@ -284,7 +304,7 @@ function AboutPage() {
                                         fontWeight: 900,
                                     }}
                                 >
-                                    Trade the outcome on Qubic.
+                                    {t("about.heroTitle")}
                                 </Typography>
                                 <Typography
                                     color="text.secondary"
@@ -294,8 +314,7 @@ function AboutPage() {
                                         maxWidth: 720,
                                     }}
                                 >
-                                    Trade YES or NO outcome shares on real-world events through an on-chain order book.
-                                    The smart contract handles matching, settlement, and payouts transparently.
+                                    {t("about.heroDescription")}
                                 </Typography>
                             </Stack>
                         </Grid>
@@ -313,18 +332,18 @@ function AboutPage() {
                                 <Stack spacing={2}>
                                     <Box>
                                         <Typography variant="body2" color="text.secondary">
-                                            Whole share price
+                                            {t("about.wholeSharePrice")}
                                         </Typography>
                                         <Typography variant="h3" fontWeight={900}>
                                             100,000
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary">
-                                            tokens per complete Yes + No share pair
+                                            {t("about.wholeShareHint")}
                                         </Typography>
                                     </Box>
                                     <Divider sx={{ borderColor: theme.palette.border.soft }} />
                                     <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                                        {["Peer-to-peer", "On-chain escrow", "Verifiable settlement"].map((item) => (
+                                        {[t("about.peerToPeer"), t("about.onChainEscrow"), t("about.verifiableSettlement")].map((item) => (
                                             <Chip
                                                 key={item}
                                                 label={item}
@@ -347,7 +366,7 @@ function AboutPage() {
             <Box sx={{ width: "100%", maxWidth: PAGE_MAX_WIDTH, mx: "auto", px: PAGE_GUTTER_X }}>
                 <Stack spacing={{ xs: 6, md: 8 }}>
                     <Grid container spacing={2.5}>
-                        {overviewCards.map((card) => (
+                        {localizedOverviewCards.map((card) => (
                             <Grid item xs={12} md={4} key={card.title} sx={{ display: "flex" }}>
                                 <Card variant="outlined" sx={{ ...surfaceCardSx, width: "100%" }}>
                                     <CardContent>
@@ -368,12 +387,12 @@ function AboutPage() {
 
                     <Box component="section">
                         <SectionHeader
-                            eyebrow="How to start"
-                            title="From wallet to your first trade"
-                            body="You only need a connected wallet, QUBIC for basic network activity, and GARTH deposited into the Quottery contract. After that, trading is just choosing a market and placing an order."
+                            eyebrow={t("about.startEyebrow")}
+                            title={t("about.startTitle")}
+                            body={t("about.startDescription")}
                         />
                         <Grid container spacing={2}>
-                            {startTradingSteps.map((step, index) => (
+                            {localizedStartTradingSteps.map((step, index) => (
                                 <Grid item xs={12} md={index === 4 ? 12 : 6} key={step.title}>
                                     <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                         <CardContent>
@@ -412,11 +431,11 @@ function AboutPage() {
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <RocketLaunchIcon color="primary" />
                                             <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                                                GARTH entry points
+                                                {t("about.garthEntryPoints")}
                                             </Typography>
                                         </Box>
                                         <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
-                                            To get GARTH, try{" "}
+                                            {t("about.garthIntro")} {" "}
                                             <MuiLink href="https://quhub.app/" target="_blank" rel="noreferrer" underline="hover">
                                                 QuHub
                                             </MuiLink>
@@ -424,19 +443,19 @@ function AboutPage() {
                                             <MuiLink href="https://app.qubicportal.org/" target="_blank" rel="noreferrer" underline="hover">
                                                 Qubic Portal
                                             </MuiLink>
-                                            , or{" "}
+                                            {t("about.or")} {" "}
                                             <MuiLink href="https://qubicswap.com/" target="_blank" rel="noreferrer" underline="hover">
                                                 Qubic Swap
                                             </MuiLink>
-                                            . Once GARTH is deposited into the contract through{" "}
+                                            {t("about.garthAfterLinks")} {" "}
                                             <MuiLink component={RouterLink} to="/utilities" underline="hover">
                                                 Utilities
                                             </MuiLink>
-                                            , the{" "}
+                                            {t("about.garthThen")} {" "}
                                             <MuiLink component={RouterLink} to="/markets" underline="hover">
-                                                markets page
+                                                {t("about.marketsPage")}
                                             </MuiLink>{" "}
-                                            are ready to use.
+                                            {t("about.garthReady")}
                                         </Typography>
                                     </Stack>
                                 </Grid>
@@ -450,7 +469,7 @@ function AboutPage() {
                                             startIcon={<AccountBalanceWalletIcon fontSize="small" />}
                                             sx={{ px: 1.5 }}
                                         >
-                                            Connect wallet
+                                            {t("about.connectWallet")}
                                         </Button>
                                         <Button
                                             component="span"
@@ -460,7 +479,7 @@ function AboutPage() {
                                             title="Gate, MEXC, Bitget, etc."
                                             sx={{ px: 1.5, cursor: "default" }}
                                         >
-                                            Buy QUBIC
+                                            {t("about.buyQubic")}
                                         </Button>
                                         <Button
                                             href="https://quhub.app/"
@@ -471,7 +490,7 @@ function AboutPage() {
                                             startIcon={<CurrencyExchangeIcon fontSize="small" />}
                                             sx={{ px: 1.5 }}
                                         >
-                                            Buy GARTH
+                                            {t("about.buyGarth")}
                                         </Button>
                                         <Button
                                             component={RouterLink}
@@ -481,7 +500,7 @@ function AboutPage() {
                                             startIcon={<SwapHorizIcon fontSize="small" />}
                                             sx={{ px: 1.5 }}
                                         >
-                                            Deposit to contract
+                                            {t("about.depositContract")}
                                         </Button>
                                         <Button
                                             component={RouterLink}
@@ -491,7 +510,7 @@ function AboutPage() {
                                             startIcon={<TrendingUpIcon fontSize="small" />}
                                             sx={{ px: 1.5 }}
                                         >
-                                            Trade markets
+                                            {t("about.tradeMarkets")}
                                         </Button>
                                     </Stack>
                                 </Grid>
@@ -501,12 +520,12 @@ function AboutPage() {
 
                     <Box component="section">
                         <SectionHeader
-                            eyebrow="What can you predict?"
-                            title="Anything with a clear Yes/No outcome"
-                            body="Markets can be as short as minutes or as long as months, making Quottery useful for both real-time sentiment and longer-running forecasts."
+                            eyebrow={t("about.predictEyebrow")}
+                            title={t("about.predictTitle")}
+                            body={t("about.predictDescription")}
                         />
                         <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
-                            {predictionExamples.map((item) => (
+                            {localizedPredictionExamples.map((item) => (
                                 <Chip
                                     key={item}
                                     label={item}
@@ -523,9 +542,9 @@ function AboutPage() {
 
                     <Box component="section">
                         <SectionHeader
-                            eyebrow="How it works"
-                            title="Two sides, one fixed payout"
-                            body="Every market has Yes and No shares. When the event resolves, the winning side receives the full 100,000 tokens per share while the losing side receives nothing."
+                            eyebrow={t("about.worksEyebrow")}
+                            title={t("about.worksTitle")}
+                            body={t("about.worksDescription")}
                         />
                         <Grid container spacing={3}>
                             <Grid item xs={12} md={5}>
@@ -540,19 +559,18 @@ function AboutPage() {
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <PaymentsIcon color="primary" />
                                             <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                                                Trading currency
+                                                {t("about.tradingCurrency")}
                                             </Typography>
                                         </Box>
                                         <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
-                                            Trading currently uses GARTH as a temporary stablecoin managed by the smart contract.
-                                            When native QUSD becomes available on Qubic, Quottery is designed to migrate to it.
+                                            {t("about.tradingCurrencyDescription")}
                                         </Typography>
                                     </Stack>
                                 </Paper>
                             </Grid>
                             <Grid item xs={12} md={7}>
                                 <Grid container spacing={2}>
-                                    {orderBookRows.map((row) => (
+                                    {localizedOrderBookRows.map((row) => (
                                         <Grid item xs={12} sm={6} key={row.title}>
                                             <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                                 <CardContent>
@@ -573,18 +591,18 @@ function AboutPage() {
 
                     <Box component="section">
                         <SectionHeader
-                            eyebrow="Lifecycle"
-                            title="From event creation to reward claiming"
-                            body="The contract manages open orders, escrowed tokens, disputes, finalization, rewards, and cleanup across the full market lifecycle."
+                            eyebrow={t("about.lifecycleEyebrow")}
+                            title={t("about.lifecycleTitle")}
+                            body={t("about.lifecycleDescription")}
                         />
                         <Grid container spacing={2}>
-                            {lifecycleSteps.map((step, index) => (
+                            {localizedLifecycleSteps.map((step, index) => (
                                 <Grid item xs={12} sm={6} md={4} key={step.title}>
                                     <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                         <CardContent>
                                             <Stack spacing={1}>
                                                 <Typography variant="caption" sx={{ color: accentTextColor }} fontWeight={900}>
-                                                    STEP {index + 1}
+                                                    {t("about.step", { number: index + 1 })}
                                                 </Typography>
                                                 <Typography sx={{ fontWeight: 900 }}>{step.title}</Typography>
                                                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
@@ -600,14 +618,14 @@ function AboutPage() {
 
                     <Box component="section">
                         <SectionHeader
-                            eyebrow="Fees and market making"
-                            title="Fees happen on winning payouts"
-                            body="Quottery does not charge for placing, cancelling, or replacing orders. Fees are charged only when value is realized through winning rewards."
+                            eyebrow={t("about.feesEyebrow")}
+                            title={t("about.feesTitle")}
+                            body={t("about.feesDescription")}
                         />
                         <Grid container spacing={3}>
                             <Grid item xs={12} md={6}>
                                 <List disablePadding>
-                                    {feeRows.map((row) => (
+                                    {localizedFeeRows.map((row) => (
                                         <ListItem key={row.label} disableGutters alignItems="flex-start">
                                             <ListItemIcon sx={{ minWidth: 36, color: accentTextColor, pt: 0.5 }}>
                                                 <CheckCircleOutlineIcon fontSize="small" />
@@ -632,12 +650,11 @@ function AboutPage() {
                                         <Box display="flex" alignItems="center" gap={1}>
                                             <BalanceIcon color="primary" />
                                             <Typography variant="h6" sx={{ fontWeight: 900 }}>
-                                                Market maker discounts
+                                                {t("about.marketMakerDiscounts")}
                                             </Typography>
                                         </Box>
                                         <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
-                                            The Game Operator can grant fee discounts to specific addresses, up to 100%.
-                                            This helps active liquidity providers quote tighter spreads and run automated strategies with less fee drag.
+                                            {t("about.marketMakerDescription")}
                                         </Typography>
                                     </Stack>
                                 </Paper>
@@ -647,9 +664,9 @@ function AboutPage() {
 
                     <Box component="section">
                         <SectionHeader
-                            eyebrow="Governance"
-                            title="QTRYGOV holders shape the protocol"
-                            body="There are 676 QTRYGOV tokens. Holders can submit complete parameter proposals covering fees, deposit amounts, event costs, and the Game Operator address."
+                            eyebrow={t("about.governanceEyebrow")}
+                            title={t("about.governanceTitle")}
+                            body={t("about.governanceDescription")}
                         />
                         <Paper
                             elevation={0}
@@ -659,21 +676,18 @@ function AboutPage() {
                             }}
                         >
                             <Typography color="text.secondary" sx={{ lineHeight: 1.7 }}>
-                                Proposals are weighted by QTRYGOV holdings. If identical proposals reach a quorum of
-                                451 weighted votes within an epoch, the new parameters take effect at the start of the
-                                next epoch. Inactive holders can be redistributed after long inactivity so governance
-                                does not get blocked by abandoned accounts.
+                                {t("about.governanceDetail")}
                             </Typography>
                         </Paper>
                     </Box>
 
                     <Box component="section">
                         <SectionHeader
-                            eyebrow="Roles"
-                            title="The people and systems behind Quottery"
+                            eyebrow={t("about.rolesEyebrow")}
+                            title={t("about.rolesTitle")}
                         />
                         <Grid container spacing={2}>
-                            {roleRows.map((role) => (
+                            {localizedRoleRows.map((role) => (
                                 <Grid item xs={12} md={6} key={role.title}>
                                     <Card variant="outlined" sx={{ ...surfaceCardSx, height: "100%" }}>
                                         <CardContent>

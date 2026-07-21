@@ -11,8 +11,9 @@ export default function useIdentitySearch(search, {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const normalized = normalizeIdentity(search);
-    if (!normalized) {
+    const query = String(search || "").trim();
+    const normalizedIdentity = normalizeIdentity(query);
+    if (!query) {
       setOptions([]);
       setLoading(false);
       return undefined;
@@ -22,12 +23,12 @@ export default function useIdentitySearch(search, {
     const timer = window.setTimeout(async () => {
       setLoading(true);
       try {
-        const body = await searchIdentities(normalized, { limit });
+        const body = await searchIdentities(query, { limit });
         const remoteOptions = body.results || [];
         const byIdentity = new Map();
 
-        if (identityRegex?.test(normalized)) {
-          byIdentity.set(normalized, { identity: normalized, source: "typed" });
+        if (identityRegex?.test(normalizedIdentity)) {
+          byIdentity.set(normalizedIdentity, { identity: normalizedIdentity, source: "typed" });
         }
         for (const option of remoteOptions) {
           if (option?.identity) byIdentity.set(option.identity, option);
@@ -36,7 +37,7 @@ export default function useIdentitySearch(search, {
         if (!cancelled) setOptions(Array.from(byIdentity.values()));
       } catch {
         if (!cancelled) {
-          setOptions(identityRegex?.test(normalized) ? [{ identity: normalized, source: "typed" }] : []);
+          setOptions(identityRegex?.test(normalizedIdentity) ? [{ identity: normalizedIdentity, source: "typed" }] : []);
         }
       } finally {
         if (!cancelled) setLoading(false);

@@ -52,6 +52,7 @@ import { useTxTracker } from "../hooks/useTxTracker";
 import { useBalanceNotifier } from "../hooks/useBalanceNotifier";
 import usePageTitle from "../hooks/usePageTitle";
 import { MetricGrid, PageHeader, PageShell } from "../components/ui";
+import { useTranslation } from "react-i18next";
 
 const TRANSFER_QUBIC_FEE = 100;
 const CLAIM_REWARD_QUBIC_FEE = 1000000;
@@ -126,12 +127,6 @@ const formatAmountInput = (value) => {
     if (!digits) return "";
     return formatQubicAmount(digits);
 };
-
-const availableLabel = (value, unit) => (
-    value === null || value === undefined
-        ? `Available: unavailable`
-        : `Available: ${formatQubicAmount(value)} ${unit}`
-);
 
 const hasTransferFee = (quBalance) => quBalance === null || quBalance === undefined || quBalance >= TRANSFER_QUBIC_FEE;
 
@@ -262,14 +257,20 @@ const ActionCard = ({
                     size="medium"
                     sx={{ minHeight: 44, borderRadius: 1, textTransform: "none", fontWeight: 900 }}
                 >
-                    {submitting ? "Signing..." : submitLabel}
+                    {submitting ? <ActionCardSigningLabel /> : submitLabel}
                 </Button>
             </Stack>
         </CardContent>
     </Card>
 );
 
+const ActionCardSigningLabel = () => {
+    const { t } = useTranslation();
+    return t("utilities.signing");
+};
+
 const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
+    const { t } = useTranslation();
     const numericValue = toPositiveInt(value);
     const sliderMax = Math.max(1, Number(max || 0));
     const cappedValue = Math.min(numericValue, sliderMax);
@@ -291,7 +292,9 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                     {label}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                    {availableLabel(max, unit)}
+                    {max === null || max === undefined
+                        ? t("utilities.availableUnavailable")
+                        : t("utilities.available", { value: formatQubicAmount(max), unit })}
                 </Typography>
             </Box>
             <Slider
@@ -322,7 +325,7 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                 {AMOUNT_PRESETS.map((percent) => (
                     <Chip
                         key={percent}
-                        label={percent === 100 ? "Max" : `${percent}%`}
+                        label={percent === 100 ? t("utilities.max") : `${percent}%`}
                         size="small"
                         variant={percent === 100 ? "filled" : "outlined"}
                         color={percent === 100 ? "primary" : "default"}
@@ -343,7 +346,9 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
                 onChange={(e) => onChange(clampToMax(e.target.value, max))}
                 fullWidth
                 size="small"
-                placeholder={max ? `Max ${formatQubicAmount(max)} ${unit}` : "Unavailable"}
+                placeholder={max
+                    ? t("utilities.maxAmount", { value: formatQubicAmount(max), unit })
+                    : t("utilities.unavailable")}
                 inputProps={{ inputMode: "numeric", pattern: "[0-9,]*" }}
                 disabled={isDisabled}
                 sx={utilityInputSx}
@@ -353,20 +358,21 @@ const AmountSlider = ({ label, value, max, unit, onChange, disabled }) => {
 };
 
 const ReceiverIdentityField = ({ value, onChange }) => {
+    const { t } = useTranslation();
     const hasValue = value.length > 0;
     const isValid = isValidReceiverIdentity(value);
 
     return (
         <TextField
-            label="Receiver Identity"
+            label={t("utilities.receiverIdentity")}
             value={value}
             onChange={(e) => onChange(normalizeIdentityInput(e.target.value))}
             fullWidth
             size="small"
-            placeholder="60-character Qubic identity"
+            placeholder={t("utilities.receiverPlaceholder")}
             inputProps={{ maxLength: 60 }}
             error={hasValue && !isValid}
-            helperText={hasValue && !isValid ? "Use exactly 60 uppercase Latin letters." : " "}
+            helperText={hasValue && !isValid ? t("utilities.receiverInvalid") : " "}
             sx={utilityInputSx}
             InputProps={{
                 endAdornment: (
@@ -386,7 +392,8 @@ const ReceiverIdentityField = ({ value, onChange }) => {
 };
 
 function UtilitiesPage() {
-    usePageTitle("Utilities");
+    const { t } = useTranslation();
+    usePageTitle(t("utilities.pageTitle"));
     const { connected, toggleConnectModal, getSignedTx } = useQubicConnect();
     const {
         allEvents,
@@ -435,8 +442,11 @@ function UtilitiesPage() {
     const feeWarning = useMemo(() => (
         hasTransferFee(quBalance)
             ? ""
-            : `Transfers require ${TRANSFER_QUBIC_FEE} QU for the Qubic fee. Current QU balance: ${formatQubicAmount(quBalance ?? 0)}.`
-    ), [quBalance]);
+            : t("utilities.transfersFeeWarning", {
+                fee: TRANSFER_QUBIC_FEE,
+                balance: formatQubicAmount(quBalance ?? 0),
+            })
+    ), [quBalance, t]);
 
     const selectedSmrSource = useMemo(
         () => smrSourceContracts.find((contract) => String(contract.contractIndex) === String(smrSourceContractIndex)) || null,
@@ -471,7 +481,7 @@ function UtilitiesPage() {
             return {
                 blocked: true,
                 severity: "info",
-                message: `Required fee: ${requiredFee} QU. Loading QU balance...`,
+                message: t("utilities.requiredFeeLoading", { fee: requiredFee }),
             };
         }
 
@@ -480,16 +490,16 @@ function UtilitiesPage() {
             return {
                 blocked: true,
                 severity: "warning",
-                message: `Transfer rights requires ${requiredFee} QU. Current QU balance: ${currentBalance}.`,
+                message: t("utilities.rightsFeeLow", { fee: requiredFee, balance: currentBalance }),
             };
         }
 
         return {
             blocked: false,
             severity: "info",
-            message: `Required fee: ${requiredFee} QU. Current QU balance: ${currentBalance}.`,
+            message: t("utilities.requiredFee", { fee: requiredFee, balance: currentBalance }),
         };
-    }, [quBalance, selectedSmrDestination, selectedSmrFee, selectedSmrSource]);
+    }, [quBalance, selectedSmrDestination, selectedSmrFee, selectedSmrSource, t]);
 
     useEffect(() => {
         setPendingClaimEventIds(readPendingClaimIds(walletPublicIdentity));
@@ -510,11 +520,11 @@ function UtilitiesPage() {
         try {
             await fetchQuBalance(walletPublicIdentity);
         } catch (error) {
-            showSnackbar(`Failed to refresh QU balance: ${error.message || error}`, "error");
+            showSnackbar(t("utilities.refreshQuFailed", { error: error.message || error }), "error");
         } finally {
             setQuBalanceRefreshing(false);
         }
-    }, [fetchQuBalance, showSnackbar, walletPublicIdentity]);
+    }, [fetchQuBalance, showSnackbar, t, walletPublicIdentity]);
 
     useEffect(() => {
         const identity = connected ? walletPublicIdentity : "";
@@ -577,13 +587,13 @@ function UtilitiesPage() {
                         }
 
                         const optionName = option === 0
-                            ? event.option0Desc || "Option 0"
-                            : event.option1Desc || "Option 1";
+                            ? event.option0Desc || t("eventDetails.option0")
+                            : event.option1Desc || t("eventDetails.option1");
                         const shares = Number(position.amount || 0);
 
                         return {
                             eventId: position.eventId,
-                            label: event.desc || `Event #${position.eventId}`,
+                            label: event.desc || t("eventDetails.eventFallback", { id: position.eventId }),
                             optionName,
                             shares,
                             estimatedReward: shares * WHOLE_SHARE_PRICE,
@@ -615,7 +625,7 @@ function UtilitiesPage() {
                 if (!cancelled) {
                     setClaimOptions([]);
                     setClaimEventId("");
-                    setClaimOptionsError("Failed to load rewards.");
+                    setClaimOptionsError(t("utilities.rewardsLoadFailed"));
                 }
             } finally {
                 if (!cancelled) setClaimOptionsLoading(false);
@@ -627,7 +637,7 @@ function UtilitiesPage() {
         return () => {
             cancelled = true;
         };
-    }, [allEvents, bobUrl, connected, pendingClaimEventIds, walletPublicIdentity]);
+    }, [allEvents, bobUrl, connected, pendingClaimEventIds, t, walletPublicIdentity]);
 
     useEffect(() => {
         let cancelled = false;
@@ -642,13 +652,13 @@ function UtilitiesPage() {
 
                 setSmartContracts(contracts);
                 if (contracts.length === 0) {
-                    setSmartContractsError("Failed to load smart contracts metadata.");
+                    setSmartContractsError(t("utilities.contractsLoadFailed"));
                 }
             } catch (error) {
                 console.error("Failed to load smart contracts metadata:", error);
                 if (!cancelled) {
                     setSmartContracts([]);
-                    setSmartContractsError("Failed to load smart contracts metadata.");
+                    setSmartContractsError(t("utilities.contractsLoadFailed"));
                 }
             } finally {
                 if (!cancelled) setSmartContractsLoading(false);
@@ -660,7 +670,7 @@ function UtilitiesPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [t]);
 
     const loadSourceContracts = useCallback(async (isCancelled = null) => {
             if (!connected || !walletPublicIdentity || smartContracts.length === 0) {
@@ -738,13 +748,13 @@ function UtilitiesPage() {
                 if (!isCancelled || !isCancelled()) {
                     setSmrSourceContracts([]);
                     setSmrDestinationContracts([]);
-                    setSmartContractsError("Failed to load GARTH management contracts.");
+                    setSmartContractsError(t("utilities.managementLoadFailed"));
                 }
             } finally {
                 if (!isCancelled || !isCancelled()) setSmrAvailableLoading(false);
             }
         },
-        [bobUrl, connected, smartContracts, walletPublicIdentity]
+        [bobUrl, connected, smartContracts, t, walletPublicIdentity]
     );
 
     useEffect(() => {
@@ -799,11 +809,11 @@ function UtilitiesPage() {
         ]);
 
         if (!tickInfo) {
-            showSnackbar("Failed to get scheduled tick.", "error");
+            showSnackbar(t("utilities.scheduledTickFailed"), "error");
             return null;
         }
         if (!basicInfo) {
-            showSnackbar("Failed to get contract info.", "error");
+            showSnackbar(t("utilities.contractInfoFailed"), "error");
             return null;
         }
 
@@ -816,7 +826,7 @@ function UtilitiesPage() {
         const packet = destinationPubkey
             ? buildContractTx(walletPublicKeyBytes, destinationPubkey, scheduledTick, inputType, txAmount, payload)
             : buildQuotteryTx(walletPublicKeyBytes, scheduledTick, inputType, txAmount, payload);
-        showSnackbar("Sign your transaction in wallet.", "info");
+        showSnackbar(t("utilities.signTransaction"), "info");
         const confirmed = await getSignedTx(packet);
         if (!confirmed) return null;
 
@@ -854,7 +864,7 @@ function UtilitiesPage() {
             return false;
         }
         if (!walletPublicKeyBytes) {
-            showSnackbar("Wallet public key not found.", "error");
+            showSnackbar(t("utilities.walletKeyMissing"), "error");
             return false;
         }
         return true;
@@ -865,7 +875,7 @@ function UtilitiesPage() {
 
         const eid = parseInt(claimEventId, 10);
         if (Number.isNaN(eid) || eid < 0) {
-            showSnackbar("Enter a valid event ID.", "error");
+            showSnackbar(t("utilities.validEvent"), "error");
             return;
         }
 
@@ -876,7 +886,7 @@ function UtilitiesPage() {
                 QTRY_USER_CLAIM_REWARD,
                 CLAIM_REWARD_QUBIC_FEE,
                 payload,
-                `Claim reward for event ${eid}`,
+                t("utilities.claimTrack", { id: eid }),
                 null,
                 {
                     eventId: eid,
@@ -895,10 +905,10 @@ function UtilitiesPage() {
                     setClaimEventId(nextOptions[0] ? String(nextOptions[0].eventId) : "");
                     return nextOptions;
                 });
-                showSnackbar("Claim transaction sent. Reward is hidden until the indexer confirms it.", "success");
+                showSnackbar(t("utilities.claimSent"), "success");
             }
         } catch (e) {
-            showSnackbar(`Claim failed: ${e.message}`, "error");
+            showSnackbar(t("utilities.claimFailed", { error: e.message }), "error");
         } finally {
             setClaimSubmitting(false);
         }
@@ -909,19 +919,19 @@ function UtilitiesPage() {
 
         const amt = parseInt(garthAmount, 10);
         if (!isValidReceiverIdentity(garthReceiver)) {
-            showSnackbar("Enter a valid receiver identity: exactly 60 uppercase Latin letters.", "error");
+            showSnackbar(t("utilities.validReceiver"), "error");
             return;
         }
         if (Number.isNaN(amt) || amt <= 0) {
-            showSnackbar("Enter a valid amount.", "error");
+            showSnackbar(t("utilities.validAmount"), "error");
             return;
         }
         if (balance !== null && balance !== undefined && amt > balance) {
-            showSnackbar("Amount exceeds available GARTH balance.", "error");
+            showSnackbar(t("utilities.garthExceeded"), "error");
             return;
         }
         if (!hasTransferFee(quBalance)) {
-            showSnackbar(`Transfer requires ${TRANSFER_QUBIC_FEE} QU for the Qubic fee.`, "error");
+            showSnackbar(t("utilities.transferFeeRequired", { fee: TRANSFER_QUBIC_FEE }), "error");
             return;
         }
 
@@ -938,7 +948,7 @@ function UtilitiesPage() {
                 { receiver: garthReceiver, amount: amt }
             );
         } catch (e) {
-            showSnackbar(`Transfer failed: ${e.message}`, "error");
+            showSnackbar(t("utilities.transferFailed", { error: e.message }), "error");
         } finally {
             setGarthSubmitting(false);
         }
@@ -949,19 +959,19 @@ function UtilitiesPage() {
 
         const amt = parseInt(govAmount, 10);
         if (!isValidReceiverIdentity(govReceiver)) {
-            showSnackbar("Enter a valid receiver identity: exactly 60 uppercase Latin letters.", "error");
+            showSnackbar(t("utilities.validReceiver"), "error");
             return;
         }
         if (Number.isNaN(amt) || amt <= 0) {
-            showSnackbar("Enter a valid amount.", "error");
+            showSnackbar(t("utilities.validAmount"), "error");
             return;
         }
         if (qtryGovBalance !== null && qtryGovBalance !== undefined && amt > qtryGovBalance) {
-            showSnackbar("Amount exceeds available QTRYGOV balance.", "error");
+            showSnackbar(t("utilities.govExceeded"), "error");
             return;
         }
         if (!hasTransferFee(quBalance)) {
-            showSnackbar(`Transfer requires ${TRANSFER_QUBIC_FEE} QU for the Qubic fee.`, "error");
+            showSnackbar(t("utilities.transferFeeRequired", { fee: TRANSFER_QUBIC_FEE }), "error");
             return;
         }
 
@@ -978,7 +988,7 @@ function UtilitiesPage() {
                 { receiver: govReceiver, amount: amt }
             );
         } catch (e) {
-            showSnackbar(`Transfer failed: ${e.message}`, "error");
+            showSnackbar(t("utilities.transferFailed", { error: e.message }), "error");
         } finally {
             setGovSubmitting(false);
         }
@@ -988,31 +998,31 @@ function UtilitiesPage() {
         if (!requireWallet()) return;
 
         if (!selectedSmrSource) {
-            showSnackbar("Select the current managing contract.", "error");
+            showSnackbar(t("utilities.selectSource"), "error");
             return;
         }
         if (!selectedSmrDestination) {
-            showSnackbar("Select the destination contract.", "error");
+            showSnackbar(t("utilities.selectDestination"), "error");
             return;
         }
 
         const shares = parseInt(smrShares, 10);
         if (Number.isNaN(shares) || shares <= 0) {
-            showSnackbar("Enter a valid number of shares.", "error");
+            showSnackbar(t("utilities.validShares"), "error");
             return;
         }
         if (effectiveSmrAvailable !== null && effectiveSmrAvailable !== undefined && shares > effectiveSmrAvailable) {
-            showSnackbar("Number of shares exceeds the available balance.", "error");
+            showSnackbar(t("utilities.sharesExceeded"), "error");
             return;
         }
 
         const procedureFee = selectedSmrFee;
         if (quBalance === null || quBalance === undefined) {
-            showSnackbar("QU balance is still loading. Try again in a moment.", "warning");
+            showSnackbar(t("utilities.quLoading"), "warning");
             return;
         }
         if (quBalance < procedureFee) {
-            showSnackbar(`Transfer rights requires ${formatQubicAmount(procedureFee)} QU for the selected contract fee.`, "error");
+            showSnackbar(t("utilities.rightsFeeRequired", { fee: formatQubicAmount(procedureFee) }), "error");
             return;
         }
 
@@ -1048,25 +1058,25 @@ function UtilitiesPage() {
                 }
             );
         } catch (e) {
-            showSnackbar(`Transfer failed: ${e.message}`, "error");
+            showSnackbar(t("utilities.transferFailed", { error: e.message }), "error");
         } finally {
             setSmrSubmitting(false);
         }
     };
 
     const utilityStats = [
-        { label: "Wallet", value: connected ? "Connected" : "Disconnected" },
+        { key: "wallet", label: t("utilities.wallet"), value: connected ? t("utilities.connected") : t("utilities.disconnected") },
         { label: "GARTH", value: balance === null || balance === undefined ? "-" : formatQubicAmount(balance) },
         { label: "QTRYGOV", value: qtryGovBalance === null || qtryGovBalance === undefined ? "-" : formatQubicAmount(qtryGovBalance) },
-        { label: "Claimable", value: claimOptionsLoading ? "Loading" : String(claimOptions.length) },
+        { key: "claimable", label: t("utilities.claimable"), value: claimOptionsLoading ? t("utilities.loading") : String(claimOptions.length) },
     ];
 
     return (
         <PageShell top={{ xs: 10, md: 12 }} bottom={7}>
             <PageHeader
-                eyebrow="Wallet operations"
-                title="Utilities"
-                description="Claim rewards, transfer GARTH or QTRYGOV, and manage GARTH share rights."
+                eyebrow={t("utilities.eyebrow")}
+                title={t("utilities.title")}
+                description={t("utilities.description")}
                 icon={<AccountBalanceIcon />}
                 actions={!connected && (
                     <Button
@@ -1074,7 +1084,7 @@ function UtilitiesPage() {
                         onClick={toggleConnectModal}
                         sx={{ minHeight: 44, borderRadius: 1, textTransform: "none", fontWeight: 900, alignSelf: { md: "center" } }}
                     >
-                        Connect Wallet
+                        {t("utilities.connectWallet")}
                     </Button>
                 )}
             />
@@ -1082,7 +1092,7 @@ function UtilitiesPage() {
             <MetricGrid
                 metrics={utilityStats.map((stat) => ({
                     ...stat,
-                    tone: stat.label === "Wallet" && connected ? "cyan" : "default",
+                    tone: stat.key === "wallet" && connected ? "cyan" : "default",
                 }))}
                 sx={{ mb: 2.5 }}
                 compact
@@ -1098,18 +1108,18 @@ function UtilitiesPage() {
             >
                 <ActionCard
                     icon={<RedeemIcon />}
-                    title="Claim Reward"
-                    subtitle="Claim your payout from a finalized event."
+                    title={t("utilities.claimTitle")}
+                    subtitle={t("utilities.claimSubtitle")}
                     onSubmit={handleClaimReward}
                     submitting={claimSubmitting}
-                    submitLabel="Claim Reward"
+                    submitLabel={t("utilities.claimButton")}
                     connected={connected}
                     disabled={!claimEventId || claimOptionsLoading}
                     tone="success"
                 >
                     <TextField
                         select
-                        label="Reward Event"
+                        label={t("utilities.rewardEvent")}
                         value={claimEventId}
                         onChange={(e) => setClaimEventId(e.target.value)}
                         fullWidth
@@ -1117,9 +1127,9 @@ function UtilitiesPage() {
                         disabled={!connected || claimOptionsLoading || claimOptions.length === 0}
                         helperText={
                             claimOptionsLoading
-                                ? "Loading rewards..."
+                                ? t("utilities.loadingRewards")
                                 : claimOptions.length === 0
-                                    ? "No rewards found for your current winning positions."
+                                    ? t("utilities.noRewards")
                                     : " "
                         }
                         InputProps={{
@@ -1132,25 +1142,25 @@ function UtilitiesPage() {
                                 <Stack spacing={0.25}>
                                     <Typography variant="body2">{option.label}</Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        {option.optionName} | {formatQubicAmount(option.shares)} shares | est. {formatQubicAmount(option.estimatedReward)} GARTH
+                                        {option.optionName} | {formatQubicAmount(option.shares)} {t("utilities.shares")} | {t("utilities.estimated")} {formatQubicAmount(option.estimatedReward)} GARTH
                                     </Typography>
                                 </Stack>
                             </MenuItem>
                         ))}
                     </TextField>
                     <Typography variant="caption" color="text.secondary">
-                        Claim requires a 1M QU deposit. It is returned automatically if the claim succeeds.
+                        {t("utilities.claimDepositHint")}
                     </Typography>
                     {claimOptionsError && <Alert severity="warning">{claimOptionsError}</Alert>}
                 </ActionCard>
 
                 <ActionCard
                     icon={<SendIcon />}
-                    title="Transfer GARTH"
-                    subtitle="Send GARTH (QUSD) tokens to another identity via the Quottery contract."
+                    title={t("utilities.garthTitle")}
+                    subtitle={t("utilities.garthSubtitle")}
                     onSubmit={handleTransferGarth}
                     submitting={garthSubmitting}
-                    submitLabel="Transfer GARTH"
+                    submitLabel={t("utilities.transferGarth")}
                     connected={connected}
                     disabled={!hasTransferFee(quBalance) || !isValidReceiverIdentity(garthReceiver) || !toPositiveInt(garthAmount) || !balance || balance <= 0}
                     tone="primary"
@@ -1161,7 +1171,7 @@ function UtilitiesPage() {
                         onChange={setGarthReceiver}
                     />
                     <AmountSlider
-                        label="Amount"
+                        label={t("utilities.amount")}
                         value={garthAmount}
                         max={balance}
                         unit="GARTH"
@@ -1172,11 +1182,11 @@ function UtilitiesPage() {
 
                 <ActionCard
                     icon={<AccountBalanceIcon />}
-                    title="Transfer QTRYGOV"
-                    subtitle="Send QTRYGOV governance shares to another identity."
+                    title={t("utilities.govTitle")}
+                    subtitle={t("utilities.govSubtitle")}
                     onSubmit={handleTransferGov}
                     submitting={govSubmitting}
-                    submitLabel="Transfer QTRYGOV"
+                    submitLabel={t("utilities.transferGov")}
                     connected={connected}
                     disabled={!hasTransferFee(quBalance) || !isValidReceiverIdentity(govReceiver) || !toPositiveInt(govAmount) || !qtryGovBalance || qtryGovBalance <= 0}
                     tone="warning"
@@ -1187,7 +1197,7 @@ function UtilitiesPage() {
                         onChange={setGovReceiver}
                     />
                     <AmountSlider
-                        label="Amount"
+                        label={t("utilities.amount")}
                         value={govAmount}
                         max={qtryGovBalance}
                         unit="QTRYGOV"
@@ -1198,11 +1208,11 @@ function UtilitiesPage() {
 
                 <ActionCard
                     icon={<SwapHorizIcon />}
-                    title="Transfer Share Management Rights"
-                    subtitle="Move GARTH management rights from the current managing contract to another contract."
+                    title={t("utilities.rightsTitle")}
+                    subtitle={t("utilities.rightsSubtitle")}
                     onSubmit={handleTransferShareMgmt}
                     submitting={smrSubmitting}
-                    submitLabel="Transfer Management Rights"
+                    submitLabel={t("utilities.transferRights")}
                     connected={connected}
                     disabled={
                         smartContractsLoading ||
@@ -1222,7 +1232,7 @@ function UtilitiesPage() {
                             severity={smrFeeState.severity}
                             action={
                                 <IconButton
-                                    aria-label="Refresh QU balance"
+                                    aria-label={t("utilities.refreshQuBalance")}
                                     size="small"
                                     onClick={refreshQuBalance}
                                     disabled={!walletPublicIdentity || quBalanceRefreshing}
@@ -1242,7 +1252,7 @@ function UtilitiesPage() {
                     )}
                     <TextField
                         select
-                        label="Current Managing Contract"
+                        label={t("utilities.currentContract")}
                         value={smrSourceContractIndex}
                         onChange={(e) => setSmrSourceContractIndex(e.target.value)}
                         fullWidth
@@ -1250,9 +1260,9 @@ function UtilitiesPage() {
                         disabled={!connected || smartContractsLoading || smrAvailableLoading || smrSourceContracts.length === 0}
                         helperText={
                             smartContractsLoading || smrAvailableLoading
-                                ? "Loading GARTH balances..."
+                                ? t("utilities.loadingGarthBalances")
                                 : smrSourceContracts.length === 0
-                                    ? "No GARTH managed by a supported contract was found for this wallet."
+                                    ? t("utilities.noManagedGarth")
                                     : " "
                         }
                         sx={utilityInputSx}
@@ -1262,7 +1272,7 @@ function UtilitiesPage() {
                                 <Stack spacing={0.25}>
                                     <Typography variant="body2">{contractLabel(contract)}</Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        Available: {formatQubicAmount(contract.availableBalance)} GARTH | Procedure fee {formatQubicAmount(contract.procedureFee)} QU
+                                        {t("utilities.contractAvailable", { amount: formatQubicAmount(contract.availableBalance), fee: formatQubicAmount(contract.procedureFee) })}
                                     </Typography>
                                 </Stack>
                             </MenuItem>
@@ -1270,7 +1280,7 @@ function UtilitiesPage() {
                     </TextField>
                     <TextField
                         select
-                        label="Destination Contract"
+                        label={t("utilities.destinationContract")}
                         value={smrDestinationContractIndex}
                         onChange={(e) => setSmrDestinationContractIndex(e.target.value)}
                         fullWidth
@@ -1278,7 +1288,7 @@ function UtilitiesPage() {
                         disabled={!connected || !selectedSmrSource || filteredSmrDestinationContracts.length === 0}
                         helperText={
                             filteredSmrDestinationContracts.length === 0
-                                ? "No compatible destination contract found."
+                                ? t("utilities.noDestination")
                                 : " "
                         }
                         sx={utilityInputSx}
@@ -1290,7 +1300,7 @@ function UtilitiesPage() {
                         ))}
                     </TextField>
                     <AmountSlider
-                        label="Number of Shares"
+                        label={t("utilities.numberOfShares")}
                         value={smrShares}
                         max={effectiveSmrAvailable}
                         unit="GARTH"

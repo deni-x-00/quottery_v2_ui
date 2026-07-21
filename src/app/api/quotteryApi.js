@@ -4,6 +4,10 @@ export function getPortfolio(identity, { limit = 1000, signal } = {}) {
   return requestJson(`/api/quottery/accounts/${identity}?limit=${encodeURIComponent(limit)}`, { signal });
 }
 
+export function getNotifications(identity, { limit = 40, signal } = {}) {
+  return requestJson(`/api/quottery/accounts/${encodeURIComponent(identity)}/notifications?limit=${encodeURIComponent(limit)}`, { signal });
+}
+
 export function getIndexerStatus({ signal } = {}) {
   return requestJson("/api/quottery/indexer-status", { signal });
 }
@@ -22,4 +26,25 @@ export function searchIdentities(query, { limit = 8, signal } = {}) {
 
 export function getArchivedEvents({ limit = 1000, signal } = {}) {
   return requestJson(`/api/quottery/events?status=archived&limit=${encodeURIComponent(limit)}`, { signal });
+}
+
+export function profileAvatarUrl(identity, updatedAt = null) {
+  if (!identity) return "";
+  const version = updatedAt ? `?v=${encodeURIComponent(updatedAt)}` : "";
+  return `/api/quottery/profiles/${encodeURIComponent(identity)}/avatar${version}`;
+}
+
+export function checkProfileNameAvailability(displayName, identity, { signal } = {}) {
+  const params = new URLSearchParams({ name: displayName });
+  if (identity) params.set("identity", identity);
+  return requestJson(`/api/quottery/profiles/name-availability?${params.toString()}`, { signal });
+}
+
+export function saveProfile(identity, payload, { signal } = {}) {
+  return requestJson(`/api/quottery/profiles/${encodeURIComponent(identity)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal,
+  });
 }

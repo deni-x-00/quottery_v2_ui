@@ -2,8 +2,10 @@ import React from "react";
 import { Box, Divider, Link, Stack, Typography } from "@mui/material";
 import { useTheme, alpha } from "@mui/material/styles";
 import { getEventRules } from "./qubic/util/eventRules";
+import { useTranslation } from "react-i18next";
 
 function EventRules({ event }) {
+    const { t } = useTranslation();
     const theme = useTheme();
     const rules = getEventRules(event);
 
@@ -20,17 +22,17 @@ function EventRules({ event }) {
                     mb: 1,
                 }}
             >
-                Rules
+                {t("eventDetails.rules")}
             </Typography>
 
             <Stack spacing={1.5}>
                 <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.6 }}>
-                    {rules.summary}
+                    {t(rules.summaryKey, rules.values)}
                 </Typography>
 
                 {rules.sections.map((section) => (
                     <Box
-                        key={section.title}
+                        key={section.id}
                         sx={{
                             borderLeft: `2px solid ${alpha(theme.palette.primary.main, 0.35)}`,
                             pl: 1.5,
@@ -47,12 +49,14 @@ function EventRules({ event }) {
                                 mb: 0.4,
                             }}
                         >
-                            {section.title}
+                            {t(section.titleKey)}
                         </Typography>
 
-                        {section.lines.map((line) => (
+                        {(Array.isArray(t(section.linesKey, { ...rules.values, returnObjects: true }))
+                            ? t(section.linesKey, { ...rules.values, returnObjects: true })
+                            : [t(section.linesKey, rules.values)]).map((line, index) => (
                             <Typography
-                                key={line}
+                                key={`${section.id}-${index}`}
                                 variant="body2"
                                 color="text.secondary"
                                 sx={{ lineHeight: 1.55 }}
@@ -61,7 +65,7 @@ function EventRules({ event }) {
                             </Typography>
                         ))}
 
-                        {(section.urls || (section.url ? [section.url] : [])).map((url) => (
+                        {(section.urls || []).map((url) => (
                             <Link
                                 key={url}
                                 href={url}

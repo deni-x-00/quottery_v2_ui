@@ -20,8 +20,10 @@ import { useQuotteryContext } from '../../../contexts/QuotteryContext';
 import { formatQubicAmount } from '../util';
 import { motion } from 'framer-motion';
 import { useTheme } from '@mui/material/styles';
+import { useTranslation } from 'react-i18next';
 
 const ConnectLink = () => {
+    const { t } = useTranslation();
     const { connected, showConnectModal, toggleConnectModal } = useQubicConnect();
     const {
         balance,
@@ -110,7 +112,7 @@ const ConnectLink = () => {
                             }
                         >
                             <Typography variant='body1' fontWeight='bold' sx={{ letterSpacing: 0.5 }}>
-                                {connected ? `${formatQubicAmount(balance)} GARTH` : 'Connect Wallet'}
+                                {connected ? `${formatQubicAmount(balance)} GARTH` : t('wallet.connect')}
                             </Typography>
                         </Button>
                     ) : (
@@ -161,40 +163,40 @@ const ConnectLink = () => {
                                 <Stack spacing={1.5}>
                                     <Box>
                                         <Typography variant="caption" color="text.secondary">
-                                            GARTH Balance
+                                            {t('wallet.garthBalance')}
                                         </Typography>
                                         <Typography variant="body1" fontWeight={700}>
                                             {formatQubicAmount(balance ?? 0)} GARTH
                                         </Typography>
                                         {shouldShowGarthHint && (
                                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, maxWidth: 260 }}>
-                                                Do not see your GARTH? Go to{' '}
+                                                {t('wallet.missingGarthBefore')}{' '}
                                                 <Link
                                                     component={RouterLink}
                                                     to="/utilities"
                                                     underline="hover"
                                                     onClick={() => setShowBalanceBubble(false)}
                                                 >
-                                                    Utilities
+                                                    {t('nav.utilities')}
                                                 </Link>
-                                                {' '}and use Transfer Share Management Rights.
+                                                {' '}{t('wallet.missingGarthAfter')}
                                             </Typography>
                                         )}
                                     </Box>
                                     <Box>
                                         <Typography variant="caption" color="text.secondary">
-                                            QU Balance
+                                            {t('wallet.quBalance')}
                                         </Typography>
                                         <Typography variant="body1" fontWeight={700}>
-                                            {quBalance !== null ? `${formatQubicAmount(quBalance)} QU` : 'Unavailable'}
+                                            {quBalance !== null ? `${formatQubicAmount(quBalance)} QU` : t('wallet.unavailable')}
                                         </Typography>
                                     </Box>
                                     <Box>
                                         <Typography variant="caption" color="text.secondary">
-                                            QTRYGOV Balance
+                                            {t('wallet.govBalance')}
                                         </Typography>
                                         <Typography variant="body1" fontWeight={700}>
-                                            {qtryGovBalance !== null ? `${formatQubicAmount(qtryGovBalance)} QTRYGOV` : 'Unavailable'}
+                                            {qtryGovBalance !== null ? `${formatQubicAmount(qtryGovBalance)} QTRYGOV` : t('wallet.unavailable')}
                                         </Typography>
                                     </Box>
                                     <Button
@@ -202,7 +204,7 @@ const ConnectLink = () => {
                                         onClick={(e) => { e.stopPropagation(); toggleConnectModal(); setShowBalanceBubble(false); }}
                                         sx={{ textTransform: 'none', fontWeight: 600, justifyContent: 'flex-start', px: 0 }}
                                     >
-                                        Wallet Settings
+                                        {t('wallet.settings')}
                                     </Button>
                                 </Stack>
                             )}

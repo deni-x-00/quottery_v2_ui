@@ -1,22 +1,23 @@
 import React from "react";
 import { Box, alpha, useTheme } from "@mui/material";
+import { useTranslation } from "react-i18next";
 
 const STATUS_META = {
-  open: { label: "Open", color: "open" },
-  active: { label: "Open", color: "open" },
-  closed: { label: "Closed", color: "closed" },
-  resolved: { label: "Resolved", color: "resolved" },
-  finalized: { label: "Resolved", color: "resolved" },
-  archived: { label: "Archived", color: "archive" },
-  cancelled: { label: "Cancelled", color: "cancelled" },
-  canceled: { label: "Canceled", color: "cancelled" },
-  pending: { label: "Pending", color: "open" },
-  win: { label: "Win", color: "resolved" },
-  lose: { label: "Lose", color: "cancelled" },
-  matched: { label: "Matched", color: "resolved" },
-  partially_matched: { label: "Partially matched", color: "closed" },
-  removed_by_user: { label: "Canceled", color: "closed" },
-  removed_by_system: { label: "Returned", color: "open" },
+  open: { labelKey: "status.open", color: "open" },
+  active: { labelKey: "status.open", color: "open" },
+  closed: { labelKey: "status.closed", color: "closed" },
+  resolved: { labelKey: "status.resolved", color: "resolved" },
+  finalized: { labelKey: "status.resolved", color: "resolved" },
+  archived: { labelKey: "status.archived", color: "archive" },
+  cancelled: { labelKey: "status.cancelled", color: "cancelled" },
+  canceled: { labelKey: "status.canceled", color: "cancelled" },
+  pending: { labelKey: "status.pending", color: "open" },
+  win: { labelKey: "status.win", color: "resolved" },
+  lose: { labelKey: "status.lose", color: "cancelled" },
+  matched: { labelKey: "status.matched", color: "resolved" },
+  partially_matched: { labelKey: "status.partiallyMatched", color: "closed" },
+  removed_by_user: { labelKey: "status.canceled", color: "closed" },
+  removed_by_system: { labelKey: "status.returned", color: "open" },
 };
 
 function humanizeStatus(status) {
@@ -27,8 +28,10 @@ function humanizeStatus(status) {
 
 export default function StatusBadge({ status, label, size = "sm", sx }) {
   const theme = useTheme();
+  const { t } = useTranslation();
   const key = String(status || "").toLowerCase();
-  const meta = STATUS_META[key] || { label: label || humanizeStatus(status) || "-", color: "archive" };
+  const meta = STATUS_META[key] || { color: "archive" };
+  const visibleLabel = label || (meta.labelKey ? t(meta.labelKey) : humanizeStatus(status) || "-");
   const color = theme.palette.status?.[meta.color] || theme.palette.text.secondary;
   const compact = size === "xs";
   const isLight = theme.palette.mode === "light";
@@ -36,7 +39,7 @@ export default function StatusBadge({ status, label, size = "sm", sx }) {
   return (
     <Box
       component="span"
-      aria-label={`Status: ${label || meta.label}`}
+      aria-label={t("status.label", { status: visibleLabel })}
       sx={{
         display: "inline-flex",
         alignItems: "center",
@@ -54,7 +57,7 @@ export default function StatusBadge({ status, label, size = "sm", sx }) {
         ...sx,
       }}
     >
-      {label || meta.label}
+      {visibleLabel}
     </Box>
   );
 }

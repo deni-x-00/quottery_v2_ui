@@ -15,6 +15,7 @@ import PhonelinkIcon from "@mui/icons-material/Phonelink";
 import CloseIcon from "@mui/icons-material/Close";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
+import { useTranslation } from "react-i18next";
 
 /**
  * @param {object} props
@@ -33,6 +34,7 @@ const ConfirmTxModal = ({
   onClose,
   onConfirm
 }) => {
+  const { t } = useTranslation();
   const [transactionStatus, setTransactionStatus] = useState(null);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -46,7 +48,7 @@ const ConfirmTxModal = ({
     } catch (error) {
       console.error("Error while confirming transaction :", error);
       setTransactionStatus("failure");
-      setErrorMessage("The transaction could not be confirmed. Please retry.");
+      setErrorMessage(t("walletConnect.transactionFailed"));
     }
   };
 
@@ -143,7 +145,7 @@ const ConfirmTxModal = ({
                     startIcon={<CancelIcon />}
                     onClick={onClose}
                   >
-                    CANCEL
+                    {t("walletConnect.cancel")}
                   </Button>
                   <Button
                     variant='outlined'
@@ -151,7 +153,7 @@ const ConfirmTxModal = ({
                     startIcon={<CheckCircleIcon />}
                     onClick={handleConfirm}
                   >
-                    CONFIRM
+                    {t("walletConnect.confirm")}
                   </Button>
                 </Box>
               </>
