@@ -19,6 +19,10 @@ export const TAG_MAP = {
     3:  { label: 'BTC',             thumbnail: 'bitcoin.svg' },
     4:  { label: 'ETH',             thumbnail: 'ethereum.svg' },
     5:  { label: 'SOL',             thumbnail: 'solana.svg' },
+    6:  { label: 'BNB',             thumbnail: 'bnb.svg' },
+    7:  { label: 'HYPE',            thumbnail: 'hype.svg' },
+    8:  { label: 'DOGE',            thumbnail: 'dogecoin.svg' },
+    9:  { label: 'XRP',             thumbnail: 'xrp.svg' },
 
     // Qubic Ecosystem: 41-50
     41: { label: 'Qubic',           thumbnail: 'qubic.svg' },

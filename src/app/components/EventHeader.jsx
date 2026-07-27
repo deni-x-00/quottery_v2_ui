@@ -1,11 +1,14 @@
 import React from "react";
 import { Box, IconButton, Stack, Typography, useTheme } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import ArrowDropDownIcon from "@mui/icons-material/ArrowDropDown";
+import ArrowDropUpIcon from "@mui/icons-material/ArrowDropUp";
 import HelpIcon from "@mui/icons-material/Help";
 import { getTagGroupInfo, getTagInfo, getTagSlug } from "./qubic/util/tagMap";
 import { isEventClosed } from "./qubic/util/tradeValidation";
 import EventCountdown from "./EventCountdown";
 import { useTranslation } from "react-i18next";
+import { formatRational, formatRationalDelta } from "../utils/format";
 
 function EventHeader({ event, onBack, resolveThumbnail }) {
     const { t } = useTranslation();
@@ -16,6 +19,29 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
     const groupLabel = t(`markets.groups.${groupInfo.id}`, { defaultValue: groupInfo.label });
     const topicLabel = t(`markets.tags.${getTagSlug(event?.tag)}`, { defaultValue: tagInfo.label });
     const hasEnded = Boolean(event && isEventClosed(event));
+    const priceToBeat = event?.priceToBeat;
+    const finalPrice = event?.finalPrice;
+    const formattedPriceToBeat = priceToBeat
+        ? formatRational(priceToBeat.numerator, priceToBeat.denominator, 2)
+        : null;
+    const formattedFinalPrice = finalPrice
+        ? formatRational(finalPrice.numerator, finalPrice.denominator, 2)
+        : null;
+    const priceDelta = priceToBeat && finalPrice
+        ? formatRationalDelta(
+            finalPrice.numerator,
+            finalPrice.denominator,
+            priceToBeat.numerator,
+            priceToBeat.denominator,
+            2,
+        )
+        : null;
+    const deltaColor = priceDelta?.direction > 0
+        ? theme.palette.success.main
+        : priceDelta?.direction < 0
+            ? theme.palette.error.main
+            : theme.palette.text.secondary;
+    const quoteCurrency = finalPrice?.quoteCurrency || priceToBeat?.quoteCurrency || "";
 
     return (
         <Box
@@ -110,6 +136,87 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
                     >
                         {event?.desc}
                     </Typography>
+                    {formattedPriceToBeat && formattedPriceToBeat !== "-" && (
+                        <Stack
+                            direction="row"
+                            alignItems="baseline"
+                            spacing={1}
+                            sx={{ mt: 1, flexWrap: "wrap", rowGap: 0.25 }}
+                        >
+                            <Typography
+                                sx={{
+                                    color: "text.secondary",
+                                    fontSize: "0.72rem",
+                                    fontWeight: 800,
+                                    textTransform: "uppercase",
+                                }}
+                            >
+                                {t("eventDetails.priceToBeat")}
+                            </Typography>
+                            <Typography
+                                sx={{
+                                    color: "text.primary",
+                                    fontSize: { xs: "1rem", sm: "1.16rem" },
+                                    fontWeight: 850,
+                                }}
+                            >
+                                {formattedPriceToBeat} {priceToBeat.quoteCurrency}
+                            </Typography>
+                            {formattedFinalPrice && formattedFinalPrice !== "-" && (
+                                <Stack
+                                    direction="row"
+                                    alignItems="baseline"
+                                    spacing={0.55}
+                                    sx={{
+                                        pl: { xs: 1.25, sm: 2 },
+                                        ml: { xs: 0.25, sm: 1 },
+                                        borderLeft: `1px solid ${theme.palette.border.soft}`,
+                                    }}
+                                >
+                                    <Typography
+                                        sx={{
+                                            color: "text.secondary",
+                                            fontSize: "0.72rem",
+                                            fontWeight: 800,
+                                            textTransform: "uppercase",
+                                        }}
+                                    >
+                                        {t("eventDetails.finalPrice")}
+                                    </Typography>
+                                    {priceDelta && priceDelta.value !== "-" && (
+                                        <Stack direction="row" alignItems="center" spacing={0} sx={{ color: deltaColor }}>
+                                            {priceDelta.direction > 0 && <ArrowDropUpIcon sx={{ fontSize: 16, ml: -0.3 }} />}
+                                            {priceDelta.direction < 0 && <ArrowDropDownIcon sx={{ fontSize: 16, ml: -0.3 }} />}
+                                            <Typography sx={{ color: "inherit", fontSize: "0.72rem", fontWeight: 800 }}>
+                                                {priceDelta.direction > 0 ? "+" : ""}{priceDelta.value}
+                                            </Typography>
+                                        </Stack>
+                                    )}
+                                    <Typography
+                                        sx={{
+                                            color: "text.primary",
+                                            fontSize: { xs: "1rem", sm: "1.16rem" },
+                                            fontWeight: 850,
+                                            whiteSpace: "nowrap",
+                                        }}
+                                    >
+                                        {formattedFinalPrice} {quoteCurrency}
+                                    </Typography>
+                                </Stack>
+                            )}
+                            {priceToBeat.timeframe && (
+                                <Typography
+                                    sx={{
+                                        color: "text.secondary",
+                                        fontSize: "0.74rem",
+                                        fontWeight: 700,
+                                    }}
+                                >
+                                    {priceToBeat.timeframe} · {t("eventDetails.oracleOpeningPrice")}
+                                </Typography>
+                            )}
+                        </Stack>
+                    )}
                 </Box>
             </Stack>
 

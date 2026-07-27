@@ -33,7 +33,7 @@ import { TAG_GROUPS, getAllTags, getCanonicalTagId, getTagGroupId, getTagIdBySlu
 import { isEventClosed, parseQubicUtcDate } from "../components/qubic/util/tradeValidation";
 import { fetchCachedEventVolumes, fetchEventVolumesByIds, formatCompactAmount, getEventId } from "../utils/eventVolumes";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
-import { formatDateUtc, formatInteger } from "../utils/format";
+import { formatDateUtc, formatInteger, formatRational } from "../utils/format";
 import { useTranslation } from "react-i18next";
 
 const SORT_MODES = {
@@ -123,6 +123,7 @@ function EventsPage() {
   const [eventVolumes, setEventVolumes] = useState({});
   const [eventOpenOrderVolumes, setEventOpenOrderVolumes] = useState({});
   const [eventProbabilities, setEventProbabilities] = useState({});
+  const [eventPriceToBeat, setEventPriceToBeat] = useState({});
   const [archivePage, setArchivePage] = useState(1);
   const [showZeroVolumeArchiveEvents, setShowZeroVolumeArchiveEvents] = useState(false);
   const {
@@ -186,6 +187,7 @@ function EventsPage() {
       setEventVolumes({});
       setEventOpenOrderVolumes({});
       setEventProbabilities({});
+      setEventPriceToBeat({});
       return undefined;
     }
 
@@ -203,6 +205,9 @@ function EventsPage() {
     const mergeProbabilities = (probabilities) => {
       setEventProbabilities((prev) => ({ ...prev, ...(probabilities || {}) }));
     };
+    const mergePriceToBeat = (values) => {
+      setEventPriceToBeat((prev) => ({ ...prev, ...(values || {}) }));
+    };
 
     const loadVolumes = async ({ immediate = false } = {}) => {
       if (immediate) {
@@ -219,6 +224,7 @@ function EventsPage() {
         mergeVolumes(firstResult.volumes);
         mergeOpenOrderVolumes(firstResult.openOrderVolumes);
         mergeProbabilities(firstResult.probabilities);
+        mergePriceToBeat(firstResult.priceToBeat);
 
         let deferredEventIds = firstResult.deferredEventIds || [];
         while (deferredEventIds.length > 0 && !controller.signal.aborted) {
@@ -229,6 +235,7 @@ function EventsPage() {
           mergeVolumes(nextResult.volumes);
           mergeOpenOrderVolumes(nextResult.openOrderVolumes);
           mergeProbabilities(nextResult.probabilities);
+          mergePriceToBeat(nextResult.priceToBeat);
           deferredEventIds = nextResult.deferredEventIds || [];
         }
       } catch (error) {
@@ -626,6 +633,20 @@ function EventsPage() {
       );
     }
 
+    const renderOraclePrice = (price) => {
+      if (!price?.numerator || !price?.denominator) return "-";
+      const value = formatRational(price.numerator, price.denominator, 2);
+      if (value === "-") return value;
+      return (
+        <Typography variant="body2" sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>
+          {value} {price.quoteCurrency || ""}
+        </Typography>
+      );
+    };
+    const showOraclePriceColumns = archivedEventsToDisplay.some(
+      (event) => event.priceToBeat || event.finalPrice
+    );
+
     const archiveColumns = [
       { key: "event_id", label: "ID", numeric: true, render: (event) => event.event_id },
       {
@@ -683,6 +704,22 @@ function EventsPage() {
           event.archived_tick_ref
         ),
       },
+      ...(showOraclePriceColumns
+        ? [
+            {
+              key: "price_to_beat",
+              label: t("eventDetails.priceToBeat"),
+              numeric: true,
+              render: (event) => renderOraclePrice(event.priceToBeat),
+            },
+            {
+              key: "final_price",
+              label: t("eventDetails.finalPrice"),
+              numeric: true,
+              render: (event) => renderOraclePrice(event.finalPrice),
+            },
+          ]
+        : []),
     ];
 
     return (
@@ -691,7 +728,7 @@ function EventsPage() {
           columns={archiveColumns}
           rows={pagedArchivedEvents}
           emptyText={t("markets.noArchive")}
-          minWidth={940}
+          minWidth={showOraclePriceColumns ? 1180 : 940}
           getRowKey={(event) => event.event_id}
         />
         {archivedEventsToDisplay.length > PAGE_SIZE && (
@@ -1061,6 +1098,7 @@ function EventsPage() {
                                               tradedVolume: eventVolumes[getEventId(event)] ?? 0,
                                               openOrderVolume: eventOpenOrderVolumes[getEventId(event)] ?? 0,
                                               probability: eventProbabilities[getEventId(event)],
+                                              priceToBeat: eventPriceToBeat[getEventId(event)],
                                             }}
                                             onClick={() => navigate(`/market/${event.eid}`, { state: { from: eventsReturnPath } })}
                                             status={event.status}

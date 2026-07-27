@@ -88,7 +88,7 @@ export const resources = {
       },
       eventDetails: {
         event: "Event", eventFallback: "Event #{{id}}", notFound: "Event not found", invalidEvent: "This event is missing or the event ID is invalid.", back: "Back to Markets",
-        pending: "Pending", result: "Result: {{option}}", refreshOrderBook: "Refresh order book", orderBook: "Order Book",
+        pending: "Pending", result: "Result: {{option}}", priceToBeat: "Price to beat", finalPrice: "Final price", oracleOpeningPrice: "Oracle opening price", refreshOrderBook: "Refresh order book", orderBook: "Order Book",
         noBuyOrders: "No buy orders", noSellOrders: "No sell orders", tradeOption: "Trade {{option}}", yes: "YES", no: "NO",
         price: "Price", shares: "Shares", total: "Total", bid: "Bid: {{value}}", spread: "Spread: {{value}}", ask: "Ask: {{value}}",
         option0: "Option 0", option1: "Option 1", loadingOrderBook: "Loading order book...", aiContext: "AI Context", moreDetails: "More Details",
@@ -158,7 +158,7 @@ export const resources = {
       },
       eventDetails: {
         event: "Evento", eventFallback: "Evento #{{id}}", notFound: "Evento no encontrado", invalidEvent: "El evento no existe o su ID no es válido.", back: "Volver a Mercados",
-        pending: "Pendiente", result: "Resultado: {{option}}", refreshOrderBook: "Actualizar libro de órdenes", orderBook: "Libro de órdenes",
+        pending: "Pendiente", result: "Resultado: {{option}}", priceToBeat: "Precio a superar", finalPrice: "Precio final", oracleOpeningPrice: "Precio de apertura del oráculo", refreshOrderBook: "Actualizar libro de órdenes", orderBook: "Libro de órdenes",
         noBuyOrders: "No hay órdenes de compra", noSellOrders: "No hay órdenes de venta", tradeOption: "Operar {{option}}", yes: "SÍ", no: "NO",
         price: "Precio", shares: "Participaciones", total: "Total", bid: "Compra: {{value}}", spread: "Diferencial: {{value}}", ask: "Venta: {{value}}",
         option0: "Opción 0", option1: "Opción 1", loadingOrderBook: "Cargando libro de órdenes...", aiContext: "Contexto de IA", moreDetails: "Más detalles",
@@ -223,7 +223,7 @@ export const resources = {
       },
       eventDetails: {
         event: "Événement", eventFallback: "Événement #{{id}}", notFound: "Événement introuvable", invalidEvent: "Cet événement est absent ou son ID est invalide.", back: "Retour aux Marchés",
-        pending: "En attente", result: "Résultat : {{option}}", refreshOrderBook: "Actualiser le carnet d'ordres", orderBook: "Carnet d'ordres",
+        pending: "En attente", result: "Résultat : {{option}}", priceToBeat: "Prix à battre", finalPrice: "Prix final", oracleOpeningPrice: "Prix d'ouverture de l'oracle", refreshOrderBook: "Actualiser le carnet d'ordres", orderBook: "Carnet d'ordres",
         noBuyOrders: "Aucun ordre d'achat", noSellOrders: "Aucun ordre de vente", tradeOption: "Négocier {{option}}", yes: "OUI", no: "NON",
         price: "Prix", shares: "Parts", total: "Total", bid: "Offre : {{value}}", spread: "Écart : {{value}}", ask: "Demande : {{value}}",
         option0: "Option 0", option1: "Option 1", loadingOrderBook: "Chargement du carnet d'ordres...", aiContext: "Contexte IA", moreDetails: "Plus de détails",
@@ -288,7 +288,7 @@ export const resources = {
       },
       eventDetails: {
         event: "Evento", eventFallback: "Evento #{{id}}", notFound: "Evento não encontrado", invalidEvent: "Este evento não existe ou o ID é inválido.", back: "Voltar aos Mercados",
-        pending: "Pendente", result: "Resultado: {{option}}", refreshOrderBook: "Atualizar livro de ordens", orderBook: "Livro de ordens",
+        pending: "Pendente", result: "Resultado: {{option}}", priceToBeat: "Preço a superar", finalPrice: "Preço final", oracleOpeningPrice: "Preço de abertura do oráculo", refreshOrderBook: "Atualizar livro de ordens", orderBook: "Livro de ordens",
         noBuyOrders: "Sem ordens de compra", noSellOrders: "Sem ordens de venda", tradeOption: "Negociar {{option}}", yes: "SIM", no: "NÃO",
         price: "Preço", shares: "Participações", total: "Total", bid: "Compra: {{value}}", spread: "Spread: {{value}}", ask: "Venda: {{value}}",
         option0: "Opção 0", option1: "Opção 1", loadingOrderBook: "Carregando livro de ordens...", aiContext: "Contexto de IA", moreDetails: "Mais detalhes",
@@ -353,7 +353,7 @@ export const resources = {
       },
       eventDetails: {
         event: "Событие", eventFallback: "Событие #{{id}}", notFound: "Событие не найдено", invalidEvent: "Событие отсутствует или указан неверный ID.", back: "Вернуться к маркетам",
-        pending: "Ожидается", result: "Результат: {{option}}", refreshOrderBook: "Обновить книгу ордеров", orderBook: "Книга ордеров",
+        pending: "Ожидается", result: "Результат: {{option}}", priceToBeat: "Цена для сравнения", finalPrice: "Цена закрытия", oracleOpeningPrice: "Цена открытия Oracle", refreshOrderBook: "Обновить книгу ордеров", orderBook: "Книга ордеров",
         noBuyOrders: "Нет ордеров на покупку", noSellOrders: "Нет ордеров на продажу", tradeOption: "Торговля {{option}}", yes: "ДА", no: "НЕТ",
         price: "Цена", shares: "Доли", total: "Всего", bid: "Бид: {{value}}", spread: "Спред: {{value}}", ask: "Аск: {{value}}",
         option0: "Опция 0", option1: "Опция 1", loadingOrderBook: "Загрузка книги ордеров...", aiContext: "Контекст ИИ", moreDetails: "Подробнее",
@@ -418,7 +418,7 @@ export const resources = {
       },
       eventDetails: {
         event: "事件", eventFallback: "事件 #{{id}}", notFound: "未找到事件", invalidEvent: "该事件不存在或事件 ID 无效。", back: "返回市场",
-        pending: "待定", result: "结果：{{option}}", refreshOrderBook: "刷新订单簿", orderBook: "订单簿",
+        pending: "待定", result: "结果：{{option}}", priceToBeat: "目标价格", finalPrice: "最终价格", oracleOpeningPrice: "预言机开盘价", refreshOrderBook: "刷新订单簿", orderBook: "订单簿",
         noBuyOrders: "暂无买单", noSellOrders: "暂无卖单", tradeOption: "交易 {{option}}", yes: "是", no: "否",
         price: "价格", shares: "份额", total: "总额", bid: "买价：{{value}}", spread: "价差：{{value}}", ask: "卖价：{{value}}",
         option0: "选项 0", option1: "选项 1", loadingOrderBook: "正在加载订单簿...", aiContext: "AI 背景", moreDetails: "更多详情",
@@ -498,6 +498,12 @@ Object.assign(resources.fr.translation.leaderboard, { searchName: "Rechercher un
 Object.assign(resources.pt.translation.leaderboard, { searchName: "Buscar endereco ou nome" });
 Object.assign(resources.ru.translation.leaderboard, { searchName: "Поиск адреса или имени" });
 Object.assign(resources.zh.translation.leaderboard, { searchName: "搜索地址或名称" });
+Object.assign(resources.en.translation.leaderboard, { allTime: "All time", weekly: "Weekly" });
+Object.assign(resources.es.translation.leaderboard, { allTime: "Todo el periodo", weekly: "Semanal" });
+Object.assign(resources.fr.translation.leaderboard, { allTime: "Tout l'historique", weekly: "Hebdomadaire" });
+Object.assign(resources.pt.translation.leaderboard, { allTime: "Todo o periodo", weekly: "Semanal" });
+Object.assign(resources.ru.translation.leaderboard, { allTime: "За всё время", weekly: "За неделю" });
+Object.assign(resources.zh.translation.leaderboard, { allTime: "全部时间", weekly: "每周" });
 
 const portfolioTranslations = {
   en: {

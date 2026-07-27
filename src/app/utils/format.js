@@ -75,6 +75,58 @@ export function formatPrice(value) {
   return formatNumeric(value);
 }
 
+export function formatRational(numerator, denominator, maxFractionDigits = 12) {
+  try {
+    const top = window.BigInt(numerator);
+    const bottom = window.BigInt(denominator);
+    if (bottom === 0n) return "-";
+
+    const negative = (top < 0n) !== (bottom < 0n);
+    const absoluteTop = top < 0n ? -top : top;
+    const absoluteBottom = bottom < 0n ? -bottom : bottom;
+    const scale = 10n ** window.BigInt(maxFractionDigits);
+    const scaled = (absoluteTop * scale + absoluteBottom / 2n) / absoluteBottom;
+    const integer = scaled / scale;
+    const fraction = (scaled % scale)
+      .toString()
+      .padStart(maxFractionDigits, "0")
+      .replace(/0+$/, "");
+    const value = `${integer}${fraction ? `.${fraction}` : ""}`;
+    return formatNumeric(`${negative ? "-" : ""}${value}`, maxFractionDigits);
+  } catch {
+    return "-";
+  }
+}
+
+export function formatRationalDelta(
+  finalNumerator,
+  finalDenominator,
+  openingNumerator,
+  openingDenominator,
+  maxFractionDigits = 2,
+) {
+  try {
+    const finalTop = window.BigInt(finalNumerator);
+    const finalBottom = window.BigInt(finalDenominator);
+    const openingTop = window.BigInt(openingNumerator);
+    const openingBottom = window.BigInt(openingDenominator);
+    if (finalBottom === 0n || openingBottom === 0n) return null;
+
+    let numerator = finalTop * openingBottom - openingTop * finalBottom;
+    let denominator = finalBottom * openingBottom;
+    if (denominator < 0n) {
+      numerator = -numerator;
+      denominator = -denominator;
+    }
+    return {
+      direction: numerator === 0n ? 0 : numerator > 0n ? 1 : -1,
+      value: formatRational(numerator, denominator, maxFractionDigits),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function formatPricePercent(value) {
   if (value === null || value === undefined || value === "") return "-";
   const price = Number(value);
@@ -98,6 +150,14 @@ export function formatDateUtc(value) {
   if (Number.isNaN(date.getTime())) return "-";
   const part = (next) => String(next).padStart(2, "0");
   return `${part(date.getUTCMonth() + 1)}/${part(date.getUTCDate())}/${date.getUTCFullYear()}, ${part(date.getUTCHours())}:${part(date.getUTCMinutes())}:${part(date.getUTCSeconds())}`;
+}
+
+export function formatDateUtcMinute(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const part = (next) => String(next).padStart(2, "0");
+  return `${part(date.getUTCMonth() + 1)}/${part(date.getUTCDate())}/${date.getUTCFullYear()}, ${part(date.getUTCHours())}:${part(date.getUTCMinutes())}`;
 }
 
 export function shortMiddle(value, start = 5, end = 5, minLength = 13) {

@@ -27,13 +27,24 @@ import { profileAvatarUrl } from "../api/quotteryApi";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
 import { useIdentitySearch, useLeaderboard } from "../hooks/data";
 import usePageTitle from "../hooks/usePageTitle";
-import { formatNumeric, formatSignedAmount, normalizeIdentity, shortIdentity } from "../utils/format";
+import {
+  formatDateUtcMinute,
+  formatNumeric,
+  formatSignedAmount,
+  normalizeIdentity,
+  shortIdentity,
+} from "../utils/format";
+import { getCurrentWednesdayUtcWindow } from "../utils/timeWindows";
 import { ActionIconButton, DataTable, MetricGrid, PageHeader, PageShell } from "../components/ui";
 import { useTranslation } from "react-i18next";
 
 const METRICS = {
   PNL: "pnl",
   VOLUME: "volume",
+};
+const PERIODS = {
+  ALL: "all",
+  WEEKLY: "weekly",
 };
 const PAGE_SIZE = 50;
 const SEARCH_RESET_REASON = "reset";
@@ -45,9 +56,16 @@ const LeaderboardPage = () => {
   const theme = useTheme();
   const navigate = useNavigate();
   const [metric, setMetric] = useState(METRICS.PNL);
+  const [period, setPeriod] = useState(PERIODS.ALL);
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
-  const { leaders, loading, error, refetch: loadLeaderboard } = useLeaderboard(metric);
+  const weeklyWindow = getCurrentWednesdayUtcWindow();
+  const weeklyStart = period === PERIODS.WEEKLY ? weeklyWindow.start.toISOString() : null;
+  const weeklyEnd = period === PERIODS.WEEKLY ? weeklyWindow.end.toISOString() : null;
+  const { leaders, loading, error, refetch: loadLeaderboard } = useLeaderboard(metric, {
+    startTime: weeklyStart,
+    endTime: weeklyEnd,
+  });
   const {
     options: searchOptions,
     loading: searchLoading,
@@ -84,6 +102,25 @@ const LeaderboardPage = () => {
     bgcolor: theme.palette.surface[1],
     boxShadow: "none",
   };
+  const segmentedTabsSx = {
+    minHeight: 40,
+    border: `1px solid ${theme.palette.border.default}`,
+    borderRadius: 1.5,
+    overflow: "hidden",
+    width: "fit-content",
+    "& .MuiTabs-indicator": { display: "none" },
+    "& .MuiTab-root": {
+      minHeight: 40,
+      px: { xs: 1.75, sm: 2.5 },
+      textTransform: "none",
+      fontWeight: 900,
+      borderRight: `1px solid ${theme.palette.border.default}`,
+      "&:last-of-type": { borderRight: 0 },
+    },
+    "& .Mui-selected": {
+      bgcolor: alpha(theme.palette.primary.main, 0.18),
+    },
+  };
 
   const renderPnl = (value) => {
     if (value === null || value === undefined || value === "") return "-";
@@ -115,7 +152,7 @@ const LeaderboardPage = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [metric]);
+  }, [metric, period]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -139,7 +176,7 @@ const LeaderboardPage = () => {
     );
   };
 
-  const leaderboardColumns = [
+  const allTimeColumns = [
     {
       key: "rank",
       label: t("leaderboard.rank"),
@@ -209,6 +246,10 @@ const LeaderboardPage = () => {
     { key: "transfer_count", label: t("leaderboard.transfers"), numeric: true, render: (row) => formatNumeric(row.transfer_count) },
     { key: "last_seen_tick", label: t("leaderboard.lastSeenTick"), numeric: true, render: (row) => renderTick(row.last_seen_tick, row.last_seen_tick_ref) },
   ];
+  const leaderboardColumns = period === PERIODS.WEEKLY
+    ? allTimeColumns.slice(0, 4)
+    : allTimeColumns;
+  const tableMinWidth = period === PERIODS.WEEKLY ? 660 : 920;
 
   return (
     <PageShell>
@@ -331,6 +372,31 @@ const LeaderboardPage = () => {
       )}
 
       <Paper elevation={0} sx={{ ...panelSx, mb: 2 }}>
+        <Stack
+          direction={{ xs: "column", sm: "row" }}
+          alignItems={{ xs: "flex-start", sm: "center" }}
+          justifyContent="space-between"
+          spacing={1}
+          sx={{ mb: 1.5 }}
+        >
+          <Tabs
+            value={period}
+            onChange={(event, nextPeriod) => setPeriod(nextPeriod)}
+            sx={segmentedTabsSx}
+          >
+            <Tab value={PERIODS.ALL} label={t("leaderboard.allTime")} />
+            <Tab value={PERIODS.WEEKLY} label={t("leaderboard.weekly")} />
+          </Tabs>
+          {period === PERIODS.WEEKLY && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ fontWeight: 750, fontVariantNumeric: "tabular-nums" }}
+            >
+              {formatDateUtcMinute(weeklyWindow.start)} - {formatDateUtcMinute(weeklyWindow.end)} UTC
+            </Typography>
+          )}
+        </Stack>
         <MetricGrid
           metrics={leaderboardMetrics}
           columns={{ xs: "1fr", sm: "repeat(3, minmax(0, 1fr))" }}
@@ -343,25 +409,9 @@ const LeaderboardPage = () => {
           value={metric}
           onChange={(event, nextMetric) => setMetric(nextMetric)}
           sx={{
+            ...segmentedTabsSx,
             alignSelf: "flex-start",
-            minHeight: 40,
-            border: `1px solid ${theme.palette.border.default}`,
-            borderRadius: 1.5,
-            overflow: "hidden",
-            width: "fit-content",
             mb: 1.5,
-            "& .MuiTabs-indicator": { display: "none" },
-            "& .MuiTab-root": {
-              minHeight: 40,
-              px: 2.5,
-              textTransform: "none",
-              fontWeight: 900,
-              borderRight: `1px solid ${theme.palette.border.default}`,
-              "&:last-of-type": { borderRight: 0 },
-            },
-            "& .Mui-selected": {
-              bgcolor: alpha(theme.palette.primary.main, 0.18),
-            },
           }}
         >
           <Tab value={METRICS.PNL} label={t("leaderboard.bestPnl")} />
@@ -374,7 +424,7 @@ const LeaderboardPage = () => {
             rows={[]}
             loading
             skeletonRows={8}
-            minWidth={920}
+            minWidth={tableMinWidth}
           />
         ) : (
           <>
@@ -382,7 +432,7 @@ const LeaderboardPage = () => {
               columns={leaderboardColumns}
               rows={pagedLeaders}
               emptyText={t("leaderboard.noAccounts")}
-              minWidth={920}
+              minWidth={tableMinWidth}
               getRowKey={(row) => row.identity}
             />
             {leaders.length > PAGE_SIZE && (

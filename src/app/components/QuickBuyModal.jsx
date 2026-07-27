@@ -31,6 +31,7 @@ import gcLogo from '../../assets/gc.png';
 import TradePriceSelector from './TradePriceSelector';
 import TradeAmountSlider from './TradeAmountSlider';
 import { useTranslation } from 'react-i18next';
+import { formatRational } from '../utils/format';
 
 const WHOLE_SHARE_PRICE = 100000;
 
@@ -49,6 +50,10 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
     const [price, setPrice] = useState(50000);
     const [priceInput, setPriceInput] = useState('50000');
     const [submitting, setSubmitting] = useState(false);
+    const priceToBeat = event?.priceToBeat;
+    const formattedPriceToBeat = priceToBeat
+        ? formatRational(priceToBeat.numerator, priceToBeat.denominator)
+        : null;
     const localizePreflightError = (error) => {
         if (!error) return '';
         if (error.startsWith('This event is closed')) return t('quickBuy.eventClosed');
@@ -238,6 +243,29 @@ const QuickBuyModal = ({ open, onClose, event, initialOption = 0, onTxBroadcast 
 
             <DialogContent sx={{ pb: 3 }}>
                 <Stack spacing={2}>
+                    {formattedPriceToBeat && formattedPriceToBeat !== '-' && (
+                        <Box
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'baseline',
+                                justifyContent: 'space-between',
+                                gap: 1.5,
+                                px: 1.5,
+                                py: 1.25,
+                                borderRadius: 1,
+                                bgcolor: theme.palette.surface[1],
+                                border: `1px solid ${theme.palette.border.soft}`,
+                            }}
+                        >
+                            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>
+                                {t('eventDetails.priceToBeat')}
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 850, textAlign: 'right' }}>
+                                {formattedPriceToBeat} {priceToBeat.quoteCurrency || ''}
+                            </Typography>
+                        </Box>
+                    )}
+
                     {/* Option selector */}
                     <ToggleButtonGroup
                         value={selectedOption} exclusive

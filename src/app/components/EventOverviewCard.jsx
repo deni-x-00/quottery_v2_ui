@@ -18,7 +18,7 @@ import FormatListBulletedIcon from "@mui/icons-material/FormatListBulleted";
 import { getCanonicalTagId, getTagInfo, getTagSlug } from "./qubic/util/tagMap";
 import { isEventClosed } from "./qubic/util/tradeValidation";
 import { formatCompactAmount } from "../utils/eventVolumes";
-import { formatPercent } from "../utils/format";
+import { formatPercent, formatRational } from "../utils/format";
 import QuickBuyModal from "./QuickBuyModal";
 import { OutcomeButton, StatusBadge } from "./ui";
 import { useTranslation } from "react-i18next";
@@ -47,7 +47,9 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
         data?.resultByGO !== null &&
         data?.resultByGO !== undefined &&
         (resultOption === 0 || resultOption === 1);
-    const resultLabel = resultOption === 0 ? t("marketCard.resultYes") : t("marketCard.resultNo");
+    const resultLabel = resultOption === 0
+        ? (data?.option0Desc || t("marketCard.resultYes"))
+        : (data?.option1Desc || t("marketCard.resultNo"));
     const hasTradedVolume = data?.tradedVolume !== undefined && data?.tradedVolume !== null;
     const hasOpenOrderVolume = data?.openOrderVolume !== undefined && data?.openOrderVolume !== null;
     const chancePercent = Number(data?.probability?.percent);
@@ -56,6 +58,10 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
         : null;
     const option0Chance = normalizedChancePercent === null ? null : formatPercent(normalizedChancePercent);
     const option1Chance = normalizedChancePercent === null ? null : formatPercent(100 - normalizedChancePercent);
+    const priceToBeat = data?.priceToBeat;
+    const formattedPriceToBeat = priceToBeat
+        ? formatRational(priceToBeat.numerator, priceToBeat.denominator)
+        : null;
 
     const handleOptionClick = (e, optionIndex) => {
         e.preventDefault();
@@ -166,6 +172,30 @@ function EventOverviewCard({ data, eventUrl = "", onClick, status = "", onTxBroa
                     </Stack>
 
                     {/* Option buttons — open quick buy modal */}
+                    {formattedPriceToBeat && formattedPriceToBeat !== "-" && (
+                        <Stack
+                            direction="row"
+                            alignItems="baseline"
+                            justifyContent="space-between"
+                            spacing={1}
+                            sx={{ mt: 1.5, minWidth: 0 }}
+                        >
+                            <Typography
+                                variant="caption"
+                                sx={{ color: theme.palette.text.secondary, fontWeight: 750 }}
+                            >
+                                {t("eventDetails.priceToBeat")}
+                            </Typography>
+                            <Typography
+                                variant="body2"
+                                noWrap
+                                sx={{ color: theme.palette.text.primary, fontWeight: 850, minWidth: 0 }}
+                            >
+                                {formattedPriceToBeat} {priceToBeat.quoteCurrency || ""}
+                            </Typography>
+                        </Stack>
+                    )}
+
                     {data.option0Desc && data.option1Desc && (
                         <Stack direction="row" spacing={1.5} sx={{ mt: 2, mb: 1 }}>
                             <OutcomeButton

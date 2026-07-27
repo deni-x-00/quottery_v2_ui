@@ -20,6 +20,16 @@ export function getLeaderboard(metric, { limit = 1000, signal } = {}) {
   return requestJson(`/api/quottery/leaderboard?metric=${encodeURIComponent(metric)}&limit=${encodeURIComponent(limit)}`, { signal });
 }
 
+export function getPeriodRanks(startTime, endTime, sortBy, { limit = 1000, signal } = {}) {
+  const params = new URLSearchParams({
+    starttime: startTime,
+    endtime: endTime,
+    sortby: sortBy,
+    limit: String(limit),
+  });
+  return requestJson(`/api/quottery/ranks?${params.toString()}`, { signal });
+}
+
 export function searchIdentities(query, { limit = 8, signal } = {}) {
   return requestJson(`/api/quottery/search?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(limit)}`, { signal });
 }

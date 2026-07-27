@@ -3,11 +3,15 @@ import {
   AppBar,
   Box,
   Button,
+  ClickAwayListener,
   Divider,
   Grow,
   IconButton,
   Menu,
   MenuItem,
+  MenuList,
+  Paper,
+  Popper,
   Toolbar,
   Tooltip,
   Typography,
@@ -93,6 +97,8 @@ const Header = () => {
   const [mobileAnchorEl, setMobileAnchorEl] = useState(null);
   const moreOpenTimerRef = useRef(null);
   const moreCloseTimerRef = useRef(null);
+  const moreTriggerHoveredRef = useRef(false);
+  const moreMenuHoveredRef = useRef(false);
 
   const scrollTrigger = useScrollTrigger({ disableHysteresis: true, threshold: 24 });
   const navItems = isConnected
@@ -137,22 +143,49 @@ const Header = () => {
   const handleMoreClose = () => {
     clearMoreOpenTimer();
     clearMoreCloseTimer();
+    moreTriggerHoveredRef.current = false;
+    moreMenuHoveredRef.current = false;
     setMoreAnchorEl(null);
   };
 
   const scheduleMoreOpen = (event) => {
     if (!isDesktopNav) return;
+    moreTriggerHoveredRef.current = true;
     const anchor = event.currentTarget;
     clearMoreCloseTimer();
+    if (moreAnchorEl) return;
     clearMoreOpenTimer();
-    moreOpenTimerRef.current = setTimeout(() => setMoreAnchorEl(anchor), 90);
+    moreOpenTimerRef.current = setTimeout(() => {
+      moreOpenTimerRef.current = null;
+      if (anchor.isConnected) setMoreAnchorEl(anchor);
+    }, 90);
   };
 
   const scheduleMoreClose = () => {
     if (!isDesktopNav) return;
     clearMoreOpenTimer();
     clearMoreCloseTimer();
-    moreCloseTimerRef.current = setTimeout(() => setMoreAnchorEl(null), 620);
+    moreCloseTimerRef.current = setTimeout(() => {
+      moreCloseTimerRef.current = null;
+      if (!moreTriggerHoveredRef.current && !moreMenuHoveredRef.current) {
+        setMoreAnchorEl(null);
+      }
+    }, 220);
+  };
+
+  const handleMoreTriggerLeave = () => {
+    moreTriggerHoveredRef.current = false;
+    scheduleMoreClose();
+  };
+
+  const handleMoreMenuEnter = () => {
+    moreMenuHoveredRef.current = true;
+    clearMoreCloseTimer();
+  };
+
+  const handleMoreMenuLeave = () => {
+    moreMenuHoveredRef.current = false;
+    scheduleMoreClose();
   };
 
   useEffect(() => {
@@ -161,6 +194,21 @@ const Header = () => {
       clearMoreCloseTimer();
     };
   }, []);
+
+  useEffect(() => {
+    if (moreOpenTimerRef.current) {
+      clearTimeout(moreOpenTimerRef.current);
+      moreOpenTimerRef.current = null;
+    }
+    if (moreCloseTimerRef.current) {
+      clearTimeout(moreCloseTimerRef.current);
+      moreCloseTimerRef.current = null;
+    }
+    moreTriggerHoveredRef.current = false;
+    moreMenuHoveredRef.current = false;
+    setMoreAnchorEl(null);
+    setMobileAnchorEl(null);
+  }, [location.pathname, isDesktopNav]);
 
   const navButtonSx = (active = false) => ({
     minHeight: 34,
@@ -194,72 +242,81 @@ const Header = () => {
   };
 
   const moreMenu = (
-    <Menu
+    <Popper
       anchorEl={moreAnchorEl}
       open={Boolean(moreAnchorEl)}
-      onClose={handleMoreClose}
-      disableScrollLock
-      keepMounted
-      TransitionComponent={Grow}
-      transitionDuration={{ enter: 180, exit: 140 }}
-      anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      transformOrigin={{ vertical: "top", horizontal: "right" }}
-      MenuListProps={{
-        onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
-        onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
-        sx: { py: 0.75 },
-      }}
-      PaperProps={{
-        onMouseEnter: isDesktopNav ? clearMoreCloseTimer : undefined,
-        onMouseLeave: isDesktopNav ? scheduleMoreClose : undefined,
-        sx: {
-          mt: 0.8,
-          minWidth: 176,
-          bgcolor: theme.palette.background.paper,
-          border: `1px solid ${theme.palette.border.default}`,
-          borderRadius: 1.5,
-          boxShadow: "0 20px 44px rgba(0,0,0,0.44)",
-          overflow: "visible",
-          "&::before": {
-            content: '""',
-            position: "absolute",
-            top: -10,
-            left: 0,
-            right: 0,
-            height: 10,
-          },
-          "& .MuiMenu-list": {
-            overflow: "hidden",
-            borderRadius: 1.5,
-          },
+      placement="bottom-end"
+      transition
+      modifiers={[
+        {
+          name: "offset",
+          options: { offset: [0, 6] },
         },
-      }}
+      ]}
+      sx={{ zIndex: theme.zIndex.modal }}
     >
-      {secondaryNav.map((item) => (
-        <MenuItem
-          key={item.to}
-          component={Link}
-          to={item.to}
-          onClick={handleMoreClose}
-          selected={isActiveRoute(location.pathname, item.to)}
-          sx={{
-            minHeight: 40,
-            fontWeight: 800,
-            color: "text.secondary",
-            "&.Mui-selected": {
-              color: "primary.main",
-              bgcolor: alpha(theme.palette.primary.main, 0.12),
-            },
-            "&:hover": {
-              color: "text.primary",
-              bgcolor: theme.palette.surface[2],
-            },
-          }}
+      {({ TransitionProps }) => (
+        <Grow
+          {...TransitionProps}
+          timeout={{ enter: 180, exit: 140 }}
+          style={{ transformOrigin: "top right" }}
         >
-          {t(item.labelKey)}
-        </MenuItem>
-      ))}
-    </Menu>
+          <Paper
+            onMouseEnter={handleMoreMenuEnter}
+            onMouseLeave={handleMoreMenuLeave}
+            sx={{
+              position: "relative",
+              minWidth: 176,
+              bgcolor: theme.palette.background.paper,
+              border: `1px solid ${theme.palette.border.default}`,
+              borderRadius: 1.5,
+              boxShadow: "0 20px 44px rgba(0,0,0,0.44)",
+              overflow: "visible",
+              "&::before": {
+                content: '""',
+                position: "absolute",
+                top: -8,
+                left: 0,
+                right: 0,
+                height: 8,
+              },
+            }}
+          >
+            <ClickAwayListener onClickAway={handleMoreClose}>
+              <MenuList
+                autoFocusItem={false}
+                sx={{ py: 0.75, overflow: "hidden", borderRadius: 1.5 }}
+              >
+                {secondaryNav.map((item) => (
+                  <MenuItem
+                    key={item.to}
+                    component={Link}
+                    to={item.to}
+                    onClick={handleMoreClose}
+                    selected={isActiveRoute(location.pathname, item.to)}
+                    sx={{
+                      minHeight: 40,
+                      fontWeight: 800,
+                      color: "text.secondary",
+                      "&.Mui-selected": {
+                        color: "primary.main",
+                        bgcolor: alpha(theme.palette.primary.main, 0.12),
+                      },
+                      "&:hover": {
+                        color: "text.primary",
+                        bgcolor: theme.palette.surface[2],
+                      },
+                    }}
+                  >
+                    {t(item.labelKey)}
+                  </MenuItem>
+                ))}
+              </MenuList>
+            </ClickAwayListener>
+          </Paper>
+        </Grow>
+      )}
+    </Popper>
   );
 
   const mobileMenu = (
@@ -414,22 +471,19 @@ const Header = () => {
             ))}
             <Box
               onMouseEnter={scheduleMoreOpen}
-              onMouseLeave={scheduleMoreClose}
+              onMouseLeave={handleMoreTriggerLeave}
               sx={{ position: "relative", display: "inline-flex", py: 0.75, my: -0.75 }}
             >
               <Button
                 size="small"
                 onClick={(event) => (moreAnchorEl ? handleMoreClose() : handleMoreOpen(event))}
-                onFocus={handleMoreOpen}
+                onDoubleClick={handleMoreClose}
                 aria-haspopup="menu"
                 aria-expanded={Boolean(moreAnchorEl) ? "true" : undefined}
                 endIcon={
                   <MoreHorizIcon
                     sx={{
                       fontSize: 18,
-                      transition: "transform 180ms ease, opacity 180ms ease",
-                      transform: moreAnchorEl ? "translateY(1px)" : "translateY(0)",
-                      opacity: moreAnchorEl ? 1 : 0.8,
                     }}
                   />
                 }

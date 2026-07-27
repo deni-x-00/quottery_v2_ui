@@ -873,7 +873,7 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
         t.amount * t.price0 AS vol
       FROM trades t
       WHERE t.tx_timestamp >= $1::timestamptz
-        AND t.tx_timestamp <= $2::timestamptz
+        AND t.tx_timestamp < $2::timestamptz
 
       UNION ALL
 
@@ -882,7 +882,7 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
         t.amount * CASE WHEN t.price1 > 0 THEN t.price1 ELSE t.price0 END AS vol
       FROM trades t
       WHERE t.tx_timestamp >= $1::timestamptz
-        AND t.tx_timestamp <= $2::timestamptz
+        AND t.tx_timestamp < $2::timestamptz
     ),
     volume_by_wallet AS (
       SELECT walletid, COALESCE(sum(vol), 0) AS vol
@@ -897,7 +897,7 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
       FROM position_events pe
       WHERE pe.action = 'ask_matched'
         AND pe.tx_timestamp >= $1::timestamptz
-        AND pe.tx_timestamp <= $2::timestamptz
+        AND pe.tx_timestamp < $2::timestamptz
       GROUP BY pe.owner
     ),
     settlement_pnl_by_wallet AS (
@@ -907,7 +907,7 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
       FROM positions p
       JOIN events e ON e.event_id = p.event_id
       WHERE COALESCE(e.finalized_tx_timestamp, e.archived_tx_timestamp) >= $1::timestamptz
-        AND COALESCE(e.finalized_tx_timestamp, e.archived_tx_timestamp) <= $2::timestamptz
+        AND COALESCE(e.finalized_tx_timestamp, e.archived_tx_timestamp) < $2::timestamptz
         AND p.status IN ('win', 'lose')
       GROUP BY p.owner
     ),
@@ -939,9 +939,17 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
       FROM metrics
       WHERE pnl <> 0 OR vol <> 0
     )
-    SELECT rank, walletid, pnl, vol
+    SELECT
+      ranked.rank,
+      ranked.walletid,
+      ranked.pnl,
+      ranked.vol,
+      profile.display_name,
+      profile.avatar_updated_at,
+      (profile.avatar_data IS NOT NULL) AS has_avatar
     FROM ranked
-    ORDER BY rank
+    LEFT JOIN profiles AS profile ON profile.identity = ranked.walletid
+    ORDER BY ranked.rank
     LIMIT $3
   `, [startTime.toISOString(), endTime.toISOString(), limit]);
 
@@ -950,7 +958,73 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
     walletid: row.walletid,
     pnl: rankNumber(row.pnl),
     vol: rankNumber(row.vol),
+    display_name: row.display_name || null,
+    avatar_updated_at: row.avatar_updated_at || null,
+    has_avatar: Boolean(row.has_avatar),
   }));
+}
+
+async function enrichEventsWithAutomationPrices(events) {
+  if (!Array.isArray(events) || events.length === 0) return events;
+  const eventIds = events
+    .map((event) => Number(event.event_id))
+    .filter((eventId) => Number.isSafeInteger(eventId) && eventId >= 0);
+  if (eventIds.length === 0) return events;
+
+  try {
+    const result = await query(`
+      SELECT
+        event_id,
+        token,
+        timeframe,
+        period_start,
+        end_at AS period_end,
+        currency_2 AS quote_currency,
+        opening_numerator,
+        opening_denominator,
+        oracle_numerator,
+        oracle_denominator
+      FROM quottery_automation.markets
+      WHERE event_id = ANY($1::bigint[])
+        AND strategy = 'period_change'
+    `, [eventIds]);
+    const pricesByEvent = new Map(result.rows.map((row) => [Number(row.event_id), row]));
+
+    return events.map((event) => {
+      const row = pricesByEvent.get(Number(event.event_id));
+      if (!row) return event;
+      const metadata = {
+        token: row.token,
+        quoteCurrency: row.quote_currency,
+        timeframe: row.timeframe,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+      };
+      return {
+        ...event,
+        priceToBeat:
+          row.opening_numerator !== null && row.opening_denominator !== null
+            ? {
+                ...metadata,
+                numerator: String(row.opening_numerator),
+                denominator: String(row.opening_denominator),
+              }
+            : null,
+        finalPrice:
+          row.oracle_numerator !== null && row.oracle_denominator !== null
+            ? {
+                ...metadata,
+                numerator: String(row.oracle_numerator),
+                denominator: String(row.oracle_denominator),
+              }
+            : null,
+      };
+    });
+  } catch (error) {
+    // Automation may be deployed later or use another database.
+    if (['42P01', '3F000', '42703'].includes(error?.code)) return events;
+    throw error;
+  }
 }
 
 async function getEventSummary(eventId) {
@@ -966,7 +1040,8 @@ async function getEventSummary(eventId) {
     LEFT JOIN event_volume_summary v ON v.event_id = e.event_id
     WHERE e.event_id = $1
   `, [eventId]);
-  return result.rows[0] || null;
+  const events = await enrichEventsWithAutomationPrices(result.rows);
+  return events[0] || null;
 }
 
 async function getEvents(status, limit) {
@@ -995,7 +1070,7 @@ async function getEvents(status, limit) {
       e.event_id DESC
     LIMIT $${limitParam}
   `, params);
-  return result.rows;
+  return enrichEventsWithAutomationPrices(result.rows);
 }
 
 function normalizeOrderPrice(price, flipPrice = false) {
@@ -1043,6 +1118,8 @@ async function getEventMetrics(eventIds) {
       tradedVolumes: {},
       openOrderVolumes: {},
       probabilities: {},
+      priceToBeat: {},
+      finalPrice: {},
       source: 'db',
       cached: false,
       lastUpdatedAt: Date.now(),
@@ -1085,6 +1162,8 @@ async function getEventMetrics(eventIds) {
   const tradedVolumes = {};
   const openOrderVolumes = {};
   const probabilities = {};
+  const priceToBeat = {};
+  const finalPrice = {};
 
   for (const eventId of eventIds) {
     const row = byEventId.get(eventId) || { open_order_volume: 0, traded_volume: 0 };
@@ -1096,11 +1175,65 @@ async function getEventMetrics(eventIds) {
     probabilities[eventId] = calculateProbability(row, 0);
   }
 
+  try {
+    const automationResult = await query(`
+      SELECT
+        event_id,
+        token,
+        timeframe,
+        period_start,
+        end_at AS period_end,
+        currency_2 AS quote_currency,
+        opening_numerator,
+        opening_denominator,
+        oracle_numerator,
+        oracle_denominator
+      FROM quottery_automation.markets
+      WHERE event_id = ANY($1::bigint[])
+        AND strategy = 'period_change'
+        AND (
+          (opening_numerator IS NOT NULL AND opening_denominator IS NOT NULL)
+          OR
+          (oracle_numerator IS NOT NULL AND oracle_denominator IS NOT NULL)
+        )
+    `, [eventIds]);
+
+    for (const row of automationResult.rows) {
+      const eventId = Number(row.event_id);
+      const metadata = {
+        token: row.token,
+        quoteCurrency: row.quote_currency,
+        timeframe: row.timeframe,
+        periodStart: row.period_start,
+        periodEnd: row.period_end,
+      };
+      if (row.opening_numerator !== null && row.opening_denominator !== null) {
+        priceToBeat[eventId] = {
+          ...metadata,
+          numerator: String(row.opening_numerator),
+          denominator: String(row.opening_denominator),
+        };
+      }
+      if (row.oracle_numerator !== null && row.oracle_denominator !== null) {
+        finalPrice[eventId] = {
+          ...metadata,
+          numerator: String(row.oracle_numerator),
+          denominator: String(row.oracle_denominator),
+        };
+      }
+    }
+  } catch (error) {
+    // Automation may be deployed later or use another database.
+    if (!['42P01', '3F000'].includes(error?.code)) throw error;
+  }
+
   return {
     volumes,
     tradedVolumes,
     openOrderVolumes,
     probabilities,
+    priceToBeat,
+    finalPrice,
     source: 'db',
     cached: false,
     lastUpdatedAt: Date.now(),
@@ -1183,8 +1316,8 @@ async function handleQuotteryDbApi(req, res, requestUrl, sendJson, chainGateway 
     if (apiParts[0] === 'ranks') {
       const startTime = parseRankTimestamp(requestUrl.searchParams.get('starttime'), 'starttime');
       const endTime = parseRankTimestamp(requestUrl.searchParams.get('endtime'), 'endtime');
-      if (startTime.getTime() > endTime.getTime()) {
-        throw requestError('starttime must be before or equal to endtime');
+      if (startTime.getTime() >= endTime.getTime()) {
+        throw requestError('starttime must be before endtime');
       }
       const sortBy = parseRankSort(requestUrl.searchParams.get('sortby'));
       sendJson(res, 200, {

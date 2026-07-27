@@ -34,6 +34,7 @@ function StartPage() {
   const [eventVolumes, setEventVolumes] = useState({});
   const [eventOpenOrderVolumes, setEventOpenOrderVolumes] = useState({});
   const [eventProbabilities, setEventProbabilities] = useState({});
+  const [eventPriceToBeat, setEventPriceToBeat] = useState({});
 
   useEffect(() => {
     if (!isConnected) return;
@@ -60,6 +61,7 @@ function StartPage() {
       setEventVolumes({});
       setEventOpenOrderVolumes({});
       setEventProbabilities({});
+      setEventPriceToBeat({});
       return undefined;
     }
 
@@ -73,6 +75,9 @@ function StartPage() {
     const mergeProbabilities = (probabilities) => {
       setEventProbabilities((prev) => ({ ...prev, ...(probabilities || {}) }));
     };
+    const mergePriceToBeat = (values) => {
+      setEventPriceToBeat((prev) => ({ ...prev, ...(values || {}) }));
+    };
 
     const loadVolumes = async () => {
       try {
@@ -80,6 +85,7 @@ function StartPage() {
         mergeVolumes(firstResult.volumes);
         mergeOpenOrderVolumes(firstResult.openOrderVolumes);
         mergeProbabilities(firstResult.probabilities);
+        mergePriceToBeat(firstResult.priceToBeat);
 
         let deferredEventIds = firstResult.deferredEventIds || [];
         while (deferredEventIds.length > 0 && !controller.signal.aborted) {
@@ -90,6 +96,7 @@ function StartPage() {
           mergeVolumes(nextResult.volumes);
           mergeOpenOrderVolumes(nextResult.openOrderVolumes);
           mergeProbabilities(nextResult.probabilities);
+          mergePriceToBeat(nextResult.priceToBeat);
           deferredEventIds = nextResult.deferredEventIds || [];
         }
       } catch (error) {
@@ -272,6 +279,7 @@ function StartPage() {
                                       tradedVolume: eventVolumes[getEventId(event)] ?? 0,
                                       openOrderVolume: eventOpenOrderVolumes[getEventId(event)] ?? 0,
                                       probability: eventProbabilities[getEventId(event)],
+                                      priceToBeat: eventPriceToBeat[getEventId(event)],
                                     }}
                                     onClick={() => navigate(`/market/${event.eid}`, { state: { from: "/" } })}
                                     status={event.status}
