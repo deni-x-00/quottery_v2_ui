@@ -1118,6 +1118,8 @@ async function getEventMetrics(eventIds) {
       tradedVolumes: {},
       openOrderVolumes: {},
       probabilities: {},
+      eventResults: {},
+      eventStatuses: {},
       priceToBeat: {},
       finalPrice: {},
       source: 'db',
@@ -1151,10 +1153,13 @@ async function getEventMetrics(eventIds) {
       o.bid0,
       o.ask0,
       o.bid1,
-      o.ask1
+      o.ask1,
+      e.result,
+      e.status
     FROM requested_events r
     LEFT JOIN open_orderbook o ON o.event_id = r.event_id
     LEFT JOIN event_volume_summary v ON v.event_id = r.event_id
+    LEFT JOIN events e ON e.event_id = r.event_id
   `, [eventIds]);
 
   const byEventId = new Map(result.rows.map((row) => [Number(row.event_id), row]));
@@ -1162,6 +1167,8 @@ async function getEventMetrics(eventIds) {
   const tradedVolumes = {};
   const openOrderVolumes = {};
   const probabilities = {};
+  const eventResults = {};
+  const eventStatuses = {};
   const priceToBeat = {};
   const finalPrice = {};
 
@@ -1173,6 +1180,12 @@ async function getEventMetrics(eventIds) {
     tradedVolumes[eventId] = tradedVolume;
     openOrderVolumes[eventId] = openOrderVolume;
     probabilities[eventId] = calculateProbability(row, 0);
+    if (row.result !== null && row.result !== undefined) {
+      eventResults[eventId] = Number(row.result);
+    }
+    if (row.status) {
+      eventStatuses[eventId] = row.status;
+    }
   }
 
   try {
@@ -1232,6 +1245,8 @@ async function getEventMetrics(eventIds) {
     tradedVolumes,
     openOrderVolumes,
     probabilities,
+    eventResults,
+    eventStatuses,
     priceToBeat,
     finalPrice,
     source: 'db',

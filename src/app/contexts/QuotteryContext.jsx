@@ -22,6 +22,7 @@ import {
 import { excludedEventIds } from '../components/qubic/util/commons';
 import { isEventClosed } from '../components/qubic/util/tradeValidation';
 import { useTickRate } from '../hooks/useTickRate';
+import { fetchEventVolumesByIds } from '../utils/eventVolumes';
 
 const QuotteryContext = createContext();
 const TICK_SETTINGS_KEY = 'quottery.txTickSettings';
@@ -32,7 +33,6 @@ const DEFAULT_TICK_SETTINGS = {
 };
 const WHOLE_SHARE_PRICE = 100000;
 const OPEN_ORDERS_CONCURRENCY = 6;
-const EVENT_RESULT_CONCURRENCY = 6;
 const excludedEventIdSet = new Set(excludedEventIds.map(Number));
 
 function filterVisibleEvents(events) {
@@ -139,9 +139,22 @@ export const QuotteryProvider = ({ children }) => {
       const events = await fetchAllActiveEvents(bobUrl);
       const visibleEvents = filterVisibleEvents(events);
       const endedEvents = visibleEvents.filter((event) => isEventClosed(event));
-      const resultDetails = await runWithConcurrency(
-        endedEvents,
-        EVENT_RESULT_CONCURRENCY,
+      const endedEventIds = endedEvents.map((event) => event.eid ?? event.eventId);
+      let indexedResults = {};
+      try {
+        const metrics = await fetchEventVolumesByIds(bobUrl, endedEventIds);
+        indexedResults = metrics.eventResults || {};
+      } catch (error) {
+        console.warn('Failed to load indexed event results:', error);
+      }
+      const missingResultEvents = endedEvents.filter((event) => {
+        const eventId = event.eid ?? event.eventId;
+        const result = indexedResults[eventId];
+        return result !== 0 && result !== 1;
+      });
+      const fallbackDetails = await runWithConcurrency(
+        missingResultEvents,
+        6,
         async (event) => {
           try {
             return await getEventInfo(bobUrl, event.eid ?? event.eventId);
@@ -152,10 +165,15 @@ export const QuotteryProvider = ({ children }) => {
         }
       );
       const resultsByEventId = new Map(
-        resultDetails
+        fallbackDetails
           .filter(Boolean)
           .map((event) => [String(event.eid ?? event.eventId), event])
       );
+      Object.entries(indexedResults).forEach(([eventId, result]) => {
+        if (result === 0 || result === 1) {
+          resultsByEventId.set(String(eventId), { resultByGO: result });
+        }
+      });
 
       setAllEvents(visibleEvents.map((event) => {
         const details = resultsByEventId.get(String(event.eid ?? event.eventId));

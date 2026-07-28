@@ -483,7 +483,7 @@ async function handlePublicTick(req, res) {
     return;
   }
 
-  sendJson(res, 200, { tick: tickInfo.tick, source: tickInfo.source || 'public-rpc', updatedAt: Date.now() });
+  sendJson(res, 200, { tick: tickInfo.tick, source: 'public-rpc', updatedAt: Date.now() });
 }
 
 function pickStatusResponse(data) {
@@ -595,17 +595,28 @@ async function getQueryCapableTargets(sourceInfo) {
   }
 
   if (!queryHealthCache.pending) {
-    queryHealthCache.pending = Promise.allSettled(
-      eligibleTargets.map((target) => probeQueryTarget(target))
-    ).then((results) => {
+    const probes = eligibleTargets.map(async (target) => {
+      try {
+        await probeQueryTarget(target);
+        return { target, error: null };
+      } catch (error) {
+        return { target, error };
+      }
+    });
+    const firstHealthy = Promise.any(
+      probes.map((probe) => probe.then((result) => {
+        if (result.error) throw result.error;
+        return result.target;
+      }))
+    ).catch(() => null);
+    const complete = Promise.all(probes).then((results) => {
       const healthyTargets = [];
       const errors = [];
-      results.forEach((result, index) => {
-        const target = eligibleTargets[index];
-        if (result.status === 'fulfilled') {
-          healthyTargets.push(target);
+      results.forEach((result) => {
+        if (!result.error) {
+          healthyTargets.push(result.target);
         } else {
-          errors.push(`${target.label}: ${result.reason?.message || result.reason}`);
+          errors.push(`${result.target.label}: ${result.error?.message || result.error}`);
         }
       });
 
@@ -628,11 +639,18 @@ async function getQueryCapableTargets(sourceInfo) {
         healthyTargetIndexes: [],
         pending: null,
       };
-      throw error;
+      console.warn(`[bob-proxy] Bob querySmartContract healthcheck failed: ${error.message}`);
+      return [];
     });
+    queryHealthCache.pending = { firstHealthy, complete };
   }
 
-  return queryHealthCache.pending;
+  if (cachedTargets.length > 0) {
+    return cachedTargets;
+  }
+
+  const firstHealthy = await queryHealthCache.pending.firstHealthy;
+  return firstHealthy ? [firstHealthy] : [];
 }
 
 async function getTransactionForDbVerification(txHash) {
@@ -702,7 +720,7 @@ async function executeQuerySmartContract(funcNumber, inputHex = '') {
           target.index,
           ...queryHealthCache.healthyTargetIndexes.filter((index) => index !== target.index),
         ];
-        return { data, source: 'bob', target: target.label };
+        return { data, source: 'bob' };
       } catch (error) {
         queryHealthCache.healthyTargetIndexes =
           queryHealthCache.healthyTargetIndexes.filter((index) => index !== target.index);
@@ -720,7 +738,6 @@ async function executeQuerySmartContract(funcNumber, inputHex = '') {
   return {
     data: await querySmartContractViaPublicRpc(funcNumber, inputHex),
     source: 'public-rpc',
-    target: PUBLIC_RPC_BASE_URL,
   };
 }
 
@@ -1127,12 +1144,10 @@ async function proxyToBob(req, res) {
         sendJson(res, 200, {
           data: result.data.toString('hex'),
           querySource: result.source,
-          queryTarget: result.target,
         });
       } catch (error) {
         sendJson(res, 502, {
           error: 'All Bob and public RPC querySmartContract endpoints failed',
-          details: error.message,
         });
       }
       return;
@@ -1161,7 +1176,6 @@ async function proxyToBob(req, res) {
       }
 
       setCorsHeaders(res);
-      res.setHeader('X-Proxy-Bob-Target', target.label);
       res.writeHead(response.statusCode, response.headers);
       res.end(response.body);
       return;
@@ -1172,7 +1186,6 @@ async function proxyToBob(req, res) {
 
   sendJson(res, 502, {
     error: 'All Bob upstreams unavailable',
-    details: errors.join('; '),
   });
 }
 
