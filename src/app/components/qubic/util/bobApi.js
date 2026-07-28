@@ -125,7 +125,19 @@ async function querySc(bobUrl, funcNumber, inputHex = '') {
         }
     }
 
-    return queryScViaBob(bobUrl, funcNumber, inputHex);
+    try {
+        const data = await queryScViaBob(bobUrl, funcNumber, inputHex);
+        if (data.length > 0) {
+            return data;
+        }
+        throw new Error('Bob returned an empty querySmartContract response');
+    } catch (e) {
+        console.warn(
+            `[querySc] Bob failed for function ${funcNumber}, falling back to public RPC:`,
+            e.message
+        );
+        return queryScViaPublicRpc(funcNumber, inputHex);
+    }
 }
 
 async function queryScViaBob(bobUrl, funcNumber, inputHex = '') {

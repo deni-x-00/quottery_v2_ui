@@ -3,7 +3,7 @@ import { Box, Skeleton, Stack, Tooltip, Typography, useTheme } from "@mui/materi
 import { getMarketPrices } from "./qubic/util/bobApi";
 import { formatNumeric, formatUsd } from "../utils/format";
 import qubicLogo from "../../assets/qubic.svg";
-import garthLogo from "../../assets/garth.svg";
+import garthLogo from "../../assets/garth.png";
 
 const PRICE_REFRESH_MS = 60_000;
 const ONE_MILLION = 1_000_000;

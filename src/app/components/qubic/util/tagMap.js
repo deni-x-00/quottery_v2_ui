@@ -21,15 +21,15 @@ export const TAG_MAP = {
     5:  { label: 'SOL',             thumbnail: 'solana.svg' },
     6:  { label: 'BNB',             thumbnail: 'bnb.svg' },
     7:  { label: 'HYPE',            thumbnail: 'hype.svg' },
-    8:  { label: 'DOGE',            thumbnail: 'dogecoin.svg' },
+    8:  { label: 'DOGE',            thumbnail: 'doge.svg' },
     9:  { label: 'XRP',             thumbnail: 'xrp.svg' },
 
     // Qubic Ecosystem: 41-50
     41: { label: 'Qubic',           thumbnail: 'qubic.svg' },
     42: { label: 'QCAP',            thumbnail: 'qcap.svg' },
     43: { label: 'QMINE',           thumbnail: 'qmine.svg' },
-    44: { label: 'QDOGE',           thumbnail: 'qdoge.svg' },
-    45: { label: 'GARTH',           thumbnail: 'garth.svg' },
+    44: { label: 'QDOGE',           thumbnail: 'qdoge.png' },
+    45: { label: 'GARTH',           thumbnail: 'garth.png' },
 
     // Sports: 11-20
     11: { label: 'Sport',           thumbnail: 'sport.svg' },

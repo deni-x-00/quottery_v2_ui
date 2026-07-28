@@ -22,6 +22,7 @@ const BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS = Number(
   || process.env.BOB_QUERY_TIMEOUT_MS
   || 7000
 );
+const BOB_QUERY_HEALTH_CACHE_MS = Number(process.env.BOB_QUERY_HEALTH_CACHE_MS || 30000);
 const PUBLIC_TICK_TOLERANCE = Number(process.env.PUBLIC_TICK_TOLERANCE || 15);
 const SC_INDEX = 2;
 const FUNC_GET_ORDERS = 3;
@@ -72,6 +73,11 @@ const bobTargets = bobTargetUrls.map((targetUrl, index) => {
 
 let sourceCache = { at: 0, source: 'bob', bobTargetIndex: 0, tickInfo: null };
 let statusCache = { at: 0, body: null, pending: null };
+let queryHealthCache = {
+  at: 0,
+  healthyTargetIndexes: [],
+  pending: null,
+};
 let publicRpcQueue = Promise.resolve();
 let nextPublicRpcAt = 0;
 const volumeCache = {
@@ -534,6 +540,101 @@ async function getPreferredDataSource() {
   return sourceCache;
 }
 
+function queryEligibleTargets(sourceInfo) {
+  const publicTick = Number(sourceInfo.tickInfo?.publicTick || 0);
+  const statusByTarget = new Map(
+    (sourceInfo.tickInfo?.bobStatuses || []).map((status) => [status.target, status])
+  );
+  const preferredIndex = queryHealthCache.healthyTargetIndexes[0]
+    ?? sourceInfo.bobTargetIndex;
+
+  return getBobTargetOrder(preferredIndex).filter((target) => {
+    const status = statusByTarget.get(target.label);
+    const tick = Number(status?.tick || 0);
+    return tick > 0 && (!publicTick || publicTick - tick <= PUBLIC_TICK_TOLERANCE);
+  });
+}
+
+function parseBobQueryData(response) {
+  const hex = typeof response?.data === 'string' ? response.data : '';
+  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex)) {
+    throw new Error('querySmartContract returned no valid data');
+  }
+  return Buffer.from(hex, 'hex');
+}
+
+async function probeQueryTarget(target) {
+  const response = await bobPostJsonToTarget(
+    target,
+    '/querySmartContract',
+    {
+      nonce: Math.floor(Math.random() * 0xffffffff) + 1,
+      scIndex: SC_INDEX,
+      funcNumber: 1,
+      data: '',
+    },
+    3,
+    BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS
+  );
+  const data = parseBobQueryData(response);
+  if (data.length < 112) {
+    throw new Error(`BasicInfo response is ${data.length} bytes, expected at least 112`);
+  }
+  return target;
+}
+
+async function getQueryCapableTargets(sourceInfo) {
+  const eligibleTargets = queryEligibleTargets(sourceInfo);
+  if (eligibleTargets.length === 0) return [];
+
+  const now = Date.now();
+  const cachedIndexes = new Set(queryHealthCache.healthyTargetIndexes);
+  const cachedTargets = eligibleTargets.filter((target) => cachedIndexes.has(target.index));
+  if (queryHealthCache.at > 0 && now - queryHealthCache.at < BOB_QUERY_HEALTH_CACHE_MS) {
+    return cachedTargets;
+  }
+
+  if (!queryHealthCache.pending) {
+    queryHealthCache.pending = Promise.allSettled(
+      eligibleTargets.map((target) => probeQueryTarget(target))
+    ).then((results) => {
+      const healthyTargets = [];
+      const errors = [];
+      results.forEach((result, index) => {
+        const target = eligibleTargets[index];
+        if (result.status === 'fulfilled') {
+          healthyTargets.push(target);
+        } else {
+          errors.push(`${target.label}: ${result.reason?.message || result.reason}`);
+        }
+      });
+
+      queryHealthCache = {
+        at: Date.now(),
+        healthyTargetIndexes: healthyTargets.map((target) => target.index),
+        pending: null,
+      };
+
+      if (healthyTargets.length === 0 && errors.length > 0) {
+        console.warn(
+          `[bob-proxy] No Bob node passed querySmartContract healthcheck; ` +
+          `public RPC will be used: ${errors.join('; ')}`
+        );
+      }
+      return healthyTargets;
+    }).catch((error) => {
+      queryHealthCache = {
+        at: Date.now(),
+        healthyTargetIndexes: [],
+        pending: null,
+      };
+      throw error;
+    });
+  }
+
+  return queryHealthCache.pending;
+}
+
 async function getTransactionForDbVerification(txHash) {
   const sourceInfo = await getPreferredDataSource();
   if (sourceInfo.source !== 'bob') {
@@ -577,33 +678,55 @@ async function getTransactionForDbVerification(txHash) {
   return { source: 'public', transaction: null };
 }
 
-async function querySmartContract(funcNumber, inputHex = '') {
+async function executeQuerySmartContract(funcNumber, inputHex = '') {
   const sourceInfo = await getPreferredDataSource();
-  if (sourceInfo.source === 'public') {
-    return querySmartContractViaPublicRpc(funcNumber, inputHex);
+
+  if (sourceInfo.source === 'bob') {
+    const queryTargets = await getQueryCapableTargets(sourceInfo);
+    for (const target of queryTargets) {
+      try {
+        const response = await bobPostJsonToTarget(
+          target,
+          '/querySmartContract',
+          {
+            nonce: Math.floor(Math.random() * 0xffffffff) + 1,
+            scIndex: SC_INDEX,
+            funcNumber,
+            data: inputHex,
+          },
+          10,
+          BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS
+        );
+        const data = parseBobQueryData(response);
+        queryHealthCache.healthyTargetIndexes = [
+          target.index,
+          ...queryHealthCache.healthyTargetIndexes.filter((index) => index !== target.index),
+        ];
+        return { data, source: 'bob', target: target.label };
+      } catch (error) {
+        queryHealthCache.healthyTargetIndexes =
+          queryHealthCache.healthyTargetIndexes.filter((index) => index !== target.index);
+        console.warn(
+          `[bob-proxy] Bob querySmartContract function ${funcNumber} failed via ` +
+          `${target.label}: ${error.message}`
+        );
+      }
+    }
   }
 
-  const nonce = Math.floor(Math.random() * 0xffffffff) + 1;
-  try {
-    const resp = await bobPostJson(
-      '/querySmartContract',
-      {
-        nonce,
-        scIndex: SC_INDEX,
-        funcNumber,
-        data: inputHex,
-      },
-      10,
-      sourceInfo.bobTargetIndex,
-      BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS
-    );
+  console.warn(
+    `[bob-proxy] Using public RPC for querySmartContract function ${funcNumber}`
+  );
+  return {
+    data: await querySmartContractViaPublicRpc(funcNumber, inputHex),
+    source: 'public-rpc',
+    target: PUBLIC_RPC_BASE_URL,
+  };
+}
 
-    if (!resp?.data) return Buffer.alloc(0);
-    return Buffer.from(resp.data, 'hex');
-  } catch (error) {
-    console.warn('[event-volumes] All Bob querySmartContract attempts failed; using public RPC for this call:', error.message);
-    return querySmartContractViaPublicRpc(funcNumber, inputHex);
-  }
+async function querySmartContract(funcNumber, inputHex = '') {
+  const result = await executeQuerySmartContract(funcNumber, inputHex);
+  return result.data;
 }
 
 async function fetchOrders(eventId, option, isBid) {
@@ -980,6 +1103,42 @@ async function proxyToBob(req, res) {
   const targetOrder = getBobTargetOrder(preferredIndex);
   const lastTargetIndex = targetOrder[targetOrder.length - 1]?.index;
   const isQuerySmartContract = req.method === 'POST' && upstreamPath === '/querySmartContract';
+  if (isQuerySmartContract) {
+    let payload;
+    try {
+      payload = JSON.parse(body.toString('utf8') || '{}');
+    } catch {
+      sendJson(res, 400, { error: 'Invalid JSON body' });
+      return;
+    }
+
+    const scIndex = Number(payload?.scIndex);
+    const funcNumber = Number(payload?.funcNumber);
+    const inputHex = String(payload?.data || '');
+    if (
+      scIndex === SC_INDEX
+      && Number.isSafeInteger(funcNumber)
+      && funcNumber >= 0
+      && inputHex.length % 2 === 0
+      && /^[0-9a-f]*$/i.test(inputHex)
+    ) {
+      try {
+        const result = await executeQuerySmartContract(funcNumber, inputHex);
+        sendJson(res, 200, {
+          data: result.data.toString('hex'),
+          querySource: result.source,
+          queryTarget: result.target,
+        });
+      } catch (error) {
+        sendJson(res, 502, {
+          error: 'All Bob and public RPC querySmartContract endpoints failed',
+          details: error.message,
+        });
+      }
+      return;
+    }
+  }
+
   const timeoutMs = isQuerySmartContract
     ? BOB_QUERY_SMART_CONTRACT_TIMEOUT_MS
     : Number(process.env.BOB_PROXY_TIMEOUT_MS || 30000);
