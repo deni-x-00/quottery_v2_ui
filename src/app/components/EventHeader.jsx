@@ -22,10 +22,10 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
     const priceToBeat = event?.priceToBeat;
     const finalPrice = event?.finalPrice;
     const formattedPriceToBeat = priceToBeat
-        ? formatRational(priceToBeat.numerator, priceToBeat.denominator, 2)
+        ? formatRational(priceToBeat.numerator, priceToBeat.denominator)
         : null;
     const formattedFinalPrice = finalPrice
-        ? formatRational(finalPrice.numerator, finalPrice.denominator, 2)
+        ? formatRational(finalPrice.numerator, finalPrice.denominator)
         : null;
     const priceDelta = priceToBeat && finalPrice
         ? formatRationalDelta(
@@ -33,7 +33,6 @@ function EventHeader({ event, onBack, resolveThumbnail }) {
             finalPrice.denominator,
             priceToBeat.numerator,
             priceToBeat.denominator,
-            2,
         )
         : null;
     const deltaColor = priceDelta?.direction > 0

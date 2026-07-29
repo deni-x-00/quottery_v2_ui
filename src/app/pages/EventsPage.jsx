@@ -635,7 +635,7 @@ function EventsPage() {
 
     const renderOraclePrice = (price) => {
       if (!price?.numerator || !price?.denominator) return "-";
-      const value = formatRational(price.numerator, price.denominator, 2);
+      const value = formatRational(price.numerator, price.denominator);
       if (value === "-") return value;
       return (
         <Typography variant="body2" sx={{ fontWeight: 800, whiteSpace: "nowrap" }}>
