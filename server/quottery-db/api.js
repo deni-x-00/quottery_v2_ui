@@ -59,6 +59,14 @@ function parseRankSort(value) {
   throw requestError('sortby must be either vol or pnl');
 }
 
+function parseRankEpoch(value) {
+  const epoch = Number(String(value || '').trim());
+  if (!Number.isSafeInteger(epoch) || epoch <= 0) {
+    throw requestError('epoch must be a positive integer');
+  }
+  return epoch;
+}
+
 function rankNumber(value) {
   const number = Number(value || 0);
   if (!Number.isFinite(number)) return 0;
@@ -863,17 +871,74 @@ async function getLeaderboard(metric, limit) {
   return result.rows;
 }
 
-async function getPeriodRanks(startTime, endTime, sortBy, limit) {
+async function getLeaderboardEpochs() {
+  const result = await query(`
+    WITH epoch_activity AS (
+      SELECT epoch, tick, tx_timestamp AS activity_at
+      FROM raw_transactions
+      WHERE epoch IS NOT NULL AND epoch > 0
+
+      UNION ALL
+
+      SELECT epoch, tick, log_timestamp AS activity_at
+      FROM raw_logs
+      WHERE epoch IS NOT NULL AND epoch > 0
+    )
+    SELECT
+      epoch,
+      min(tick) AS first_tick,
+      max(tick) AS last_tick,
+      min(activity_at) AS first_activity_at,
+      max(activity_at) AS last_activity_at
+    FROM epoch_activity
+    GROUP BY epoch
+    ORDER BY epoch DESC
+  `);
+
+  return result.rows.map((row) => ({
+    epoch: Number(row.epoch),
+    first_tick: row.first_tick === null ? null : Number(row.first_tick),
+    last_tick: row.last_tick === null ? null : Number(row.last_tick),
+    first_activity_at: row.first_activity_at ? new Date(row.first_activity_at).toISOString() : null,
+    last_activity_at: row.last_activity_at ? new Date(row.last_activity_at).toISOString() : null,
+  }));
+}
+
+async function getPeriodRanks(startTime, endTime, sortBy, limit, epoch = null) {
   const sortColumn = sortBy === 'vol' ? 'vol' : 'pnl';
   const secondarySortColumn = sortBy === 'vol' ? 'pnl' : 'vol';
+  const byEpoch = Number.isSafeInteger(epoch) && epoch > 0;
+  const activityFilter = (tableAlias, timestampColumn) => (byEpoch
+    ? `EXISTS (
+        SELECT 1
+        FROM raw_transactions rank_tx
+        WHERE rank_tx.tx_hash = ${tableAlias}.tx_hash
+          AND rank_tx.epoch = $1
+      )`
+    : `${tableAlias}.${timestampColumn} >= $1::timestamptz
+        AND ${tableAlias}.${timestampColumn} < $2::timestamptz`);
+  const settlementFilter = byEpoch
+    ? `(EXISTS (
+          SELECT 1
+          FROM raw_transactions rank_tx
+          WHERE rank_tx.epoch = $1
+            AND rank_tx.tick = COALESCE(e.finalized_tick, e.archived_tick)
+        ) OR EXISTS (
+          SELECT 1
+          FROM raw_logs rank_log
+          WHERE rank_log.epoch = $1
+            AND rank_log.tick = COALESCE(e.finalized_tick, e.archived_tick)
+        ))`
+    : `COALESCE(e.finalized_tx_timestamp, e.archived_tx_timestamp) >= $1::timestamptz
+        AND COALESCE(e.finalized_tx_timestamp, e.archived_tx_timestamp) < $2::timestamptz`;
+  const limitParameter = byEpoch ? '$2' : '$3';
   const result = await query(`
     WITH trade_legs AS (
       SELECT
         t.address_a AS walletid,
         t.amount * t.price0 AS vol
       FROM trades t
-      WHERE t.tx_timestamp >= $1::timestamptz
-        AND t.tx_timestamp < $2::timestamptz
+      WHERE ${activityFilter('t', 'tx_timestamp')}
 
       UNION ALL
 
@@ -881,8 +946,7 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
         t.address_b AS walletid,
         t.amount * CASE WHEN t.price1 > 0 THEN t.price1 ELSE t.price0 END AS vol
       FROM trades t
-      WHERE t.tx_timestamp >= $1::timestamptz
-        AND t.tx_timestamp < $2::timestamptz
+      WHERE ${activityFilter('t', 'tx_timestamp')}
     ),
     volume_by_wallet AS (
       SELECT walletid, COALESCE(sum(vol), 0) AS vol
@@ -896,8 +960,7 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
         COALESCE(sum(COALESCE((pe.details ->> 'realizedTradePnlDelta')::numeric, 0)), 0) AS pnl
       FROM position_events pe
       WHERE pe.action = 'ask_matched'
-        AND pe.tx_timestamp >= $1::timestamptz
-        AND pe.tx_timestamp < $2::timestamptz
+        AND ${activityFilter('pe', 'tx_timestamp')}
       GROUP BY pe.owner
     ),
     settlement_pnl_by_wallet AS (
@@ -906,8 +969,7 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
         COALESCE(sum(p.settlement_pnl), 0) AS pnl
       FROM positions p
       JOIN events e ON e.event_id = p.event_id
-      WHERE COALESCE(e.finalized_tx_timestamp, e.archived_tx_timestamp) >= $1::timestamptz
-        AND COALESCE(e.finalized_tx_timestamp, e.archived_tx_timestamp) < $2::timestamptz
+      WHERE ${settlementFilter}
         AND p.status IN ('win', 'lose')
       GROUP BY p.owner
     ),
@@ -950,8 +1012,8 @@ async function getPeriodRanks(startTime, endTime, sortBy, limit) {
     FROM ranked
     LEFT JOIN profiles AS profile ON profile.identity = ranked.walletid
     ORDER BY ranked.rank
-    LIMIT $3
-  `, [startTime.toISOString(), endTime.toISOString(), limit]);
+    LIMIT ${limitParameter}
+  `, byEpoch ? [epoch, limit] : [startTime.toISOString(), endTime.toISOString(), limit]);
 
   return result.rows.map((row) => ({
     rank: Number(row.rank),
@@ -1329,12 +1391,24 @@ async function handleQuotteryDbApi(req, res, requestUrl, sendJson, chainGateway 
     }
 
     if (apiParts[0] === 'ranks') {
+      const sortBy = parseRankSort(requestUrl.searchParams.get('sortby'));
+      const epochParam = requestUrl.searchParams.get('epoch');
+      if (epochParam !== null) {
+        const epoch = parseRankEpoch(epochParam);
+        sendJson(res, 200, {
+          success: true,
+          epoch,
+          sortby: sortBy,
+          ranks: await getPeriodRanks(null, null, sortBy, limit, epoch),
+        });
+        return true;
+      }
+
       const startTime = parseRankTimestamp(requestUrl.searchParams.get('starttime'), 'starttime');
       const endTime = parseRankTimestamp(requestUrl.searchParams.get('endtime'), 'endtime');
       if (startTime.getTime() >= endTime.getTime()) {
         throw requestError('starttime must be before endtime');
       }
-      const sortBy = parseRankSort(requestUrl.searchParams.get('sortby'));
       sendJson(res, 200, {
         success: true,
         starttime: startTime.toISOString(),
@@ -1347,6 +1421,11 @@ async function handleQuotteryDbApi(req, res, requestUrl, sendJson, chainGateway 
 
     if (apiParts[0] === 'search') {
       sendJson(res, 200, { results: await searchAccounts(requestUrl.searchParams.get('q'), limit) });
+      return true;
+    }
+
+    if (apiParts[0] === 'leaderboard' && apiParts[1] === 'epochs') {
+      sendJson(res, 200, { epochs: await getLeaderboardEpochs() });
       return true;
     }
 

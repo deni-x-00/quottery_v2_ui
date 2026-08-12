@@ -7,6 +7,7 @@ import {
     Typography,
 } from "@mui/material";
 import { formatQubicAmount } from "./qubic/util";
+import { formatDecimalOdds } from "../utils/format";
 import { useTranslation } from "react-i18next";
 
 const PRICE_PRESETS = [10, 25, 50, 75, 90];
@@ -28,6 +29,7 @@ export default function TradePriceSelector({
     const visibleLabel = label || t("eventDetails.price");
     const numericValue = toPrice(value);
     const probability = ((numericValue / WHOLE_SHARE_PRICE) * 100).toFixed(2);
+    const odds = formatDecimalOdds(numericValue, WHOLE_SHARE_PRICE);
 
     const setPrice = (nextPrice) => {
         const safePrice = Math.min(MAX_PRICE, Math.max(0, Number(nextPrice || 0)));
@@ -51,7 +53,8 @@ export default function TradePriceSelector({
                     {visibleLabel}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                    {t("eventDetails.probability", { value: probability })}
+                    {t("eventDetails.probability", { value: probability })}{" "}
+                    ({t("eventDetails.odds", { value: odds })})
                 </Typography>
             </Box>
             <TextField

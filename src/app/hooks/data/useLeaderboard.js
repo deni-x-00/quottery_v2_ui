@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getLeaderboard, getPeriodRanks } from "../../api/quotteryApi";
+import { getEpochRanks, getLeaderboard, getPeriodRanks } from "../../api/quotteryApi";
 
 export default function useLeaderboard(
   metric,
@@ -9,6 +9,7 @@ export default function useLeaderboard(
     enabled = true,
     startTime = null,
     endTime = null,
+    epoch = null,
   } = {},
 ) {
   const { t } = useTranslation();
@@ -30,15 +31,18 @@ export default function useLeaderboard(
     setLoading(true);
     setError("");
     try {
-      const body = startTime && endTime
-        ? await getPeriodRanks(
+      const hasPeriod = Boolean(epoch || (startTime && endTime));
+      const body = epoch
+        ? await getEpochRanks(epoch, metric === "volume" ? "vol" : "pnl", { limit })
+        : startTime && endTime
+          ? await getPeriodRanks(
           startTime,
           endTime,
           metric === "volume" ? "vol" : "pnl",
           { limit },
         )
         : await getLeaderboard(metric, { limit });
-      const nextLeaders = startTime && endTime
+      const nextLeaders = hasPeriod
         ? (body.ranks || []).map((row) => ({
           rank: row.rank,
           identity: row.walletid,
@@ -60,7 +64,7 @@ export default function useLeaderboard(
     } finally {
       if (requestId === requestIdRef.current) setLoading(false);
     }
-  }, [enabled, endTime, limit, metric, startTime, t]);
+  }, [enabled, endTime, epoch, limit, metric, startTime, t]);
 
   useEffect(() => {
     refetch();

@@ -30,6 +30,19 @@ export function getPeriodRanks(startTime, endTime, sortBy, { limit = 1000, signa
   return requestJson(`/api/quottery/ranks?${params.toString()}`, { signal });
 }
 
+export function getEpochRanks(epoch, sortBy, { limit = 1000, signal } = {}) {
+  const params = new URLSearchParams({
+    epoch: String(epoch),
+    sortby: sortBy,
+    limit: String(limit),
+  });
+  return requestJson(`/api/quottery/ranks?${params.toString()}`, { signal });
+}
+
+export function getLeaderboardEpochs({ signal } = {}) {
+  return requestJson('/api/quottery/leaderboard/epochs', { signal });
+}
+
 export function searchIdentities(query, { limit = 8, signal } = {}) {
   return requestJson(`/api/quottery/search?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(limit)}`, { signal });
 }

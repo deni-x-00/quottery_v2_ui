@@ -75,6 +75,18 @@ export function formatPrice(value) {
   return formatNumeric(value);
 }
 
+export function formatDecimalOdds(price, wholeSharePrice = 100000, maxFractionDigits = 2) {
+  const numericPrice = Number(price);
+  const numericWholeSharePrice = Number(wholeSharePrice);
+  if (!Number.isFinite(numericPrice) || numericPrice <= 0 || !Number.isFinite(numericWholeSharePrice) || numericWholeSharePrice <= 0) {
+    return "-";
+  }
+  return (numericWholeSharePrice / numericPrice).toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: maxFractionDigits,
+  });
+}
+
 export function formatRational(numerator, denominator, maxFractionDigits = 12) {
   try {
     const top = window.BigInt(numerator);

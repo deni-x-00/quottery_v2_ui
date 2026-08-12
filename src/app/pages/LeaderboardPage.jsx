@@ -9,8 +9,10 @@ import {
   Chip,
   IconButton,
   InputAdornment,
+  MenuItem,
   Pagination,
   Paper,
+  Select,
   Stack,
   Tab,
   Tabs,
@@ -20,12 +22,14 @@ import {
 } from "@mui/material";
 import { alpha, useTheme } from "@mui/material/styles";
 import LeaderboardIcon from "@mui/icons-material/Leaderboard";
+import CheckRoundedIcon from "@mui/icons-material/CheckRounded";
+import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import { profileAvatarUrl } from "../api/quotteryApi";
 import { explorerTickOrTxLabel, explorerTickOrTxUrl } from "../utils/explorerLinks";
-import { useIdentitySearch, useLeaderboard } from "../hooks/data";
+import { useIdentitySearch, useLeaderboard, useLeaderboardEpochs } from "../hooks/data";
 import usePageTitle from "../hooks/usePageTitle";
 import {
   formatDateUtcMinute,
@@ -45,6 +49,7 @@ const METRICS = {
 const PERIODS = {
   ALL: "all",
   WEEKLY: "weekly",
+  EPOCH: "epoch",
 };
 const PAGE_SIZE = 50;
 const SEARCH_RESET_REASON = "reset";
@@ -57,14 +62,19 @@ const LeaderboardPage = () => {
   const navigate = useNavigate();
   const [metric, setMetric] = useState(METRICS.PNL);
   const [period, setPeriod] = useState(PERIODS.ALL);
+  const [selectedEpoch, setSelectedEpoch] = useState("");
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const weeklyWindow = getCurrentWednesdayUtcWindow();
   const weeklyStart = period === PERIODS.WEEKLY ? weeklyWindow.start.toISOString() : null;
   const weeklyEnd = period === PERIODS.WEEKLY ? weeklyWindow.end.toISOString() : null;
+  const { epochs, loading: epochsLoading } = useLeaderboardEpochs();
+  const activeEpoch = period === PERIODS.EPOCH ? Number(selectedEpoch) || null : null;
+  const selectedEpochMeta = epochs.find((item) => Number(item.epoch) === activeEpoch) || null;
   const { leaders, loading, error, refetch: loadLeaderboard } = useLeaderboard(metric, {
     startTime: weeklyStart,
     endTime: weeklyEnd,
+    epoch: activeEpoch,
   });
   const {
     options: searchOptions,
@@ -152,7 +162,7 @@ const LeaderboardPage = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [metric, period]);
+  }, [metric, period, selectedEpoch]);
 
   useEffect(() => {
     if (page > pageCount) setPage(pageCount);
@@ -246,10 +256,17 @@ const LeaderboardPage = () => {
     { key: "transfer_count", label: t("leaderboard.transfers"), numeric: true, render: (row) => formatNumeric(row.transfer_count) },
     { key: "last_seen_tick", label: t("leaderboard.lastSeenTick"), numeric: true, render: (row) => renderTick(row.last_seen_tick, row.last_seen_tick_ref) },
   ];
-  const leaderboardColumns = period === PERIODS.WEEKLY
+  const leaderboardColumns = period !== PERIODS.ALL
     ? allTimeColumns.slice(0, 4)
     : allTimeColumns;
-  const tableMinWidth = period === PERIODS.WEEKLY ? 660 : 920;
+  const tableMinWidth = period !== PERIODS.ALL ? 660 : 920;
+
+  const handleEpochChange = (event) => {
+    const nextEpoch = event.target.value;
+    if (!nextEpoch) return;
+    setSelectedEpoch(nextEpoch);
+    setPeriod(PERIODS.EPOCH);
+  };
 
   return (
     <PageShell>
@@ -380,22 +397,163 @@ const LeaderboardPage = () => {
           sx={{ mb: 1.5 }}
         >
           <Tabs
-            value={period}
+            value={period === PERIODS.EPOCH ? false : period}
             onChange={(event, nextPeriod) => setPeriod(nextPeriod)}
             sx={segmentedTabsSx}
           >
             <Tab value={PERIODS.ALL} label={t("leaderboard.allTime")} />
-            <Tab value={PERIODS.WEEKLY} label={t("leaderboard.weekly")} />
+            <Tab value={PERIODS.WEEKLY} label={t("leaderboard.thisWeek")} />
           </Tabs>
-          {period === PERIODS.WEEKLY && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ fontWeight: 750, fontVariantNumeric: "tabular-nums" }}
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            alignItems={{ xs: "stretch", sm: "center" }}
+            spacing={1.25}
+            sx={{ width: { xs: "100%", sm: "auto" } }}
+          >
+            {period === PERIODS.WEEKLY && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 750, fontVariantNumeric: "tabular-nums" }}
+              >
+                {formatDateUtcMinute(weeklyWindow.start)} - {formatDateUtcMinute(weeklyWindow.end)} UTC
+              </Typography>
+            )}
+            {period === PERIODS.EPOCH && selectedEpochMeta?.first_activity_at && selectedEpochMeta?.last_activity_at && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ fontWeight: 750, fontVariantNumeric: "tabular-nums" }}
+              >
+                {formatDateUtcMinute(selectedEpochMeta.first_activity_at)} - {formatDateUtcMinute(selectedEpochMeta.last_activity_at)} UTC
+              </Typography>
+            )}
+            <Select
+              size="small"
+              value={period === PERIODS.EPOCH ? selectedEpoch : ""}
+              onChange={handleEpochChange}
+              displayEmpty
+              disabled={epochsLoading || epochs.length === 0}
+              IconComponent={ExpandMoreRoundedIcon}
+              renderValue={(value) => (
+                <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
+                  <Typography
+                    component="span"
+                    sx={{
+                      color: value ? "primary.main" : "text.secondary",
+                      fontSize: "0.7rem",
+                      fontWeight: 900,
+                      lineHeight: 1,
+                      letterSpacing: 0,
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    {t("leaderboard.epoch")}
+                  </Typography>
+                  <Typography
+                    component="span"
+                    sx={{
+                      color: value ? "text.primary" : "text.secondary",
+                      fontSize: "0.8125rem",
+                      fontWeight: 800,
+                      lineHeight: 1,
+                      fontVariantNumeric: "tabular-nums",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {value || t("leaderboard.select")}
+                  </Typography>
+                </Stack>
+              )}
+              inputProps={{ "aria-label": t("leaderboard.selectEpoch") }}
+              MenuProps={{
+                anchorOrigin: { vertical: "bottom", horizontal: "right" },
+                transformOrigin: { vertical: "top", horizontal: "right" },
+                PaperProps: {
+                  elevation: 0,
+                  sx: {
+                    mt: 0.75,
+                    minWidth: 164,
+                    maxHeight: 360,
+                    p: 0.75,
+                    borderRadius: 1.5,
+                    border: `1px solid ${theme.palette.border.default}`,
+                    bgcolor: theme.palette.background.paper,
+                    backgroundImage: "none",
+                    boxShadow: theme.palette.mode === "dark"
+                      ? "0 16px 40px rgba(0, 0, 0, 0.48)"
+                      : "0 16px 40px rgba(15, 23, 42, 0.16)",
+                    "& .MuiList-root": { p: 0 },
+                    "& .MuiMenuItem-root": {
+                      minHeight: 38,
+                      px: 1.25,
+                      borderRadius: 1,
+                      color: theme.palette.text.secondary,
+                      fontSize: "0.8125rem",
+                      fontWeight: 750,
+                      fontVariantNumeric: "tabular-nums",
+                      "&:hover": {
+                        color: theme.palette.text.primary,
+                        bgcolor: theme.palette.surface[2],
+                      },
+                      "&.Mui-selected": {
+                        color: theme.palette.primary.main,
+                        bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.12 : 0.1),
+                      },
+                      "&.Mui-selected:hover": {
+                        bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.17 : 0.14),
+                      },
+                    },
+                  },
+                },
+              }}
+              sx={{
+                minWidth: { xs: "100%", sm: 164 },
+                height: 40,
+                borderRadius: 1,
+                bgcolor: period === PERIODS.EPOCH
+                  ? alpha(theme.palette.primary.main, theme.palette.mode === "dark" ? 0.08 : 0.07)
+                  : theme.palette.surface[2],
+                transition: "background-color 150ms ease, box-shadow 150ms ease",
+                "& .MuiSelect-select": {
+                  display: "flex",
+                  alignItems: "center",
+                  py: 0,
+                  pl: 1.5,
+                  pr: 4.25,
+                },
+                "& .MuiSelect-icon": {
+                  right: 10,
+                  color: period === PERIODS.EPOCH ? theme.palette.primary.main : theme.palette.text.secondary,
+                  fontSize: 20,
+                  transition: "transform 150ms ease, color 150ms ease",
+                },
+                "& .MuiSelect-iconOpen": { transform: "rotate(180deg)" },
+                "& .MuiOutlinedInput-notchedOutline": {
+                  borderColor: period === PERIODS.EPOCH ? alpha(theme.palette.primary.main, 0.55) : theme.palette.border.default,
+                },
+                "&:hover .MuiOutlinedInput-notchedOutline": {
+                  borderColor: period === PERIODS.EPOCH ? theme.palette.primary.main : theme.palette.border.strong,
+                },
+                "&.Mui-focused": {
+                  boxShadow: `0 0 0 3px ${alpha(theme.palette.primary.main, 0.12)}`,
+                },
+                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                  borderColor: theme.palette.primary.main,
+                  borderWidth: 1,
+                },
+              }}
             >
-              {formatDateUtcMinute(weeklyWindow.start)} - {formatDateUtcMinute(weeklyWindow.end)} UTC
-            </Typography>
-          )}
+              {epochs.map((item) => (
+                <MenuItem key={item.epoch} value={String(item.epoch)}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ width: "100%", gap: 2 }}>
+                    <Box component="span">{t("leaderboard.epochValue", { epoch: item.epoch })}</Box>
+                    {String(item.epoch) === selectedEpoch && <CheckRoundedIcon sx={{ fontSize: 17 }} />}
+                  </Stack>
+                </MenuItem>
+              ))}
+            </Select>
+          </Stack>
         </Stack>
         <MetricGrid
           metrics={leaderboardMetrics}

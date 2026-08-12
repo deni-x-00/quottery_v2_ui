@@ -437,6 +437,13 @@ export const resources = {
   },
 };
 
+Object.assign(resources.en.translation.eventDetails, { odds: "Odds {{value}}" });
+Object.assign(resources.es.translation.eventDetails, { odds: "Cuota {{value}}" });
+Object.assign(resources.fr.translation.eventDetails, { odds: "Cote {{value}}" });
+Object.assign(resources.pt.translation.eventDetails, { odds: "Cotação {{value}}" });
+Object.assign(resources.ru.translation.eventDetails, { odds: "Коэффициент {{value}}" });
+Object.assign(resources.zh.translation.eventDetails, { odds: "赔率 {{value}}" });
+
 const leaderboardTranslations = {
   en: {
     pageTitle: "Leaderboard", eyebrow: "Accounts", title: "Leaderboard", description: "Ranked by realized PnL or traded volume",
@@ -504,6 +511,18 @@ Object.assign(resources.fr.translation.leaderboard, { allTime: "Tout l'historiqu
 Object.assign(resources.pt.translation.leaderboard, { allTime: "Todo o periodo", weekly: "Semanal" });
 Object.assign(resources.ru.translation.leaderboard, { allTime: "За всё время", weekly: "За неделю" });
 Object.assign(resources.zh.translation.leaderboard, { allTime: "全部时间", weekly: "每周" });
+Object.assign(resources.en.translation.leaderboard, { thisWeek: "This week", selectEpoch: "Select epoch", epochValue: "Epoch {{epoch}}" });
+Object.assign(resources.es.translation.leaderboard, { thisWeek: "Esta semana", selectEpoch: "Elegir época", epochValue: "Época {{epoch}}" });
+Object.assign(resources.fr.translation.leaderboard, { thisWeek: "Cette semaine", selectEpoch: "Choisir l'époque", epochValue: "Époque {{epoch}}" });
+Object.assign(resources.pt.translation.leaderboard, { thisWeek: "Esta semana", selectEpoch: "Escolher época", epochValue: "Época {{epoch}}" });
+Object.assign(resources.ru.translation.leaderboard, { thisWeek: "Эта неделя", selectEpoch: "Выбрать эпоху", epochValue: "Эпоха {{epoch}}" });
+Object.assign(resources.zh.translation.leaderboard, { thisWeek: "本周", selectEpoch: "选择纪元", epochValue: "纪元 {{epoch}}" });
+Object.assign(resources.en.translation.leaderboard, { epoch: "Epoch", select: "Select" });
+Object.assign(resources.es.translation.leaderboard, { epoch: "Época", select: "Elegir" });
+Object.assign(resources.fr.translation.leaderboard, { epoch: "Époque", select: "Choisir" });
+Object.assign(resources.pt.translation.leaderboard, { epoch: "Época", select: "Escolher" });
+Object.assign(resources.ru.translation.leaderboard, { epoch: "Эпоха", select: "Выбрать" });
+Object.assign(resources.zh.translation.leaderboard, { epoch: "纪元", select: "选择" });
 
 const portfolioTranslations = {
   en: {
