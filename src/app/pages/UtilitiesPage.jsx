@@ -33,6 +33,7 @@ import {
     getAssetBalance,
     getBasicInfo,
     getEventInfo,
+    getQxTransferFee,
     getStaticSmartContracts,
     getUserPositions,
 } from "../components/qubic/util/bobApi";
@@ -151,9 +152,28 @@ const findManagementRightsProcedure = (contract) => {
 
 const contractLabel = (contract) => contract?.label || contract?.name || `Contract #${contract?.contractIndex}`;
 
-const managementRightsFee = (sourceContract) => {
+const destinationManagementRightsFeeFromMetadata = (destinationContract) => {
+    const explicitFee = Number(
+        destinationContract?.managementRightsAcquisitionFee
+        ?? destinationContract?.acquireSharesFee
+        ?? 0
+    );
+    if (Number.isFinite(explicitFee) && explicitFee > 0) return explicitFee;
+
+    if (Number(destinationContract?.contractIndex) === QX_CONTRACT_INDEX) {
+        const transferProcedure = destinationContract?.procedures?.find((procedure) =>
+            matchesIdentifier(procedure.sourceIdentifier, ["TransferShareOwnershipAndPossession"])
+        );
+        return Number(transferProcedure?.fee || 0);
+    }
+
+    return 0;
+};
+
+const managementRightsFee = (sourceContract, destinationContract = null, resolvedDestinationFee = null) => {
     const sourceFee = Number(sourceContract?.procedureFee || 0);
-    return sourceFee;
+    const destinationFee = resolvedDestinationFee ?? destinationManagementRightsFeeFromMetadata(destinationContract);
+    return Math.max(sourceFee, destinationFee);
 };
 
 const utilityInputSx = (theme) => ({
@@ -435,6 +455,7 @@ function UtilitiesPage() {
     const [smrDestinationContracts, setSmrDestinationContracts] = useState([]);
     const [smrAvailable, setSmrAvailable] = useState(null);
     const [smrAvailableLoading, setSmrAvailableLoading] = useState(false);
+    const [smrDestinationFee, setSmrDestinationFee] = useState(null);
     const [smrSubmitting, setSmrSubmitting] = useState(false);
     const [quBalanceRefreshing, setQuBalanceRefreshing] = useState(false);
     const autoQuRefreshKeyRef = useRef("");
@@ -458,8 +479,8 @@ function UtilitiesPage() {
         [smrDestinationContractIndex, smrDestinationContracts]
     );
     const selectedSmrFee = useMemo(
-        () => managementRightsFee(selectedSmrSource),
-        [selectedSmrSource]
+        () => managementRightsFee(selectedSmrSource, selectedSmrDestination, smrDestinationFee),
+        [selectedSmrDestination, selectedSmrSource, smrDestinationFee]
     );
     const effectiveSmrAvailable = selectedSmrSource?.availableBalance ?? smrAvailable;
 
@@ -796,6 +817,30 @@ function UtilitiesPage() {
         ));
     }, [selectedSmrSource, smrDestinationContracts]);
 
+    useEffect(() => {
+        let cancelled = false;
+        const fallbackFee = destinationManagementRightsFeeFromMetadata(selectedSmrDestination);
+        setSmrDestinationFee(fallbackFee);
+
+        if (Number(selectedSmrDestination?.contractIndex) !== QX_CONTRACT_INDEX) {
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        getQxTransferFee(bobUrl)
+            .then((fee) => {
+                if (!cancelled) setSmrDestinationFee(fee);
+            })
+            .catch((error) => {
+                console.warn("Failed to resolve QX transfer fee; using metadata fallback:", error.message);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [bobUrl, selectedSmrDestination]);
+
     const identityToBytes = async (identity) => {
         const qHelper = new QubicHelper();
         const idBytes = await qHelper.getIdentityBytes(identity);
@@ -1016,7 +1061,20 @@ function UtilitiesPage() {
             return;
         }
 
-        const procedureFee = selectedSmrFee;
+        let procedureFee = selectedSmrFee;
+        if (Number(selectedSmrDestination.contractIndex) === QX_CONTRACT_INDEX) {
+            try {
+                const currentDestinationFee = await getQxTransferFee(bobUrl);
+                setSmrDestinationFee(currentDestinationFee);
+                procedureFee = managementRightsFee(
+                    selectedSmrSource,
+                    selectedSmrDestination,
+                    currentDestinationFee
+                );
+            } catch (error) {
+                console.warn("Failed to refresh QX transfer fee before submission; using metadata fallback:", error.message);
+            }
+        }
         if (quBalance === null || quBalance === undefined) {
             showSnackbar(t("utilities.quLoading"), "warning");
             return;

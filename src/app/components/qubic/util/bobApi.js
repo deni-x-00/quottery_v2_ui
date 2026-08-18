@@ -2,6 +2,8 @@
 import { QubicHelper } from '@qubic-lib/qubic-ts-library/dist/qubicHelper';
 
 const SC_INDEX = 2; // Quottery contract index
+const QX_CONTRACT_INDEX = 1;
+const QX_FUNC_FEES = 1;
 const QSWAP_CONTRACT_INDEX = 13;
 const QSWAP_GET_ASSET_INPUT_TYPE = 2;
 
@@ -114,19 +116,19 @@ async function bobPost(bobUrl, path, payload, maxRetries = 10) {
     throw new Error('Max retries reached for pending query');
 }
 
-async function querySc(bobUrl, funcNumber, inputHex = '') {
+async function querySc(bobUrl, funcNumber, inputHex = '', contractIndex = SC_INDEX) {
     const source = await getPreferredDataSource(bobUrl);
 
     if (source === 'public') {
         try {
-            return await queryScViaPublicRpc(funcNumber, inputHex);
+            return await queryScViaPublicRpc(funcNumber, inputHex, contractIndex);
         } catch (e) {
             console.warn(`[querySc] Public RPC failed for function ${funcNumber}, falling back to Bob:`, e.message);
         }
     }
 
     try {
-        const data = await queryScViaBob(bobUrl, funcNumber, inputHex);
+        const data = await queryScViaBob(bobUrl, funcNumber, inputHex, contractIndex);
         if (data.length > 0) {
             return data;
         }
@@ -136,15 +138,15 @@ async function querySc(bobUrl, funcNumber, inputHex = '') {
             `[querySc] Bob failed for function ${funcNumber}, falling back to public RPC:`,
             e.message
         );
-        return queryScViaPublicRpc(funcNumber, inputHex);
+        return queryScViaPublicRpc(funcNumber, inputHex, contractIndex);
     }
 }
 
-async function queryScViaBob(bobUrl, funcNumber, inputHex = '') {
+async function queryScViaBob(bobUrl, funcNumber, inputHex = '', contractIndex = SC_INDEX) {
     const nonce = Math.floor(Math.random() * 0xffffffff) + 1;
     const payload = {
         nonce,
-        scIndex: SC_INDEX,
+        scIndex: contractIndex,
         funcNumber,
         data: inputHex,
     };
@@ -1028,6 +1030,14 @@ export async function getStaticSmartContracts() {
         console.warn('[getStaticSmartContracts] Could not fetch smart contracts:', e.message);
         return [];
     }
+}
+
+export async function getQxTransferFee(bobUrl) {
+    const raw = await querySc(bobUrl, QX_FUNC_FEES, '', QX_CONTRACT_INDEX);
+    if (raw.length < 12) {
+        throw new Error(`QX Fees response too short: ${raw.length} bytes`);
+    }
+    return readUint32LE(raw, 4);
 }
 
 function readBigUint64LE(bytes, offset) {
