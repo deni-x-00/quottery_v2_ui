@@ -13,6 +13,10 @@ export const excludedEventIds = [
   111,
   121,
   122,
+  354,
+  372,
+  373,
+  391,
 ];
 export const makeJsonData = (
   contractIndex,
